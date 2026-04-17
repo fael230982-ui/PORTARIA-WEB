@@ -9,3 +9,4 @@ Todas as alteracoes relevantes deste projeto devem ser registradas aqui.
 - Registro inicial de autoria e titularidade do codigo-fonte
 - Estrutura basica de governanca do repositorio
 - Publicacao inicial da base do projeto PORTARIA-WEB
+- CHECKLIST.md como parte obrigatoria da preparacao do modulo

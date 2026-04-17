@@ -7,7 +7,7 @@ Este documento define o padrao minimo para publicar novos modulos com autoria re
 1. Configurar `git config user.name` e `git config user.email`
 2. Inicializar Git com `git init`
 3. Criar `.gitignore` adequado ao projeto
-4. Criar `README.md`, `AUTHORS.md`, `CHANGELOG.md` e `CONTRIBUTING.md`
+4. Criar `README.md`, `AUTHORS.md`, `CHANGELOG.md`, `CONTRIBUTING.md` e `CHECKLIST.md`
 5. Fazer o commit inicial
 6. Criar repositorio no GitHub e conectar `origin`
 7. Publicar `main`
@@ -21,6 +21,8 @@ Este documento define o padrao minimo para publicar novos modulos com autoria re
 - Criar `AUTHORSHIP.md` com nome, e-mail, cargo e abrangencia
 - Bloquear segredos no `.gitignore`
 - Revisar se ha chaves, tokens, `.env` e credenciais antes do primeiro push
+- Executar validacao minima antes de publicar, como typecheck, build e testes aplicaveis
+- Manter `CHECKLIST.md` atualizado antes de push, homologacao e release
 
 ## Estrutura minima sugerida
 
@@ -33,6 +35,7 @@ AUTHORS.md
 AUTHORSHIP.md
 CHANGELOG.md
 CONTRIBUTING.md
+CHECKLIST.md
 LICENSE
 README.md
 ```
@@ -47,3 +50,8 @@ README.md
 ## Observacao importante
 
 Se o GitHub bloquear o push por segredo identificado no historico, o correto e remover o arquivo do versionamento, ajustar o `.gitignore`, reescrever o commit afetado e tentar o push novamente.
+
+## Changelog
+
+- Registre a criacao da `v1.0.0`
+- Registre as mudancas relevantes seguintes

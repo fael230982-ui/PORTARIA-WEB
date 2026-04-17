@@ -15,6 +15,7 @@ Aplicacao web de portaria com foco operacional e experiencia do morador.
 - `AUTHORS.md`
 - `CHANGELOG.md`
 - `CONTRIBUTING.md`
+- `CHECKLIST.md`
 
 ## Execucao local
 

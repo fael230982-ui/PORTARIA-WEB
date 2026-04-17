@@ -87,6 +87,7 @@ Repositorio preparado com padrao minimo de governanca, autoria e publicacao.
 - AUTHORS.md
 - CHANGELOG.md
 - CONTRIBUTING.md
+- CHECKLIST.md
 "@
 
 $authorship = @"
@@ -132,6 +133,28 @@ $contributing = @"
 - Nao publique segredos, tokens ou credenciais
 - Atualize o changelog quando fizer sentido
 - Mantenha commits pequenos e objetivos
+- Execute validacao minima antes de publicar
+- Mantenha CHECKLIST.md atualizado
+"@
+
+$checklist = @"
+# Checklist de Publicacao
+
+## Antes do primeiro push
+
+- [ ] git config user.name e git config user.email configurados
+- [ ] .gitignore revisado
+- [ ] Segredos, tokens, chaves, .env e credenciais removidos do versionamento
+- [ ] README.md, AUTHORS.md, AUTHORSHIP.md, CHANGELOG.md, CONTRIBUTING.md e CHECKLIST.md criados
+- [ ] Templates de PR e issue adicionados
+
+## Antes de publicar
+
+- [ ] Typecheck executado, quando aplicavel
+- [ ] Build executado
+- [ ] Testes aplicaveis executados
+- [ ] CHANGELOG.md atualizado
+- [ ] CHECKLIST.md revisado
 "@
 
 $prTemplate = @"
@@ -179,6 +202,7 @@ Write-Utf8File -Path (Join-Path $repoPath "AUTHORSHIP.md") -Content $authorship
 Write-Utf8File -Path (Join-Path $repoPath "AUTHORS.md") -Content $authors
 Write-Utf8File -Path (Join-Path $repoPath "CHANGELOG.md") -Content $changelog
 Write-Utf8File -Path (Join-Path $repoPath "CONTRIBUTING.md") -Content $contributing
+Write-Utf8File -Path (Join-Path $repoPath "CHECKLIST.md") -Content $checklist
 Write-Utf8File -Path (Join-Path $repoPath ".github\PULL_REQUEST_TEMPLATE.md") -Content $prTemplate
 Write-Utf8File -Path (Join-Path $repoPath ".github\ISSUE_TEMPLATE\bug_report.md") -Content $bugIssue
 Write-Utf8File -Path (Join-Path $repoPath ".github\ISSUE_TEMPLATE\feature_request.md") -Content $featureIssue

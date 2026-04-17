@@ -24,3 +24,5 @@ chore: organiza arquivos de autoria do repositorio
 - Nao publique segredos, chaves, tokens ou credenciais
 - Atualize `CHANGELOG.md` em releases relevantes
 - Mantenha a autoria preservada nos documentos do projeto
+- Execute validacao minima antes de publicar, como typecheck, build e testes aplicaveis
+- Mantenha `CHECKLIST.md` atualizado antes de push, homologacao e release
