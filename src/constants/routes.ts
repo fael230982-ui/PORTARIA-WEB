@@ -1,0 +1,17 @@
+export const ROUTES = {
+  login: '/login',
+  dashboard: '/',
+  master: '/master',
+  operacao: '/operacao',
+  operacaoCameras: '/operacao/cameras',
+  admin: '/admin',
+  adminDashboard: '/admin/dashboard',
+  adminMoradores: '/admin/moradores',
+  adminEncomendas: '/admin/encomendas',
+  adminRelatorios: '/admin/relatorios',
+  adminUsuarios: '/admin/usuarios',
+  people: '/dashboard/people',
+  alerts: '/dashboard/alerts',
+  cameras: '/dashboard/cameras',
+  profile: '/dashboard/profile',
+} as const;

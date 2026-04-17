@@ -1,0 +1,132 @@
+{\rtf1\ansi\deff0
+{\fonttbl{\f0 Arial;}}
+\fs24
+\b Checklist de Testes - Portaria Web\b0\par
+\par
+Data: 2026-04-15\par
+\par
+Objetivo: validar os fluxos principais do sistema apos a rodada de correcoes, com foco em estabilidade, coerencia de dados, permissao, integracao e experiencia de uso.\par
+\par
+\b 1. Autenticacao e Sessao\b0\par
+\par
+[ ] Login com perfil MASTER\par
+[ ] Login com perfil ADMIN\par
+[ ] Login com perfil OPERADOR\par
+[ ] Login com perfil MORADOR\par
+[ ] Logout funcionando corretamente\par
+[ ] Refresh da pagina com sessao ativa sem perder contexto\par
+[ ] Bloqueio de acesso para telas sem permissao\par
+[ ] Troca de unidade no contexto do morador, se aplicavel\par
+\par
+\b 2. Master\b0\par
+\par
+[ ] Sidebar completa visivel\par
+[ ] Navegacao entre secoes preservando ?section=...\par
+[ ] Dashboard com cards coerentes\par
+[ ] Quantidade de clientes coerente\par
+[ ] Quantidade de licencas coerente\par
+[ ] Quantidade de portarias offline coerente\par
+[ ] Cliente com portaria aberta aparece online\par
+[ ] Cliente com portaria fechada aparece offline quando esperado\par
+[ ] Monitoramento sem inflar "Sem heartbeat"\par
+[ ] Monitoramento sem inflar "Offline"\par
+\par
+\b 3. Admin\b0\par
+\par
+[ ] Dashboard do admin carrega sem erro visual\par
+[ ] Moradores: criar\par
+[ ] Moradores: editar\par
+[ ] Moradores: inativar\par
+[ ] Moradores: upload de foto\par
+[ ] Moradores: facial\par
+[ ] Moradores: OCR documental\par
+[ ] Usuarios: criar\par
+[ ] Usuarios: editar\par
+[ ] Usuarios: reset de senha\par
+[ ] Usuarios: validacao de perfis e permissoes\par
+[ ] Unidades: criar\par
+[ ] Unidades: editar\par
+[ ] Veiculos: buscar placa\par
+[ ] Veiculos: criar\par
+[ ] Veiculos: editar\par
+[ ] Veiculos: excluir\par
+[ ] Pendencias: carregamento\par
+[ ] Pendencias: status e contagem\par
+[ ] Relatorios: gerar\par
+[ ] Relatorios: listar\par
+\par
+\b 4. Encomendas\b0\par
+\par
+[ ] Cadastro manual sem foto\par
+[ ] Cadastro com foto\par
+[ ] OCR por foto funcionando\par
+[ ] OCR com confianca alta faz autopreenchimento coerente\par
+[ ] OCR com confianca media ou baixa exige revisao manual\par
+[ ] Resumo do OCR mostra sugestoes corretamente\par
+[ ] Notificar encomenda\par
+[ ] Reenviar aviso\par
+[ ] Validar retirada por codigo\par
+[ ] Retirada manual\par
+[ ] Fluxo offline salva localmente\par
+[ ] Sincronizacao posterior funciona ao reconectar\par
+\par
+\b 5. Operacao\b0\par
+\par
+[ ] Tela principal abre sem crash\par
+[ ] Heartbeat/presenca reflete corretamente no master\par
+[ ] Cadastro rapido de pessoa funciona\par
+[ ] Registro de entrada funciona\par
+[ ] Registro de saida funciona\par
+[ ] Troca de turno funciona\par
+[ ] Alertas aparecem corretamente\par
+[ ] Acoes operacionais funcionam\par
+[ ] Cameras operacionais carregam\par
+[ ] Troca de layout de cameras funciona\par
+\par
+\b 6. Morador\b0\par
+\par
+[ ] Dashboard do morador carrega com dados corretos\par
+[ ] Perfil usa dados canonicos\par
+[ ] Modulos habilitados/desabilitados refletem na navegacao\par
+[ ] Encomendas respeitam a configuracao do condominio\par
+[ ] Cameras respeitam a configuracao do condominio\par
+[ ] Alertas respeitam a configuracao do condominio\par
+[ ] Pessoas respeitam a configuracao do condominio\par
+\par
+\b 7. Resiliencia e Integracao\b0\par
+\par
+[ ] Acoes principais tratam erro 403 com mensagem compreensivel\par
+[ ] Acoes principais tratam erro 404 com mensagem compreensivel\par
+[ ] Acoes principais tratam erro 500 com mensagem compreensivel\par
+[ ] A tela continua utilizavel quando um endpoint opcional falha\par
+[ ] Estados vazios fazem sentido para o usuario\par
+[ ] Estados de carregamento fazem sentido para o usuario\par
+\par
+\b 8. Observacoes Durante o Teste\b0\par
+\par
+Data do teste: ______________________________\par
+Responsavel: _______________________________\par
+Ambiente: __________________________________\par
+\par
+Observacoes gerais:\par
+\par
+____________________________________________________________\par
+\par
+____________________________________________________________\par
+\par
+____________________________________________________________\par
+\par
+\b 9. Resultado Final\b0\par
+\par
+[ ] Aprovado para uso\par
+[ ] Aprovado com ressalvas\par
+[ ] Reprovado - exige nova rodada de correcoes\par
+\par
+Resumo final:\par
+\par
+____________________________________________________________\par
+\par
+____________________________________________________________\par
+\par
+____________________________________________________________\par
+}

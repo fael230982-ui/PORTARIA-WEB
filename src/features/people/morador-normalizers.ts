@@ -1,0 +1,430 @@
+import type {
+  PeopleListResponse,
+  Person,
+  PersonCategory,
+  PersonDocumentType,
+  MinorFacialAuthorization,
+  PersonStatus,
+} from '../../types/person';
+import type {
+  Condominium,
+  ResidenceFormData,
+  Street,
+  Unit,
+  UnitStructureType,
+} from '../../types/condominium';
+
+export type MoradorRow = {
+  id: string;
+  nome: string;
+  email?: string;
+  unidade?: string;
+  bloco?: string;
+  telefone?: string;
+  documento?: string;
+  documentType?: Person['documentType'];
+  categoria?: string;
+  status?: string;
+  avatarUrl?: string;
+  condominio?: string;
+  estruturaTipo?: string;
+  estruturaLabel?: string;
+  localizacao?: string;
+  unit?: Unit | null;
+  faceStatus?: Person['faceStatus'];
+  faceUpdatedAt?: string | null;
+  faceErrorMessage?: string | null;
+  faceListSyncStatus?: string | null;
+  faceListSyncError?: string | null;
+};
+
+type ResidenceCatalog = {
+  condominiums?: Condominium[];
+  streets?: Street[];
+  units?: Unit[];
+};
+
+const structureTypeLabels: Record<UnitStructureType, string> = {
+  STREET: 'rua',
+  BLOCK: 'bloco',
+  QUAD: 'quadra',
+  LOT: 'lote',
+};
+
+export function safeText(value: unknown, fallback = '') {
+  if (value === null || value === undefined) return fallback;
+  const text = String(value).trim();
+  return text.length ? text : fallback;
+}
+
+function normalizeUpperText(value: string | null | undefined) {
+  const normalized = String(value ?? '').trim().toUpperCase();
+  return normalized.length > 0 ? normalized : '';
+}
+
+function normalizeTitleText(value: string | null | undefined) {
+  return String(value ?? '').trim();
+}
+
+function normalizeFilterText(value: unknown) {
+  return safeText(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
+export function getUnitReference(value?: string | null) {
+  const normalized = String(value ?? '').trim();
+  if (!normalized) return '';
+
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(normalized)) {
+    return normalized.slice(0, 8);
+  }
+
+  return normalized;
+}
+
+export function splitLegacyUnitId(unitId?: string | null) {
+  const normalizedUnitId = getUnitReference(unitId);
+  if (!normalizedUnitId) return { bloco: '', unidade: '' };
+
+  if (/^[0-9a-f]{8}$/i.test(normalizedUnitId)) {
+    return { bloco: '', unidade: normalizedUnitId };
+  }
+
+  const [bloco = '', ...rest] = normalizedUnitId.split('-');
+  return {
+    bloco,
+    unidade: rest.join('-'),
+  };
+}
+
+export function mapApiCategoryToUi(category?: string | null, categoryLabel?: string | null) {
+  if (categoryLabel) return categoryLabel.toLowerCase();
+
+  switch (category) {
+    case 'VISITOR':
+      return 'visitante';
+    case 'SERVICE_PROVIDER':
+      return 'prestador';
+    case 'DELIVERER':
+      return 'entregador';
+    case 'RENTER':
+      return 'locatario';
+    case 'RESIDENT':
+    default:
+      return 'morador';
+  }
+}
+
+export function mapUiCategoryToApi(value: string): PersonCategory {
+  switch (value) {
+    case 'visitante':
+      return 'VISITOR';
+    case 'funcionario':
+      return 'DELIVERER';
+    case 'locatario':
+      return 'RENTER';
+    case 'proprietario':
+      return 'RESIDENT';
+    case 'morador':
+    default:
+      return 'RESIDENT';
+  }
+}
+
+export function mapApiStatusToUi(status?: string | null, statusLabel?: string | null) {
+  if (statusLabel) return statusLabel.toLowerCase();
+
+  switch (status) {
+    case 'EXPIRED':
+      return 'vencido';
+    case 'INACTIVE':
+      return 'inativo';
+    case 'BLOCKED':
+      return 'bloqueado';
+    case 'ACTIVE':
+    default:
+      return 'ativo';
+  }
+}
+
+export function mapUiStatusToApi(value: string): PersonStatus {
+  switch (value) {
+    case 'inativo':
+    case 'pendente':
+      return 'INACTIVE';
+    case 'bloqueado':
+      return 'BLOCKED';
+    case 'vencido':
+      return 'EXPIRED';
+    case 'ativo':
+    default:
+      return 'ACTIVE';
+  }
+}
+
+export function getStructureTypeLabel(type?: UnitStructureType | null) {
+  if (!type) return '';
+  return structureTypeLabels[type] ?? '';
+}
+
+export function getResidenceDisplay(unit?: Unit | null, legacyUnitId?: string | null) {
+  const effectiveReference = getUnitReference(safeText(unit?.legacyUnitId, safeText(legacyUnitId)));
+  const legacy = splitLegacyUnitId(effectiveReference);
+  const unitLabel = safeText(unit?.label, safeText(legacy.unidade, effectiveReference));
+  const structureLabel = safeText(unit?.structure?.label, legacy.bloco);
+  const structureType = getStructureTypeLabel(unit?.structureType ?? unit?.structure?.type);
+  const condominium = safeText(unit?.condominium?.name, '');
+  const localizacao = [condominium, structureType && structureLabel ? `${structureType} ${structureLabel}` : structureLabel]
+    .filter(Boolean)
+    .join(' • ');
+
+  return {
+    unidade: unitLabel,
+    bloco: structureType === 'bloco' ? structureLabel : legacy.bloco,
+    condominio: condominium,
+    estruturaTipo: structureType,
+    estruturaLabel: structureLabel,
+    localizacao: localizacao || effectiveReference,
+  };
+}
+
+export function buildLegacyUnitId(structureLabel: string, unitLabel: string) {
+  const normalizedStructure = normalizeUpperText(structureLabel);
+  const normalizedUnit = normalizeUpperText(unitLabel);
+
+  if (normalizedStructure && normalizedUnit) {
+    return `${normalizedStructure}-${normalizedUnit}`;
+  }
+
+  return normalizedStructure || normalizedUnit || null;
+}
+
+export function optionalText(value: string | null | undefined) {
+  const normalized = String(value ?? '').trim();
+  return normalized.length > 0 ? normalized : null;
+}
+
+function onlyDigits(value: string | null | undefined) {
+  return String(value ?? '').replace(/\D+/g, '').trim();
+}
+
+export function normalizePhoneInput(value: string | null | undefined) {
+  const digits = onlyDigits(value);
+  return digits.length > 0 ? digits : null;
+}
+
+export function normalizeDocumentInput(value: string | null | undefined) {
+  const digits = onlyDigits(value);
+  return digits.length > 0 ? digits : null;
+}
+
+export function buildResidenceInput(form: ResidenceFormData) {
+  return {
+    condominiumName: normalizeTitleText(form.condominiumName),
+    structureType: form.structureType,
+    structureLabel: normalizeUpperText(form.structureLabel),
+    unitLabel: normalizeUpperText(form.unitLabel),
+  };
+}
+
+export function buildPersonUpsertPayload(input: {
+  nome: string;
+  email?: string;
+  telefone?: string;
+  documento?: string;
+  documentType?: PersonDocumentType | null;
+  birthDate?: string | null;
+  tipo: string;
+  photoUrl?: string | null;
+  minorFacialAuthorization?: MinorFacialAuthorization | null;
+  source?: string | null;
+  residence?: ResidenceFormData;
+  unitId?: string | null;
+}) {
+  const payload: {
+    name: string;
+    category: PersonCategory;
+    email?: string;
+    phone?: string;
+    document?: string;
+    documentType?: PersonDocumentType | null;
+    birthDate?: string | null;
+    unitId?: string;
+    photoUrl?: string | null;
+    minorFacialAuthorization?: MinorFacialAuthorization | null;
+    source?: string | null;
+  } = {
+    name: input.nome.trim(),
+    category: mapUiCategoryToApi(input.tipo),
+  };
+
+  const phone = normalizePhoneInput(input.telefone);
+  const document = normalizeDocumentInput(input.documento);
+  const email = optionalText(input.email);
+  const residence = input.residence ? buildResidenceInput(input.residence) : null;
+  const legacyUnitId = residence
+    ? buildLegacyUnitId(residence.structureLabel, residence.unitLabel)
+    : null;
+
+  if (email) {
+    payload.email = email;
+  }
+
+  if (phone) {
+    payload.phone = phone;
+  }
+
+  if (document) {
+    payload.document = document;
+  }
+
+  if (input.documentType) {
+    payload.documentType = input.documentType;
+  }
+
+  const birthDate = optionalText(input.birthDate);
+  if (birthDate) {
+    payload.birthDate = birthDate;
+  }
+
+  if (typeof input.photoUrl === 'string') {
+    payload.photoUrl = input.photoUrl.trim() || null;
+  }
+
+  if (input.minorFacialAuthorization) {
+    payload.minorFacialAuthorization = input.minorFacialAuthorization;
+  }
+
+  if (input.source) {
+    payload.source = input.source;
+  }
+
+  if (input.unitId) {
+    payload.unitId = input.unitId;
+  } else if (legacyUnitId) {
+    payload.unitId = legacyUnitId;
+  }
+
+  return payload;
+}
+
+export function normalizePerson(person: Person): MoradorRow {
+  const residence = getResidenceDisplay(person.unit, person.unitName ?? person.unitId);
+
+  return {
+    id: person.id,
+    nome: person.name,
+    email: person.email ?? '',
+    unidade: residence.unidade || person.unitName || person.unitId || '',
+    bloco: residence.bloco,
+    telefone: person.phone ?? '',
+    documento: person.document ?? '',
+    documentType: person.documentType ?? null,
+    categoria: mapApiCategoryToUi(person.category, person.categoryLabel),
+    status: mapApiStatusToUi(person.status, person.statusLabel),
+    avatarUrl: person.photoUrl ?? '',
+    condominio: residence.condominio,
+    estruturaTipo: residence.estruturaTipo,
+    estruturaLabel: residence.estruturaLabel,
+    localizacao: residence.localizacao,
+    unit: person.unit ?? null,
+    faceStatus: person.faceStatus ?? null,
+    faceUpdatedAt: person.faceUpdatedAt ?? null,
+    faceErrorMessage: person.faceErrorMessage ?? null,
+    faceListSyncStatus: person.faceListSyncStatus ?? null,
+    faceListSyncError: person.faceListSyncError ?? null,
+  };
+}
+
+function enrichPersonResidence(person: Person, catalog?: ResidenceCatalog): Person {
+  if (person.unit || !person.unitId || !catalog?.units?.length) {
+    return person;
+  }
+
+  const matchedUnit =
+    catalog.units.find((item) => item.id === person.unitId) ||
+    catalog.units.find((item) => item.legacyUnitId === person.unitId) ||
+    catalog.units.find((item) => item.legacyUnitId === getUnitReference(person.unitId));
+
+  if (!matchedUnit) {
+    return person;
+  }
+
+  const condominium =
+    matchedUnit.condominium ??
+    catalog.condominiums?.find((item) => item.id === matchedUnit.condominiumId) ??
+    null;
+
+  const structure =
+    matchedUnit.structure ??
+    catalog.streets
+      ?.filter((item) => item.id === matchedUnit.streetId)
+      .map((item) => ({
+        id: item.id,
+        type: 'STREET' as const,
+        label: item.name,
+      }))[0] ??
+    null;
+
+  return {
+    ...person,
+    unit: {
+      ...matchedUnit,
+      condominium,
+      structure,
+      structureType: matchedUnit.structureType ?? structure?.type ?? null,
+    },
+    unitName: person.unitName ?? matchedUnit.label,
+  };
+}
+
+export function normalizePeople(data?: PeopleListResponse, catalog?: ResidenceCatalog): MoradorRow[] {
+  if (!data?.data) return [];
+  return data.data.map((person) => normalizePerson(enrichPersonResidence(person, catalog)));
+}
+
+export function normalizeMoradorStatus(value: unknown) {
+  const normalized = normalizeFilterText(value || 'ativo');
+
+  if (normalized === 'active' || normalized === 'ativo') return 'ativo';
+  if (normalized === 'blocked' || normalized === 'bloqueado') return 'bloqueado';
+  if (normalized === 'inactive' || normalized === 'inativo' || normalized === 'pendente') return 'inativo';
+  if (normalized === 'expired' || normalized === 'vencido') return 'vencido';
+
+  return normalized || 'ativo';
+}
+
+export function normalizeMoradorCategory(value: unknown) {
+  const normalized = normalizeFilterText(value || 'morador');
+
+  if (normalized === 'resident' || normalized === 'morador' || normalized === 'proprietario') return 'morador';
+  if (normalized === 'visitor' || normalized === 'visitante') return 'visitante';
+  if (normalized === 'service_provider' || normalized === 'prestador' || normalized === 'prestador de servico') return 'prestador';
+  if (normalized === 'deliverer' || normalized === 'funcionario' || normalized === 'entregador') return 'funcionario';
+  if (normalized === 'renter' || normalized === 'locatario') return 'locatario';
+
+  return normalized || 'morador';
+}
+
+export function matchesMoradorText(row: MoradorRow, term: string) {
+  if (!term) return true;
+  const query = normalizeFilterText(term);
+  return [
+    row.nome,
+    row.email,
+    row.unidade,
+    row.bloco,
+    row.telefone,
+    row.documento,
+    row.categoria,
+    row.status,
+    row.condominio,
+    row.estruturaTipo,
+    row.estruturaLabel,
+    row.localizacao,
+  ]
+    .filter(Boolean)
+    .some((value) => normalizeFilterText(value).includes(query));
+}
