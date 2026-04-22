@@ -48,12 +48,38 @@ function normalizeAssetUrl(value: unknown) {
   const normalized = normalizeString(value);
   if (!normalized) return null;
 
-  if (/^https?:\/\//i.test(normalized) || normalized.startsWith('data:') || normalized.startsWith('blob:')) {
+  if (normalized.startsWith('data:') || normalized.startsWith('blob:')) {
     return normalized;
   }
 
-  const baseOrigin = env.apiBaseUrl.replace(/\/api\/v1$/i, '');
+  if (normalized.startsWith('/api/proxy/')) {
+    return normalized;
+  }
+
+  if (normalized.startsWith('/api/v1/')) {
+    return normalized.replace(/^\/api\/v1/i, '/api/proxy');
+  }
+
+  const proxyablePathPattern = /\/(media|uploads|files|storage)\//i;
+  if (/^https?:\/\//i.test(normalized)) {
+    try {
+      const url = new URL(normalized);
+      if (proxyablePathPattern.test(url.pathname)) {
+        return `/api/proxy${url.pathname}${url.search}`;
+      }
+    } catch {
+      return normalized;
+    }
+
+    return normalized;
+  }
+
   const absolutePath = normalized.startsWith('/') ? normalized : `/${normalized}`;
+  if (proxyablePathPattern.test(absolutePath)) {
+    return `/api/proxy${absolutePath}`;
+  }
+
+  const baseOrigin = env.apiBaseUrl.replace(/\/api\/v1$/i, '');
   return `${baseOrigin}${absolutePath}`;
 }
 

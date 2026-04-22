@@ -24,6 +24,9 @@ export type Condominium = {
   licensePlan?: string | null;
   licenseStatus?: 'ACTIVE' | 'TRIAL' | 'SUSPENDED' | 'EXPIRED' | string | null;
   licenseExpiresAt?: string | null;
+  licenseMonthlyValue?: string | number | null;
+  licenseStartsAt?: string | null;
+  licenseDueDay?: string | number | null;
   peopleCount?: number | null;
   residentsCount?: number | null;
   camerasCount?: number | null;

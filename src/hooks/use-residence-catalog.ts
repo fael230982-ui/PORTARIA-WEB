@@ -9,6 +9,7 @@ import {
   getStreets,
   getUnits,
 } from '@/services/residence.service';
+import type { Condominium, Unit } from '@/types/condominium';
 
 function parseStreetStructure(name: string | null | undefined) {
   const raw = String(name ?? '').trim().toUpperCase();
@@ -31,11 +32,18 @@ function parseStreetStructure(name: string | null | undefined) {
 export function useResidenceCatalog(enabled = true, condominiumId?: string) {
   const { user } = useAuth();
   const isResident = user?.role === 'MORADOR';
+  const useOperationCatalog = user?.role === 'OPERADOR';
   const [condominiumsQuery, streetsQuery, unitsQuery] = useQueries({
     queries: [
       {
-        queryKey: ['condominiums', isResident ? 'resident' : 'default', user?.condominiumId ?? 'all'],
+        queryKey: ['condominiums', useOperationCatalog ? 'operation' : isResident ? 'resident' : 'default', user?.condominiumId ?? 'all'],
         queryFn: async () => {
+          if (useOperationCatalog) {
+            return user?.condominiumId
+              ? ([{ id: user.condominiumId, name: user.selectedUnitName ?? 'Base operacional' }] as Condominium[])
+              : [];
+          }
+
           if (!isResident) {
             return getCondominiums();
           }
@@ -49,18 +57,27 @@ export function useResidenceCatalog(enabled = true, condominiumId?: string) {
         },
         enabled,
         staleTime: 5 * 60 * 1000,
+        retry: false,
       },
       {
-        queryKey: ['streets', condominiumId ?? 'all'],
-        queryFn: () => getStreets(condominiumId),
+        queryKey: ['streets', useOperationCatalog ? 'operation' : condominiumId ?? 'all'],
+        queryFn: () => (useOperationCatalog ? Promise.resolve([]) : getStreets(condominiumId)),
         enabled,
         staleTime: 5 * 60 * 1000,
+        retry: false,
       },
       {
-        queryKey: ['units', condominiumId ?? 'all'],
-        queryFn: () => getUnits(condominiumId ? { condominiumId } : undefined),
+        queryKey: ['units', useOperationCatalog ? 'operation' : condominiumId ?? 'all'],
+        queryFn: async () => {
+          if (!useOperationCatalog) {
+            return getUnits(condominiumId ? { condominiumId } : undefined);
+          }
+
+          return [];
+        },
         enabled,
         staleTime: 5 * 60 * 1000,
+        retry: false,
       },
     ],
   });

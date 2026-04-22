@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { env } from '@/lib/env';
 
 const API_BASE = env.apiBaseUrl;
+const UPSTREAM_TIMEOUT_MS = 15000;
 
 const METHODS_WITH_BODY = new Set(['POST', 'PUT', 'PATCH']);
 
@@ -41,13 +42,22 @@ async function handle(request: NextRequest, context: { params: Promise<{ path: s
     const { path } = await context.params;
     const targetUrl = buildTargetUrl(path, request);
     const headers = copyHeaders(request);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
 
-    const upstreamResponse = await fetch(targetUrl, {
-      method: request.method,
-      headers,
-      body: METHODS_WITH_BODY.has(request.method) ? await request.text() : undefined,
-      cache: 'no-store',
-    });
+    let upstreamResponse: Response;
+
+    try {
+      upstreamResponse = await fetch(targetUrl, {
+        method: request.method,
+        headers,
+        body: METHODS_WITH_BODY.has(request.method) ? await request.text() : undefined,
+        cache: 'no-store',
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     if (!upstreamResponse.ok) {
       const responseText = await upstreamResponse.text();

@@ -94,9 +94,40 @@ export function getDeliveryStatusBadgeClass(status: unknown) {
   return 'bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/20';
 }
 
+type DeliveryWithLegacyPhotoFields = Delivery & {
+  photo_url?: string | null;
+  package_photo_url?: string | null;
+  label_photo_url?: string | null;
+  imageUrl?: string | null;
+  image_url?: string | null;
+  fileUrl?: string | null;
+  file_url?: string | null;
+  attachmentUrl?: string | null;
+  attachment_url?: string | null;
+};
+
+function normalizeDeliveryRow(row: DeliveryWithLegacyPhotoFields): DeliveryRow {
+  return {
+    ...row,
+    photoUrl:
+      normalizeDeliveryAssetUrl(row.photoUrl) ||
+      normalizeDeliveryAssetUrl(row.photo_url) ||
+      normalizeDeliveryAssetUrl(row.imageUrl) ||
+      normalizeDeliveryAssetUrl(row.image_url) ||
+      normalizeDeliveryAssetUrl(row.fileUrl) ||
+      normalizeDeliveryAssetUrl(row.file_url) ||
+      normalizeDeliveryAssetUrl(row.attachmentUrl) ||
+      normalizeDeliveryAssetUrl(row.attachment_url) ||
+      row.photoUrl ||
+      null,
+    packagePhotoUrl: normalizeDeliveryAssetUrl(row.packagePhotoUrl) || normalizeDeliveryAssetUrl(row.package_photo_url) || row.packagePhotoUrl || null,
+    labelPhotoUrl: normalizeDeliveryAssetUrl(row.labelPhotoUrl) || normalizeDeliveryAssetUrl(row.label_photo_url) || row.labelPhotoUrl || null,
+  };
+}
+
 export function normalizeDeliveries(data?: DeliveriesListResponse | Delivery[] | null): DeliveryRow[] {
-  if (Array.isArray(data)) return data;
-  if (data && Array.isArray(data.data)) return data.data;
+  if (Array.isArray(data)) return data.map((row) => normalizeDeliveryRow(row as DeliveryWithLegacyPhotoFields));
+  if (data && Array.isArray(data.data)) return data.data.map((row) => normalizeDeliveryRow(row as DeliveryWithLegacyPhotoFields));
   return [];
 }
 
@@ -119,12 +150,21 @@ export function getDeliveryWithdrawalQrUrl(
 }
 
 export function getDeliveryPhotoUrl(
-  row?: Pick<Delivery, 'photoUrl' | 'packagePhotoUrl' | 'labelPhotoUrl'> | null
+  row?: (Pick<Delivery, 'photoUrl' | 'packagePhotoUrl' | 'labelPhotoUrl'> & Partial<DeliveryWithLegacyPhotoFields>) | null
 ) {
   return (
     normalizeDeliveryAssetUrl(row?.packagePhotoUrl) ||
+    normalizeDeliveryAssetUrl(row?.package_photo_url) ||
     normalizeDeliveryAssetUrl(row?.photoUrl) ||
+    normalizeDeliveryAssetUrl(row?.photo_url) ||
+    normalizeDeliveryAssetUrl(row?.imageUrl) ||
+    normalizeDeliveryAssetUrl(row?.image_url) ||
+    normalizeDeliveryAssetUrl(row?.fileUrl) ||
+    normalizeDeliveryAssetUrl(row?.file_url) ||
+    normalizeDeliveryAssetUrl(row?.attachmentUrl) ||
+    normalizeDeliveryAssetUrl(row?.attachment_url) ||
     normalizeDeliveryAssetUrl(row?.labelPhotoUrl) ||
+    normalizeDeliveryAssetUrl(row?.label_photo_url) ||
     null
   );
 }

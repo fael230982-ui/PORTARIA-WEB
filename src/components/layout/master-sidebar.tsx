@@ -13,6 +13,7 @@ import {
   LayoutDashboard,
   Menu,
   Puzzle,
+  Users,
 } from 'lucide-react';
 import { brandConfig } from '@/config/brand';
 
@@ -36,6 +37,11 @@ const navigation = [
     label: 'Licencas',
     href: '/master?section=licenses',
     icon: KeyRound,
+  },
+  {
+    label: 'Administradores',
+    href: '/master?section=admins',
+    icon: Users,
   },
   {
     label: 'Modulos',

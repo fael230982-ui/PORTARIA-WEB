@@ -40,7 +40,7 @@ export const brandConfig: AppBrandConfig = {
   ecosystemName: 'Ecossistema Rafiels',
   htmlLang: 'pt-BR',
   primaryLogo: {
-    src: '/logo-V8.png',
+    src: '/logo-v8.png',
     alt: 'Logo V8',
     width: 380,
     height: 124,

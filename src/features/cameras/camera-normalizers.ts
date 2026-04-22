@@ -4,6 +4,7 @@ import type {
   CameraStreamingResponse,
   CamerasListResponse,
 } from '@/types/camera';
+import { resolveCameraMediaUrl } from '@/features/cameras/camera-media';
 
 type CameraApiShape = Partial<Camera> & {
   stream_url?: string | null;
@@ -54,13 +55,13 @@ export function normalizeCamera(raw: CameraApiShape): Camera {
     provider: normalizeString(raw.provider),
     transport: normalizeString(raw.transport),
     status: normalizeStatus(raw.status),
-    streamUrl: normalizeString(raw.streamUrl) ?? normalizeString(raw.stream_url),
-    snapshotUrl: normalizeString(raw.snapshotUrl) ?? normalizeString(raw.snapshot_url),
-    thumbnailUrl: normalizeString(raw.thumbnailUrl) ?? normalizeString(raw.thumbnail_url),
-    imageStreamUrl: normalizeString(raw.imageStreamUrl) ?? normalizeString(raw.image_stream_url),
-    liveUrl: normalizeString(raw.liveUrl) ?? normalizeString(raw.live_url),
-    hlsUrl: normalizeString(raw.hlsUrl) ?? normalizeString(raw.hls_url),
-    webRtcUrl: normalizeString(raw.webRtcUrl) ?? normalizeString(raw.web_rtc_url),
+    streamUrl: resolveCameraMediaUrl(normalizeString(raw.streamUrl) ?? normalizeString(raw.stream_url)),
+    snapshotUrl: resolveCameraMediaUrl(normalizeString(raw.snapshotUrl) ?? normalizeString(raw.snapshot_url)),
+    thumbnailUrl: resolveCameraMediaUrl(normalizeString(raw.thumbnailUrl) ?? normalizeString(raw.thumbnail_url)),
+    imageStreamUrl: resolveCameraMediaUrl(normalizeString(raw.imageStreamUrl) ?? normalizeString(raw.image_stream_url)),
+    liveUrl: resolveCameraMediaUrl(normalizeString(raw.liveUrl) ?? normalizeString(raw.live_url)),
+    hlsUrl: resolveCameraMediaUrl(normalizeString(raw.hlsUrl) ?? normalizeString(raw.hls_url)),
+    webRtcUrl: resolveCameraMediaUrl(normalizeString(raw.webRtcUrl) ?? normalizeString(raw.web_rtc_url)),
     vmsStreamingUrl: normalizeString(raw.vmsStreamingUrl) ?? normalizeString(raw.vms_streaming_url),
     lastSeen: normalizeString(raw.lastSeen) ?? normalizeString(raw.last_seen),
     engineStreamId: raw.engineStreamId ?? raw.engine_stream_id ?? null,
@@ -92,17 +93,18 @@ export function normalizeCameraStreamingResponse(
   return {
     provider: String(raw.provider ?? 'UNKNOWN'),
     transport: String(raw.transport ?? 'UNKNOWN'),
-    snapshotUrl: String(raw.snapshotUrl ?? legacyRaw.snapshot_url ?? raw.previewUrl ?? legacyRaw.preview_url ?? ''),
-    thumbnailUrl: normalizeString(raw.thumbnailUrl) ?? normalizeString(legacyRaw.thumbnail_url),
-    frameUrl: normalizeString(raw.frameUrl) ?? normalizeString(legacyRaw.frame_url),
-    previewUrl: normalizeString(raw.previewUrl) ?? normalizeString(legacyRaw.preview_url),
-    imageStreamUrl: String(
-      raw.imageStreamUrl ?? legacyRaw.image_stream_url ?? raw.mjpegUrl ?? legacyRaw.mjpeg_url ?? raw.frameUrl ?? legacyRaw.frame_url ?? ''
-    ),
-    mjpegUrl: normalizeString(raw.mjpegUrl) ?? normalizeString(legacyRaw.mjpeg_url),
-    liveUrl: normalizeString(raw.liveUrl) ?? normalizeString(legacyRaw.live_url),
-    hlsUrl: normalizeString(raw.hlsUrl) ?? normalizeString(legacyRaw.hls_url),
-    webRtcUrl: normalizeString(raw.webRtcUrl) ?? normalizeString(legacyRaw.web_rtc_url),
+    snapshotUrl: resolveCameraMediaUrl(raw.snapshotUrl ?? legacyRaw.snapshot_url ?? raw.previewUrl ?? legacyRaw.preview_url) ?? '',
+    thumbnailUrl: resolveCameraMediaUrl(normalizeString(raw.thumbnailUrl) ?? normalizeString(legacyRaw.thumbnail_url)),
+    frameUrl: resolveCameraMediaUrl(normalizeString(raw.frameUrl) ?? normalizeString(legacyRaw.frame_url)),
+    previewUrl: resolveCameraMediaUrl(normalizeString(raw.previewUrl) ?? normalizeString(legacyRaw.preview_url)),
+    imageStreamUrl:
+      resolveCameraMediaUrl(
+        raw.imageStreamUrl ?? legacyRaw.image_stream_url ?? raw.mjpegUrl ?? legacyRaw.mjpeg_url ?? raw.frameUrl ?? legacyRaw.frame_url
+      ) ?? '',
+    mjpegUrl: resolveCameraMediaUrl(normalizeString(raw.mjpegUrl) ?? normalizeString(legacyRaw.mjpeg_url)),
+    liveUrl: resolveCameraMediaUrl(normalizeString(raw.liveUrl) ?? normalizeString(legacyRaw.live_url)),
+    hlsUrl: resolveCameraMediaUrl(normalizeString(raw.hlsUrl) ?? normalizeString(legacyRaw.hls_url)),
+    webRtcUrl: resolveCameraMediaUrl(normalizeString(raw.webRtcUrl) ?? normalizeString(legacyRaw.web_rtc_url)),
     gatewayPath: normalizeString(raw.gatewayPath) ?? normalizeString(legacyRaw.gateway_path),
     vmsStreamingUrl: normalizeString(raw.vmsStreamingUrl) ?? normalizeString(legacyRaw.vms_streaming_url),
     cameraUuid: normalizeString(raw.cameraUuid),

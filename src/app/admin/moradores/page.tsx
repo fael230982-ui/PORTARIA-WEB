@@ -37,13 +37,14 @@ import {
   matchesMoradorText,
   normalizeMoradorCategory,
   normalizeMoradorStatus,
+  normalizePerson,
   normalizePeople,
   safeText,
   type MoradorRow,
 } from '@/features/people/morador-normalizers';
 import { getPersonStatusBadgeClass } from '@/features/people/status-badges';
 import { api } from '@/lib/axios';
-import { uploadPersonPhoto, syncPersonFace } from '@/services/people.service';
+import { getPersonById, uploadPersonPhoto, syncPersonFace } from '@/services/people.service';
 import { camerasService } from '@/services/cameras.service';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -400,6 +401,7 @@ export default function MoradoresPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [pageNotice, setPageNotice] = useState<{ tone: 'success' | 'warning'; message: string } | null>(null);
+  const [brokenMoradorImageUrls, setBrokenMoradorImageUrls] = useState<Record<string, boolean>>({});
   const [snapshotCache, setSnapshotCache] = useState<MoradoresSnapshotCache>(() => readMoradoresSnapshot(null));
   const snapshotSignatureRef = useRef(
     getMoradoresSnapshotSignature({ moradores: [], appAccessEntries: [], accessSummaryEntries: [], cachedAt: null })
@@ -544,6 +546,12 @@ export default function MoradoresPage() {
     );
   }, [accessSummaryByPerson, selectedMorador]);
   const selectedMoradorAppAccess = selectedMorador ? appAccessByResidentId.get(selectedMorador.id) ?? null : null;
+  const selectedMoradorPhotoUnavailable = Boolean(selectedMorador?.avatarUrl && brokenMoradorImageUrls[selectedMorador.avatarUrl]);
+
+  function markMoradorImageAsUnavailable(url?: string | null) {
+    if (!url) return;
+    setBrokenMoradorImageUrls((current) => (current[url] ? current : { ...current, [url]: true }));
+  }
 
   const handleRefresh = async () => {
     await Promise.all([refetchPeople(), refetchResidenceCatalog()]);
@@ -591,17 +599,34 @@ export default function MoradoresPage() {
     setOpenCreate(true);
   };
 
+  async function loadMoradorDetails(morador: MoradorRow) {
+    try {
+      const person = await getPersonById(morador.id);
+      const detailed = normalizePerson(person);
+      setSelectedMorador({
+        ...morador,
+        ...detailed,
+        avatarUrl: detailed.avatarUrl || morador.avatarUrl,
+        unit: detailed.unit ?? morador.unit ?? null,
+      });
+    } catch {
+      setSelectedMorador(morador);
+    }
+  }
+
   const openEditMorador = (morador: MoradorRow) => {
     setSelectedMorador(morador);
     setSubmitError(null);
     setPageNotice(null);
     setOpenEdit(true);
+    void loadMoradorDetails(morador);
   };
 
   const openViewMorador = (morador: MoradorRow) => {
     setSelectedMorador(morador);
     setSubmitError(null);
     setOpenView(true);
+    void loadMoradorDetails(morador);
   };
 
   const openResidentAppAccess = (morador: MoradorRow) => {
@@ -1299,16 +1324,17 @@ export default function MoradoresPage() {
             <div className="rounded-2xl border border-white/10 bg-white/5 p-4 md:col-span-2">
               <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Foto</p>
               <div className="mt-3 flex items-center gap-4">
-                {selectedMorador.avatarUrl ? (
+                {selectedMorador.avatarUrl && !selectedMoradorPhotoUnavailable ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={selectedMorador.avatarUrl}
                     alt={selectedMorador.nome}
                     className="h-24 w-24 rounded-2xl object-cover"
+                    onError={() => markMoradorImageAsUnavailable(selectedMorador.avatarUrl)}
                   />
                 ) : (
                   <div className="flex h-24 w-24 items-center justify-center rounded-2xl bg-white/10 text-xs text-slate-400">
-                    Sem foto
+                    {selectedMoradorPhotoUnavailable ? 'Foto indisponível' : 'Sem foto'}
                   </div>
                 )}
                 <p className="text-sm text-slate-400">

@@ -40,6 +40,7 @@ import { getApiErrorMessage } from '@/features/http/api-error';
 import {
   getDeliveryWithdrawalCode,
   getDeliveryWithdrawalQrUrl,
+  getDeliveryPhotoUrl,
   hasDeliverySecureWithdrawal,
   getDeliveryStatusBadgeClass,
   getDeliveryStatusLabel,
@@ -189,12 +190,7 @@ function getErrorMessage(error: unknown, fallback: string) {
 }
 
 function getDeliveryPreviewUrl(delivery: DeliveryRow) {
-  return (
-    safeDeliveryText(delivery.photoUrl) ||
-    safeDeliveryText(delivery.packagePhotoUrl) ||
-    safeDeliveryText(delivery.labelPhotoUrl) ||
-    null
-  );
+  return getDeliveryPhotoUrl(delivery);
 }
 
 function DeliveryThumbnail({ delivery, label }: { delivery: DeliveryRow; label: string }) {

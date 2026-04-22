@@ -39,6 +39,11 @@ export type MasterClientCreatePayload = {
   enabledModules?: string[];
   moduleSettings?: Record<string, boolean>;
   slimMode?: boolean;
+  adminInitial?: {
+    name: string;
+    email: string;
+    password: string;
+  } | null;
 };
 
 export type MasterClientProfilePayload = {
@@ -58,6 +63,9 @@ export type MasterLicensePayload = {
   licensePlan: string;
   licenseStatus: LicenseStatus;
   licenseExpiresAt?: string | null;
+  licenseMonthlyValue?: string | number | null;
+  licenseStartsAt?: string | null;
+  licenseDueDay?: string | number | null;
 };
 
 export type MasterModulesPayload = {
@@ -249,6 +257,7 @@ export const masterService = {
         licenseExpiresAt: payload.licenseExpiresAt ?? null,
         enabledModules: supportedModules.map(toMasterModuleKey),
         slimMode: payload.slimMode ?? false,
+        adminInitial: payload.adminInitial ?? null,
       });
       return { client: normalizeClient(response.data), fullContractPersisted: true };
     } catch (error) {
@@ -300,6 +309,9 @@ export const masterService = {
         licensePlan: payload.licensePlan,
         licenseStatus: payload.licenseStatus,
         licenseExpiresAt: payload.licenseExpiresAt ?? null,
+        licenseMonthlyValue: payload.licenseMonthlyValue ?? null,
+        licenseStartsAt: payload.licenseStartsAt ?? null,
+        licenseDueDay: payload.licenseDueDay ?? null,
       });
       return normalizeClient(response.data as ApiMasterClient);
     } catch (error) {

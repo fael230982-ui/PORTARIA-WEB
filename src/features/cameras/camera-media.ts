@@ -24,6 +24,9 @@ export function resolveCameraMediaUrl(value?: string | null) {
   if (url.startsWith('/api/v1/')) return `/api/proxy/${url.slice('/api/v1/'.length)}`;
   if (url.startsWith('api/v1/')) return `/api/proxy/${url.slice('api/v1/'.length)}`;
   if (url.startsWith('/cameras/')) return `/api/proxy${url}`;
+  if (url.startsWith('/media-hls/') || url.startsWith('/media/') || url.startsWith('/uploads/') || url.startsWith('/files/') || url.startsWith('/storage/')) {
+    return `/api/proxy${url}`;
+  }
 
   try {
     const parsed = new URL(url);
@@ -36,6 +39,16 @@ export function resolveCameraMediaUrl(value?: string | null) {
     if (parsed.pathname.startsWith('/cameras/')) {
       return `/api/proxy${pathWithQuery}`;
     }
+
+    if (
+      parsed.pathname.startsWith('/media-hls/') ||
+      parsed.pathname.startsWith('/media/') ||
+      parsed.pathname.startsWith('/uploads/') ||
+      parsed.pathname.startsWith('/files/') ||
+      parsed.pathname.startsWith('/storage/')
+    ) {
+      return `/api/proxy${pathWithQuery}`;
+    }
   } catch {
     // Keep original URL when it is not an absolute URL or cannot be parsed.
   }
@@ -43,19 +56,29 @@ export function resolveCameraMediaUrl(value?: string | null) {
   return url;
 }
 
+function isUnavailableLocalHlsUrl(value?: string | null) {
+  const url = String(value ?? '').trim().toLowerCase();
+  return url.includes('/media-hls/') && url.endsWith('/index.m3u8');
+}
+
+function resolvePlayableVideoUrl(value?: string | null) {
+  if (isUnavailableLocalHlsUrl(value)) return null;
+  return resolveCameraMediaUrl(value);
+}
+
 export function getPreferredVideoStreamUrl(
   camera?: Pick<Camera, 'streamUrl' | 'liveUrl' | 'hlsUrl' | 'webRtcUrl'> | null,
   streaming?: Pick<CameraStreamingResponse, 'liveUrl' | 'hlsUrl' | 'webRtcUrl'> | null
 ) {
-  return resolveCameraMediaUrl(
-    streaming?.liveUrl ||
-      camera?.liveUrl ||
-      streaming?.hlsUrl ||
-      camera?.hlsUrl ||
-      streaming?.webRtcUrl ||
-      camera?.webRtcUrl ||
-      camera?.streamUrl ||
-      null
+  return (
+    resolvePlayableVideoUrl(streaming?.liveUrl) ||
+    resolvePlayableVideoUrl(camera?.liveUrl) ||
+    resolvePlayableVideoUrl(streaming?.hlsUrl) ||
+    resolvePlayableVideoUrl(camera?.hlsUrl) ||
+    resolvePlayableVideoUrl(streaming?.webRtcUrl) ||
+    resolvePlayableVideoUrl(camera?.webRtcUrl) ||
+    resolvePlayableVideoUrl(camera?.streamUrl) ||
+    null
   );
 }
 

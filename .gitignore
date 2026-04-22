@@ -31,6 +31,12 @@ yarn-error.log*
 .pnpm-debug.log*
 next-dev.log
 next-dev.err.log
+next-start*.log
+.next-start*.log
+
+# office temporary files
+~$*
+docs/~$*
 
 # env files (can opt-in for committing if needed)
 .env*

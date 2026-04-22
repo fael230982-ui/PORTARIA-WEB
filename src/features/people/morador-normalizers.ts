@@ -38,6 +38,30 @@ export type MoradorRow = {
   faceListSyncError?: string | null;
 };
 
+type PersonWithLegacyPhotoFields = Person & {
+  avatarUrl?: string | null;
+  avatar_url?: string | null;
+  imageUrl?: string | null;
+  image_url?: string | null;
+  photo_url?: string | null;
+  facePhotoUrl?: string | null;
+  face_photo_url?: string | null;
+  profilePhotoUrl?: string | null;
+  profile_photo_url?: string | null;
+  pictureUrl?: string | null;
+  picture_url?: string | null;
+  photo?: unknown;
+  avatar?: unknown;
+  image?: unknown;
+  facePhoto?: unknown;
+  profilePhoto?: unknown;
+  media?: unknown;
+  photos?: unknown;
+  images?: unknown;
+  files?: unknown;
+  attachments?: unknown;
+};
+
 type ResidenceCatalog = {
   condominiums?: Condominium[];
   streets?: Street[];
@@ -310,8 +334,108 @@ export function buildPersonUpsertPayload(input: {
   return payload;
 }
 
+function normalizePersonPhotoUrl(value?: string | null) {
+  const url = String(value ?? '').trim();
+  if (!url) return '';
+  if (url.startsWith('data:') || url.startsWith('blob:') || url.startsWith('/api/proxy/')) return url;
+  if (url.startsWith('/api/v1/')) return `/api/proxy/${url.slice('/api/v1/'.length)}`;
+  if (url.startsWith('api/v1/')) return `/api/proxy/${url.slice('api/v1/'.length)}`;
+  if (url.startsWith('/people/') || url.startsWith('/media/') || url.startsWith('/uploads/') || url.startsWith('/files/') || url.startsWith('/storage/')) {
+    return `/api/proxy${url}`;
+  }
+
+  try {
+    const parsed = new URL(url);
+    const pathWithQuery = `${parsed.pathname}${parsed.search}`;
+    if (parsed.pathname.startsWith('/api/v1/')) return `/api/proxy/${pathWithQuery.slice('/api/v1/'.length)}`;
+    if (
+      parsed.pathname.startsWith('/people/') ||
+      parsed.pathname.startsWith('/media/') ||
+      parsed.pathname.startsWith('/uploads/') ||
+      parsed.pathname.startsWith('/files/') ||
+      parsed.pathname.startsWith('/storage/')
+    ) {
+      return `/api/proxy${pathWithQuery}`;
+    }
+  } catch {
+    // Keep original value when it is not a URL we know how to proxy.
+  }
+
+  return url;
+}
+
+function readObjectString(value: unknown, keys: string[]) {
+  if (!value || typeof value !== 'object') return '';
+  const record = value as Record<string, unknown>;
+
+  for (const key of keys) {
+    const normalized = normalizePersonPhotoUrl(typeof record[key] === 'string' ? record[key] : null);
+    if (normalized) return normalized;
+  }
+
+  return '';
+}
+
+function readArrayPhotoUrl(value: unknown) {
+  if (!Array.isArray(value)) return '';
+
+  for (const item of value) {
+    if (typeof item === 'string') {
+      const normalized = normalizePersonPhotoUrl(item);
+      if (normalized) return normalized;
+      continue;
+    }
+
+    const normalized = readObjectString(item, [
+      'photoUrl',
+      'photo_url',
+      'url',
+      'path',
+      'publicUrl',
+      'public_url',
+      'signedUrl',
+      'signed_url',
+      'downloadUrl',
+      'download_url',
+      'imageUrl',
+      'image_url',
+    ]);
+    if (normalized) return normalized;
+  }
+
+  return '';
+}
+
+function getPersonPhotoUrl(person: PersonWithLegacyPhotoFields) {
+  return (
+    normalizePersonPhotoUrl(person.photoUrl) ||
+    normalizePersonPhotoUrl(person.photo_url) ||
+    normalizePersonPhotoUrl(person.avatarUrl) ||
+    normalizePersonPhotoUrl(person.avatar_url) ||
+    normalizePersonPhotoUrl(person.imageUrl) ||
+    normalizePersonPhotoUrl(person.image_url) ||
+    normalizePersonPhotoUrl(person.facePhotoUrl) ||
+    normalizePersonPhotoUrl(person.face_photo_url) ||
+    normalizePersonPhotoUrl(person.profilePhotoUrl) ||
+    normalizePersonPhotoUrl(person.profile_photo_url) ||
+    normalizePersonPhotoUrl(person.pictureUrl) ||
+    normalizePersonPhotoUrl(person.picture_url) ||
+    readObjectString(person.photo, ['url', 'path', 'photoUrl', 'photo_url', 'publicUrl', 'public_url', 'signedUrl', 'signed_url']) ||
+    readObjectString(person.avatar, ['url', 'path', 'photoUrl', 'photo_url', 'publicUrl', 'public_url', 'signedUrl', 'signed_url']) ||
+    readObjectString(person.image, ['url', 'path', 'imageUrl', 'image_url', 'publicUrl', 'public_url', 'signedUrl', 'signed_url']) ||
+    readObjectString(person.facePhoto, ['url', 'path', 'photoUrl', 'photo_url', 'publicUrl', 'public_url', 'signedUrl', 'signed_url']) ||
+    readObjectString(person.profilePhoto, ['url', 'path', 'photoUrl', 'photo_url', 'publicUrl', 'public_url', 'signedUrl', 'signed_url']) ||
+    readObjectString(person.media, ['url', 'path', 'photoUrl', 'photo_url', 'publicUrl', 'public_url', 'signedUrl', 'signed_url']) ||
+    readArrayPhotoUrl(person.photos) ||
+    readArrayPhotoUrl(person.images) ||
+    readArrayPhotoUrl(person.files) ||
+    readArrayPhotoUrl(person.attachments)
+  );
+}
+
 export function normalizePerson(person: Person): MoradorRow {
   const residence = getResidenceDisplay(person.unit, person.unitName ?? person.unitId);
+  const personWithPhotoFields = person as PersonWithLegacyPhotoFields;
 
   return {
     id: person.id,
@@ -324,7 +448,7 @@ export function normalizePerson(person: Person): MoradorRow {
     documentType: person.documentType ?? null,
     categoria: mapApiCategoryToUi(person.category, person.categoryLabel),
     status: mapApiStatusToUi(person.status, person.statusLabel),
-    avatarUrl: person.photoUrl ?? '',
+    avatarUrl: getPersonPhotoUrl(personWithPhotoFields),
     condominio: residence.condominio,
     estruturaTipo: residence.estruturaTipo,
     estruturaLabel: residence.estruturaLabel,

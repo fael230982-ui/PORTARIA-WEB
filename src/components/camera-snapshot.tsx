@@ -3,6 +3,7 @@
 import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/use-auth';
+import { resolveCameraMediaUrl } from '@/features/cameras/camera-media';
 
 type CameraSnapshotProps = {
   cameraId: string;
@@ -26,13 +27,14 @@ export function CameraSnapshot({
   errorLabel = 'Não foi possível carregar o snapshot da câmera.',
 }: CameraSnapshotProps) {
   const { token } = useAuth();
-  const [src, setSrc] = useState<string | null>(fallbackSrc);
+  const normalizedFallbackSrc = resolveCameraMediaUrl(fallbackSrc);
+  const [src, setSrc] = useState<string | null>(normalizedFallbackSrc);
   const [loading, setLoading] = useState(Boolean(cameraId));
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!cameraId || !token) {
-      setSrc(fallbackSrc);
+      setSrc(normalizedFallbackSrc);
       setLoading(false);
       return;
     }
@@ -75,8 +77,8 @@ export function CameraSnapshot({
       } catch {
         if (!active) return;
 
-        setError(fallbackSrc ? null : errorLabel);
-        setSrc(fallbackSrc);
+        setError(normalizedFallbackSrc ? null : errorLabel);
+        setSrc(normalizedFallbackSrc);
       } finally {
         if (active) {
           setLoading(false);
@@ -103,7 +105,7 @@ export function CameraSnapshot({
         URL.revokeObjectURL(objectUrl);
       }
     };
-  }, [cameraId, errorLabel, fallbackSrc, refreshMs, token]);
+  }, [cameraId, errorLabel, normalizedFallbackSrc, refreshMs, token]);
 
   if (loading && !src) {
     return <div className="flex h-full w-full items-center justify-center text-sm text-slate-400">{loadingLabel}</div>;

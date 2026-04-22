@@ -51,12 +51,19 @@ export function CameraFeed({
   const [failedVideoMediaKey, setFailedVideoMediaKey] = useState<string | null>(null);
   const [failedImageMediaKey, setFailedImageMediaKey] = useState<string | null>(null);
   const [loadedImageMediaKey, setLoadedImageMediaKey] = useState<string | null>(null);
+  const [imageRefreshTick, setImageRefreshTick] = useState(0);
   const videoError = failedVideoMediaKey === mediaKey;
   const imageError = failedImageMediaKey === mediaKey;
   const shouldUseVideo = previewMode === 'video-stream' && Boolean(videoStreamUrl) && !videoError;
   const shouldUseImageStream = Boolean(imageStreamUrl) && !imageError && (previewMode === 'image-stream' || videoError);
   const shouldUseSnapshot = previewMode === 'snapshot' || Boolean(snapshotUrl && (videoError || imageError));
   const cookieSecure = typeof window !== 'undefined' && window.location.protocol === 'https:' ? '; Secure' : '';
+
+  function withRefreshParam(url: string) {
+    if (url.startsWith('data:') || url.startsWith('blob:')) return url;
+    const separator = url.includes('?') ? '&' : '?';
+    return `${url}${separator}_=${imageRefreshTick}`;
+  }
 
   useEffect(() => {
     if (typeof document === 'undefined') return;
@@ -87,6 +94,14 @@ export function CameraFeed({
 
     return () => window.clearTimeout(timeoutId);
   }, [imageStreamUrl, loadedImageMediaKey, mediaKey, shouldUseImageStream]);
+
+  useEffect(() => {
+    if (!shouldUseImageStream || !imageStreamUrl || refreshMs <= 0) return;
+    const timerId = window.setInterval(() => {
+      setImageRefreshTick((current) => current + 1);
+    }, refreshMs);
+    return () => window.clearInterval(timerId);
+  }, [imageStreamUrl, refreshMs, shouldUseImageStream]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -204,7 +219,7 @@ export function CameraFeed({
         {modeBadge}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={imageStreamUrl}
+          src={withRefreshParam(imageStreamUrl)}
           alt={camera.name}
           className={imageClassName}
           onLoad={() => setLoadedImageMediaKey(mediaKey)}

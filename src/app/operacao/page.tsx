@@ -9,13 +9,17 @@ import {
   Delete,
   Grid3X3,
   LifeBuoy,
+  MessageCircle,
   Monitor,
   PhoneCall,
   PhoneOff,
+  QrCode,
+  RefreshCcw,
   Search,
   LogOut,
   Package,
   ShieldAlert,
+  Smartphone,
   UserPlus,
   Users,
 } from 'lucide-react';
@@ -32,13 +36,13 @@ import { CameraFeed } from '@/components/camera-feed';
 import { Button } from '@/components/ui/button';
 import { logout } from '@/services/auth.service';
 import { camerasService } from '@/services/cameras.service';
-import { createPerson, updatePerson, updatePersonStatus } from '@/services/people.service';
+import { createPerson, updatePerson, updatePersonStatus, uploadPersonPhoto } from '@/services/people.service';
 import { updateAlertStatus, updateAlertWorkflow } from '@/services/alerts.service';
 import { createReport } from '@/services/reports.service';
 import { useReports } from '@/hooks/use-reports';
 import { useDeliveries } from '@/hooks/use-deliveries';
 import { useAccessLogs } from '@/hooks/use-access-logs';
-import { useOperationActions, useOperationMessages, useOperationSearch, useOperationUnitSearch } from '@/hooks/use-operation-integrations';
+import { useOperationActions, useOperationMessages, useOperationSearch, useOperationUnitSearch, useOperationWhatsAppConnection } from '@/hooks/use-operation-integrations';
 import { operationService } from '@/services/operation.service';
 import { writeLocalOperationPresence } from '@/features/operation/local-operation-presence';
 import {
@@ -126,6 +130,25 @@ const contactButtons = [
 
 const fallbackOperationActionLabels = ['Portao principal', 'Garagem', 'Portao pedestre', 'Sirene'];
 
+function getOperationMessageChannelLabel(channel: string | null | undefined) {
+  if (channel === 'WHATSAPP') return 'WhatsApp';
+  if (channel === 'PORTARIA' || channel === 'APP') return 'Aplicativo';
+  return 'Portaria';
+}
+
+function getWhatsAppConnectionLabel(state: string | null | undefined, enabled: boolean | undefined) {
+  const normalized = state?.trim().toLowerCase();
+
+  if (enabled === false) return 'Desativado';
+  if (normalized === 'open') return 'Conectado';
+  if (normalized === 'connecting') return 'Conectando';
+  if (normalized === 'qr' || normalized === 'qrcode' || normalized === 'awaiting_qr_scan') return 'Aguardando leitura do QR code';
+  if (normalized === 'close' || normalized === 'closed' || normalized === 'disconnected') return 'Desconectado';
+  if (normalized === 'pairing') return 'Aguardando pareamento';
+  if (state?.trim()) return state;
+  return 'Nao conectado';
+}
+
 type OperationSnapshotCache = {
   people: Person[];
   deliveries: Delivery[];
@@ -144,6 +167,7 @@ type QuickPersonFormData = {
   email: string;
   phone: string;
   document: string;
+  photoUrl: string;
   category: PersonCategory;
   unitId: string;
   startDate: string;
@@ -155,6 +179,7 @@ const initialQuickPersonForm: QuickPersonFormData = {
   email: '',
   phone: '',
   document: '',
+  photoUrl: '',
   category: 'VISITOR',
   unitId: '',
   startDate: '',
@@ -289,6 +314,12 @@ function QuickPersonForm({
   onToggleVisitorDocumentRequired: (value: boolean) => void;
 }) {
   const [unitSearch, setUnitSearch] = useState('');
+  const [photoInputKey, setPhotoInputKey] = useState(0);
+  const [webcamActive, setWebcamActive] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
   const {
     data: searchedUnits = [],
     isFetching: loadingSearchedUnits,
@@ -305,6 +336,78 @@ function QuickPersonForm({
         label: [unit.condominiumName, unit.label].filter(Boolean).join(' / ') || unit.label,
       }))
     : filteredUnits;
+
+  function handlePhotoFileChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setPhotoError(null);
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      onChange('photoUrl', typeof reader.result === 'string' ? reader.result : '');
+    };
+    reader.readAsDataURL(file);
+  }
+
+  useEffect(() => {
+    return () => {
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    };
+  }, []);
+
+  async function startWebcam() {
+    try {
+      setPhotoError(null);
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user' },
+        audio: false,
+      });
+
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+      streamRef.current = stream;
+      setWebcamActive(true);
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+      }
+    } catch {
+      setPhotoError('Não foi possível acessar a webcam deste computador.');
+    }
+  }
+
+  function stopWebcam() {
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+    setWebcamActive(false);
+  }
+
+  function captureWebcamPhoto() {
+    if (!videoRef.current || !canvasRef.current) {
+      setPhotoError('Webcam indisponível para capturar a foto.');
+      return;
+    }
+
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    canvas.width = video.videoWidth || 640;
+    canvas.height = video.videoHeight || 480;
+    const context = canvas.getContext('2d');
+
+    if (!context) {
+      setPhotoError('Não foi possível processar a imagem da webcam.');
+      return;
+    }
+
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    onChange('photoUrl', canvas.toDataURL('image/jpeg', 0.92));
+    setPhotoInputKey((current) => current + 1);
+    stopWebcam();
+  }
 
   return (
     <form
@@ -360,6 +463,84 @@ function QuickPersonForm({
           <span className="text-sm text-slate-300">E-mail</span>
           <input type="email" value={value.email} onChange={(event) => onChange('email', event.target.value)} className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none" placeholder="email@exemplo.com" />
         </label>
+        <div className="space-y-2 md:col-span-2">
+          <span className="text-sm text-slate-300">Foto</span>
+          <div className="grid gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4 md:grid-cols-[120px_1fr]">
+            <div className="flex h-28 w-28 items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-slate-950 text-xs text-slate-400">
+              {value.photoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={value.photoUrl} alt="Foto do cadastro" className="h-full w-full object-cover" />
+              ) : (
+                <span>Sem foto</span>
+              )}
+            </div>
+            <div className="space-y-3">
+              <input
+                key={photoInputKey}
+                type="file"
+                accept="image/*"
+                onChange={handlePhotoFileChange}
+                className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-sm text-white file:mr-3 file:rounded-xl file:border-0 file:bg-white/10 file:px-3 file:py-2 file:text-sm file:text-white"
+              />
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => void startWebcam()}
+                  disabled={webcamActive}
+                  className="rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-xs text-white transition hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Abrir webcam
+                </button>
+                {webcamActive ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={captureWebcamPhoto}
+                      className={`rounded-xl px-3 py-2 text-xs font-medium transition ${brandClasses.solidAccent}`}
+                    >
+                      Capturar foto
+                    </button>
+                    <button
+                      type="button"
+                      onClick={stopWebcam}
+                      className="rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-xs text-white transition hover:bg-white/15"
+                    >
+                      Fechar webcam
+                    </button>
+                  </>
+                ) : null}
+              </div>
+              {webcamActive ? (
+                <div className="overflow-hidden rounded-2xl border border-white/10 bg-black">
+                  <video ref={videoRef} className="h-56 w-full object-cover" muted playsInline autoPlay />
+                  <canvas ref={canvasRef} className="hidden" />
+                </div>
+              ) : (
+                <canvas ref={canvasRef} className="hidden" />
+              )}
+              <input
+                value={value.photoUrl.startsWith('data:') ? '' : value.photoUrl}
+                onChange={(event) => onChange('photoUrl', event.target.value)}
+                className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none"
+                placeholder="Ou informe uma URL de foto"
+              />
+              {value.photoUrl ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onChange('photoUrl', '');
+                    setPhotoInputKey((current) => current + 1);
+                    setPhotoError(null);
+                  }}
+                  className="rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-xs text-white transition hover:bg-white/15"
+                >
+                  Remover foto
+                </button>
+              ) : null}
+              {photoError ? <p className="text-xs text-red-200">{photoError}</p> : null}
+            </div>
+          </div>
+        </div>
         <label className="space-y-2">
           <span className="text-sm text-slate-300">Unidade</span>
           <div className="space-y-2">
@@ -797,6 +978,14 @@ function getErrorMessage(error: unknown, fallback: string) {
       return 'Verifique o e-mail informado.';
     }
 
+    if (
+      upper.includes('EXACTLY ONE') ||
+      upper.includes('INFORME EXATAMENTE UM') ||
+      (upper.includes('PHOTOURL') && upper.includes('PHOTOBASE64') && upper.includes('CAMERAID'))
+    ) {
+      return 'Escolha apenas uma origem para a busca facial: uma câmera ou uma imagem enviada.';
+    }
+
     return normalized;
   }
 
@@ -1178,9 +1367,11 @@ export default function OperacaoPage() {
   const { units, condominiums } = useResidenceCatalog(Boolean(user), scopedCondominiumId);
 
   const [selectedCameraId, setSelectedCameraId] = useState('');
+  const [photoSearchCameraId, setPhotoSearchCameraId] = useState('');
   const [cameraFocusPulse, setCameraFocusPulse] = useState(false);
   const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
   const [openQuickPerson, setOpenQuickPerson] = useState(false);
+  const [openQuickPersonTypeModal, setOpenQuickPersonTypeModal] = useState(false);
   const [openOccurrence, setOpenOccurrence] = useState(false);
   const [openResidentsModal, setOpenResidentsModal] = useState(false);
   const [openEntryModal, setOpenEntryModal] = useState(false);
@@ -1188,6 +1379,8 @@ export default function OperacaoPage() {
   const [openDeliveryModal, setOpenDeliveryModal] = useState(false);
   const [openAccessHistoryModal, setOpenAccessHistoryModal] = useState(false);
   const [openDeliveriesHistoryModal, setOpenDeliveriesHistoryModal] = useState(false);
+  const [openOperationalPeopleModal, setOpenOperationalPeopleModal] = useState(false);
+  const [openCamerasListModal, setOpenCamerasListModal] = useState(false);
   const [openAlertsModal, setOpenAlertsModal] = useState(false);
   const [alertsStatusFilter, setAlertsStatusFilter] = useState<'ALL' | 'NEW' | 'ON_HOLD' | 'RESOLVED'>('NEW');
   const [openActionsModal, setOpenActionsModal] = useState(false);
@@ -1224,19 +1417,27 @@ export default function OperacaoPage() {
   const [quickPersonError, setQuickPersonError] = useState<string | null>(null);
   const [deliveryError, setDeliveryError] = useState<string | null>(null);
   const [peopleSearch, setPeopleSearch] = useState('');
+  const [operationalConsultationCategory, setOperationalConsultationCategory] = useState<PersonCategory | 'ALL'>('ALL');
+  const [operationalPeopleModalCategory, setOperationalPeopleModalCategory] = useState<PersonCategory | 'ALL'>('ALL');
+  const [operationalPeopleModalSearch, setOperationalPeopleModalSearch] = useState('');
   const [residentSearch, setResidentSearch] = useState('');
   const [deliverySearch, setDeliverySearch] = useState('');
   const [residentMessageText, setResidentMessageText] = useState('');
+  const [residentMessageChannel, setResidentMessageChannel] = useState<'PORTARIA' | 'WHATSAPP'>('PORTARIA');
   const [residentMessageSaving, setResidentMessageSaving] = useState(false);
   const [residentMessageUpdatingId, setResidentMessageUpdatingId] = useState<string | null>(null);
+  const [residentWhatsAppConnecting, setResidentWhatsAppConnecting] = useState(false);
   const [entryForm, setEntryForm] = useState<EntryFormState>(initialEntryForm);
   const [exitForm, setExitForm] = useState<ExitFormState>(initialExitForm);
   const [deliveryForm, setDeliveryForm] = useState<DeliveryFormState>(initialDeliveryForm);
   const [alertUpdating, setAlertUpdating] = useState(false);
   const [pageMessage, setPageMessage] = useState<{ tone: 'success' | 'error'; text: string } | null>(null);
+  const [brokenAlertImageUrls, setBrokenAlertImageUrls] = useState<Record<string, boolean>>({});
   const [photoSearchPanel, setPhotoSearchPanel] = useState<PhotoSearchPanelState>(initialPhotoSearchPanelState);
   const [activeShift, setActiveShift] = useState<ActiveShiftDraft | null>(null);
   const [openShiftCloseModal, setOpenShiftCloseModal] = useState(false);
+  const [openOperationExitModal, setOpenOperationExitModal] = useState(false);
+  const [exitAfterShiftClose, setExitAfterShiftClose] = useState(false);
   const [openOfflineQueueModal, setOpenOfflineQueueModal] = useState(false);
   const [shiftNotes, setShiftNotes] = useState('');
   const [savingShiftReport, setSavingShiftReport] = useState(false);
@@ -1271,6 +1472,12 @@ export default function OperacaoPage() {
     Boolean(selectedResidentUnitId)
   );
   const {
+    data: residentWhatsAppConnection,
+    isLoading: residentWhatsAppLoading,
+    error: residentWhatsAppError,
+    refetch: refetchResidentWhatsAppConnection,
+  } = useOperationWhatsAppConnection(selectedResidentUnitId, Boolean(selectedResidentPerson && selectedResidentUnitId));
+  const {
     data: operationSearchData,
     isFetching: operationSearchLoading,
     error: operationSearchError,
@@ -1280,6 +1487,12 @@ export default function OperacaoPage() {
   );
   const residentMessages = residentMessagesData?.data ?? [];
   const unreadResidentMessagesCount = residentMessages.filter((message) => !message.readAt).length;
+  const residentPhone = selectedResidentPerson?.phone?.trim() || null;
+  const residentWhatsAppState = residentWhatsAppConnection?.state?.trim().toLowerCase() ?? null;
+  const residentWhatsAppReady = residentWhatsAppState === 'open';
+  const residentWhatsAppQrCodeImage = residentWhatsAppConnection?.qrCodeImageDataUrl?.trim() || null;
+  const residentWhatsAppPairingCode = residentWhatsAppConnection?.pairingCode?.trim() || null;
+  const residentWhatsAppCanSend = Boolean(selectedResidentPerson?.id || residentPhone);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 1000);
@@ -1300,7 +1513,19 @@ export default function OperacaoPage() {
     const storageKey = getShiftStorageKey(user.id);
     if (!storageKey) return;
 
-    setActiveShift(parseStoredShift(window.localStorage.getItem(storageKey)));
+    const storedShift = parseStoredShift(window.localStorage.getItem(storageKey));
+    if (storedShift) {
+      setActiveShift(storedShift);
+      return;
+    }
+
+    setActiveShift({
+      startedAt: new Date().toISOString(),
+      operatorId: user.id,
+      operatorName: user.name,
+      condominiumId: user.condominiumId ?? null,
+      condominiumName: user.selectedUnitName ?? null,
+    });
   }, [user]);
 
   useEffect(() => {
@@ -1348,15 +1573,6 @@ export default function OperacaoPage() {
     }, 30000);
 
     return () => window.clearInterval(timer);
-  }, [user]);
-
-  useEffect(() => {
-    if (!user) return;
-
-    operationService
-      .listShiftChanges(8)
-      .then((items) => setRecentShiftChanges(items))
-      .catch(() => undefined);
   }, [user]);
 
   useEffect(() => {
@@ -1812,11 +2028,17 @@ export default function OperacaoPage() {
     [exitForm.personIds, peopleInsideNow]
   );
   const hasPeopleSearch = normalizeText(peopleSearch).length > 0;
+  const hasOperationalConsultation = hasPeopleSearch || operationalConsultationCategory !== 'ALL';
   const filteredOperationalPeople = useMemo(() => {
     const search = normalizeText(peopleSearch);
-    if (!search) return operationalPeople;
+    const base =
+      operationalConsultationCategory === 'ALL'
+        ? operationalPeople
+        : operationalPeople.filter((person) => person.category === operationalConsultationCategory);
 
-    return operationalPeople.filter((person) =>
+    if (!search) return base;
+
+    return base.filter((person) =>
       [
         person.name,
         person.email,
@@ -1830,7 +2052,33 @@ export default function OperacaoPage() {
         .filter(Boolean)
         .some((value) => normalizeText(value).includes(search))
     );
-  }, [accessibleUnitsMap, operationalPeople, peopleSearch]);
+  }, [accessibleUnitsMap, operationalConsultationCategory, operationalPeople, peopleSearch]);
+  const operationalPeopleModalResults = useMemo(() => {
+    const search = normalizeText(operationalPeopleModalSearch);
+    const base =
+      operationalPeopleModalCategory === 'ALL'
+        ? operationalPeople
+        : operationalPeople.filter((person) => person.category === operationalPeopleModalCategory);
+
+    const filtered = !search
+      ? base
+      : base.filter((person) =>
+          [
+            person.name,
+            person.email,
+            person.phone,
+            person.document,
+            getPersonUnitLabel(person, accessibleUnitsMap),
+            person.unit?.condominium?.name,
+            person.unitId,
+            getPersonLabel(person),
+          ]
+            .filter(Boolean)
+            .some((value) => normalizeText(value).includes(search))
+        );
+
+    return filtered.slice(0, 40);
+  }, [accessibleUnitsMap, operationalPeople, operationalPeopleModalCategory, operationalPeopleModalSearch]);
   const overdueOperationalPeople = useMemo(
     () =>
       filteredOperationalPeople.filter((person) => {
@@ -1883,10 +2131,11 @@ export default function OperacaoPage() {
     [accessibleUnitsMap, effectiveAccessEvents, scopedPeople]
   );
   const selectedCamera = cameras.find((camera) => camera.id === selectedCameraId) ?? cameras[0] ?? null;
+  const selectedPhotoSearchCamera = cameras.find((camera) => camera.id === photoSearchCameraId) ?? selectedCamera;
   const photoSearchPreviewUrl =
     photoSearchPanel.result?.capturedPhotoUrl ??
     photoSearchPanel.fallbackPreviewUrl ??
-    selectedCamera?.snapshotUrl ??
+    selectedPhotoSearchCamera?.snapshotUrl ??
     null;
   const selectedAlertPerson = useMemo(
     () => (selectedAlert?.personId ? scopedPeople.find((person) => person.id === selectedAlert.personId) ?? null : null),
@@ -1963,6 +2212,12 @@ export default function OperacaoPage() {
     });
   }, [alertSearch, alertsStatusFilter, alertsWithOperationalContext]);
   const selectedAlertImageUrl = useMemo(() => getAlertEvidenceUrl(selectedAlert), [selectedAlert]);
+  const selectedAlertImageUnavailable = Boolean(selectedAlertImageUrl && brokenAlertImageUrls[selectedAlertImageUrl]);
+
+  function markAlertImageAsUnavailable(url?: string | null) {
+    if (!url) return;
+    setBrokenAlertImageUrls((current) => (current[url] ? current : { ...current, [url]: true }));
+  }
   useEffect(() => {
     if (selectedAlert?.cameraId) {
       setSelectedCameraId(selectedAlert.cameraId);
@@ -2281,8 +2536,13 @@ export default function OperacaoPage() {
       setActiveShift(null);
       setShiftNotes('');
       setOpenShiftCloseModal(false);
+      setOpenOperationExitModal(false);
       setPageMessage((current) => current ?? { tone: 'success', text: 'Relatorio de troca de turno salvo com sucesso.' });
       await refetchReports();
+      if (exitAfterShiftClose) {
+        setExitAfterShiftClose(false);
+        await handleConfirmLogout();
+      }
     } catch (error) {
       setPageMessage({
         tone: 'error',
@@ -2291,6 +2551,21 @@ export default function OperacaoPage() {
     } finally {
       setSavingShiftReport(false);
     }
+  }
+
+  async function resolveQuickPersonPhotoUrl(data: QuickPersonFormData) {
+    const rawPhotoUrl = data.photoUrl.trim();
+
+    if (!rawPhotoUrl) {
+      return null;
+    }
+
+    if (rawPhotoUrl.startsWith('data:')) {
+      const response = await uploadPersonPhoto(rawPhotoUrl, `${data.name || getCategoryLabel(data.category)}.jpg`);
+      return response.photoUrl;
+    }
+
+    return rawPhotoUrl;
   }
 
   async function handleCreateQuickPerson() {
@@ -2303,11 +2578,14 @@ export default function OperacaoPage() {
         return;
       }
 
+      const photoUrl = await resolveQuickPersonPhotoUrl(quickPersonForm);
+
       const payload = {
         name: quickPersonForm.name.trim(),
         email: quickPersonForm.email.trim() || null,
         phone: quickPersonForm.phone.trim() || null,
         document: quickPersonForm.document.trim() || null,
+        photoUrl,
         category: quickPersonForm.category,
         unitId: quickPersonForm.unitId || null,
         startDate: toIsoOrNull(quickPersonForm.startDate),
@@ -2354,11 +2632,14 @@ export default function OperacaoPage() {
         return;
       }
 
+      const photoUrl = await resolveQuickPersonPhotoUrl(quickPersonForm);
+
       const payload = {
         name: quickPersonForm.name.trim(),
         email: quickPersonForm.email.trim() || null,
         phone: quickPersonForm.phone.trim() || null,
         document: quickPersonForm.document.trim() || null,
+        photoUrl,
         category: quickPersonForm.category,
         unitId: quickPersonForm.unitId || null,
         startDate: toIsoOrNull(quickPersonForm.startDate),
@@ -2864,8 +3145,8 @@ export default function OperacaoPage() {
   }
 
   async function handleSearchPeopleByCameraSnapshot() {
-    if (!selectedCamera) {
-      setPageMessage({ tone: 'error', text: 'Selecione uma camera antes de buscar por foto.' });
+    if (!selectedPhotoSearchCamera) {
+      setPageMessage({ tone: 'error', text: 'Selecione uma câmera antes de buscar por foto.' });
       return;
     }
 
@@ -2873,17 +3154,15 @@ export default function OperacaoPage() {
       ...current,
       loading: true,
       error: null,
-      sourceLabel: `Snapshot de ${selectedCamera.name}`,
+      sourceLabel: `Câmera: ${selectedPhotoSearchCamera.name}`,
       lastFileName: null,
     }));
     setPageMessage(null);
 
     try {
-      const capture = await camerasService.capturePhoto(selectedCamera.id);
       const result = await operationService.searchPeopleByPhoto({
-        photoUrl: capture.photoUrl,
-        cameraId: selectedCamera.id,
-        fileName: `${selectedCamera.name || 'camera'}-${Date.now()}.jpg`,
+        cameraId: selectedPhotoSearchCamera.id,
+        fileName: `${selectedPhotoSearchCamera.name || 'camera'}-${Date.now()}.jpg`,
         maxMatches: 5,
       });
 
@@ -2891,9 +3170,9 @@ export default function OperacaoPage() {
         result,
         loading: false,
         error: null,
-        sourceLabel: `Snapshot de ${selectedCamera.name}`,
+        sourceLabel: `Câmera: ${selectedPhotoSearchCamera.name}`,
         lastFileName: null,
-        fallbackPreviewUrl: capture.photoUrl,
+        fallbackPreviewUrl: selectedPhotoSearchCamera.snapshotUrl ?? selectedPhotoSearchCamera.thumbnailUrl ?? null,
       });
       setPageMessage({
         tone: 'success',
@@ -2905,9 +3184,9 @@ export default function OperacaoPage() {
       setPhotoSearchPanel((current) => ({
         ...current,
         loading: false,
-        error: getErrorMessage(error, 'Nao foi possivel processar o snapshot da camera.'),
+        error: getErrorMessage(error, 'Não foi possível buscar pela câmera selecionada.'),
       }));
-      setPageMessage({ tone: 'error', text: getErrorMessage(error, 'Nao foi possivel processar o snapshot da camera.') });
+      setPageMessage({ tone: 'error', text: getErrorMessage(error, 'Não foi possível buscar pela câmera selecionada.') });
     }
   }
 
@@ -2926,7 +3205,6 @@ export default function OperacaoPage() {
       const photoBase64 = await fileToBase64(file);
       const result = await operationService.searchPeopleByPhoto({
         photoBase64,
-        cameraId: selectedCamera?.id ?? null,
         fileName: file.name,
         maxMatches: 5,
       });
@@ -3074,6 +3352,87 @@ export default function OperacaoPage() {
     }
   }
 
+  async function handleSendResidentMessageV55() {
+    const text = residentMessageText.trim();
+    if (!selectedResidentUnitId || !text) return;
+    if (residentMessageChannel === 'WHATSAPP' && !residentWhatsAppCanSend) {
+      setPageMessage({
+        tone: 'error',
+        text: 'Cadastre um telefone ou vincule a pessoa antes de enviar pelo WhatsApp.',
+      });
+      return;
+    }
+    if (residentMessageChannel === 'WHATSAPP' && !residentWhatsAppReady) {
+      setPageMessage({
+        tone: 'error',
+        text: 'Conecte o WhatsApp da unidade e aguarde a confirmacao antes de enviar mensagens por esse canal.',
+      });
+      return;
+    }
+
+    setResidentMessageSaving(true);
+    setPageMessage(null);
+    try {
+      const payload = {
+        unitId: selectedResidentUnitId,
+        personId: selectedResidentPerson?.id ?? null,
+        recipientPersonId: residentMessageChannel === 'WHATSAPP' ? selectedResidentPerson?.id ?? null : null,
+        recipientPhone: residentMessageChannel === 'WHATSAPP' ? residentPhone : null,
+        channel: residentMessageChannel,
+        text,
+      } as const;
+
+      try {
+        await operationService.sendMessage(payload);
+      } catch (error) {
+        if (!isOfflineQueueCandidateError(error)) throw error;
+        queueOfflineDrafts(
+          [
+            {
+              kind: 'MESSAGE_SEND',
+              payload,
+              description: residentMessageChannel === 'WHATSAPP' ? 'Enviar mensagem por WhatsApp' : 'Enviar mensagem para unidade',
+            },
+          ],
+          'Sem conexao. A mensagem foi salva localmente e sera enviada quando a rede voltar.'
+        );
+      }
+
+      setResidentMessageText('');
+      setPageMessage({
+        tone: 'success',
+        text: residentMessageChannel === 'WHATSAPP' ? 'Mensagem enviada pelo WhatsApp.' : 'Mensagem enviada para a unidade.',
+      });
+      await refetchResidentMessages();
+    } catch (error) {
+      setPageMessage({ tone: 'error', text: getErrorMessage(error, 'Nao foi possivel enviar a mensagem.') });
+    } finally {
+      setResidentMessageSaving(false);
+    }
+  }
+
+  async function handleConnectResidentWhatsApp() {
+    if (!selectedResidentUnitId) return;
+
+    setResidentWhatsAppConnecting(true);
+    setPageMessage(null);
+    try {
+      await operationService.connectWhatsApp(selectedResidentUnitId);
+      await refetchResidentWhatsAppConnection();
+      setPageMessage({
+        tone: 'success',
+        text: 'Conexao do WhatsApp preparada. Leia o QR code para concluir o pareamento.',
+      });
+    } catch (error) {
+      setPageMessage({
+        tone: 'error',
+        text: getErrorMessage(error, 'Nao foi possivel preparar a conexao do WhatsApp.'),
+      });
+    } finally {
+      setResidentWhatsAppConnecting(false);
+    }
+  }
+
   function handleDialKey(key: string) {
     if (callActive) return;
     setDialedNumber((current) => `${current}${key}`.slice(0, 20));
@@ -3112,6 +3471,7 @@ export default function OperacaoPage() {
       email: person.email ?? '',
       phone: person.phone ?? '',
       document: person.document ?? '',
+      photoUrl: person.photoUrl ?? '',
       category: ['VISITOR', 'SERVICE_PROVIDER', 'RENTER'].includes(person.category)
         ? person.category
         : 'VISITOR',
@@ -3126,12 +3486,28 @@ export default function OperacaoPage() {
     setEditingPerson(null);
     setQuickPersonError(null);
     setQuickPersonCategoryLocked(true);
+    setOpenQuickPersonTypeModal(false);
     setQuickPersonForm({
       ...initialQuickPersonForm,
       category,
       unitId: defaultQuickPersonUnitId,
     });
     setOpenQuickPerson(true);
+  }
+
+  function openOperationalConsultation(category: PersonCategory | 'ALL' = 'ALL') {
+    setOperationalConsultationCategory(category);
+    setPeopleSearch('');
+    setSelectedSearchPerson(null);
+    consultationSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    window.requestAnimationFrame(() => consultationInputRef.current?.focus());
+  }
+
+  function openOperationalPeopleConsultation(category: PersonCategory | 'ALL' = 'ALL') {
+    setOperationalPeopleModalCategory(category);
+    setOperationalPeopleModalSearch('');
+    setSelectedSearchPerson(null);
+    setOpenOperationalPeopleModal(true);
   }
 
   function openDeliveryRegistration() {
@@ -3164,7 +3540,7 @@ export default function OperacaoPage() {
     window.open('/operacao/cameras', 'operacao-cameras-monitor', 'noopener,noreferrer,width=1680,height=960');
   }
 
-  async function handleLogout() {
+  async function handleConfirmLogout() {
     setPageMessage(null);
     try {
       await logout();
@@ -3174,6 +3550,16 @@ export default function OperacaoPage() {
       clearSession();
       router.replace('/login');
     }
+  }
+
+  function handleOperationExitClick() {
+    if (activeShift) {
+      setExitAfterShiftClose(false);
+      setOpenOperationExitModal(true);
+      return;
+    }
+
+    void handleConfirmLogout();
   }
 
   if (isChecking) return <div className="flex min-h-screen items-center justify-center bg-[#07111f] text-white">Carregando autenticação...</div>;
@@ -3285,7 +3671,7 @@ export default function OperacaoPage() {
                   <p className={`mt-1 text-xs font-semibold ${brandClasses.accentText}`}>{formatNow(now)}</p>
                 </div>
               </div>
-              <Button variant="outline" onClick={handleLogout} className="mt-1.5 h-8 w-full border-red-400/20 bg-red-500/10 px-3 text-xs font-medium text-red-100 hover:bg-red-500/15">
+              <Button variant="outline" onClick={handleOperationExitClick} className="mt-1.5 h-8 w-full border-red-400/20 bg-red-500/10 px-3 text-xs font-medium text-red-100 hover:bg-red-500/15">
                 <LogOut className="mr-2 h-4 w-4" />
                 Sair da operação
               </Button>
@@ -3440,10 +3826,10 @@ export default function OperacaoPage() {
               <button
                 type="button"
                 onClick={() => void handleSearchPeopleByCameraSnapshot()}
-                disabled={!selectedCamera || photoSearchPanel.loading}
+                disabled={!selectedPhotoSearchCamera || photoSearchPanel.loading}
                 className={`rounded-[16px] border px-3 py-2 text-xs font-medium transition ${brandClasses.softAccentPanel} ${brandClasses.accentTextSoft} disabled:cursor-not-allowed disabled:opacity-50`}
               >
-                {photoSearchPanel.loading && photoSearchPanel.sourceLabel?.startsWith('Snapshot') ? 'Buscando...' : 'Buscar por snapshot'}
+                {photoSearchPanel.loading && photoSearchPanel.sourceLabel?.startsWith('Câmera') ? 'Buscando...' : 'Buscar rosto'}
               </button>
             </div>
 
@@ -3459,7 +3845,7 @@ export default function OperacaoPage() {
                 <div>
                   <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Busca por foto</p>
                   <p className="mt-1 text-sm text-slate-300">
-                    Use o snapshot da camera principal ou envie uma imagem manualmente para identificar pessoas.
+                    Selecione uma câmera para buscar o rosto ou envie uma imagem manualmente.
                   </p>
                 </div>
                 <Button
@@ -3470,6 +3856,36 @@ export default function OperacaoPage() {
                   disabled={photoSearchPanel.loading}
                 >
                   Enviar imagem
+                </Button>
+              </div>
+
+              <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                <label className="block">
+                  <span className="text-xs text-slate-400">Câmera para busca facial</span>
+                  <select
+                    value={selectedPhotoSearchCamera?.id ?? ''}
+                    onChange={(event) => setPhotoSearchCameraId(event.target.value)}
+                    className="mt-1 w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none"
+                  >
+                    {cameras.length === 0 ? (
+                      <option value="">Nenhuma câmera disponível</option>
+                    ) : (
+                      cameras.map((camera) => (
+                        <option key={`${camera.id}-photo-search`} value={camera.id} className="bg-slate-950 text-white">
+                          {camera.name} {camera.location ? `| ${camera.location}` : ''}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="self-end border-white/10 bg-white/5 text-white hover:bg-white/10"
+                  onClick={() => void handleSearchPeopleByCameraSnapshot()}
+                  disabled={!selectedPhotoSearchCamera || photoSearchPanel.loading}
+                >
+                  {photoSearchPanel.loading && photoSearchPanel.sourceLabel?.startsWith('Câmera') ? 'Buscando...' : 'Buscar pela câmera'}
                 </Button>
               </div>
 
@@ -3592,7 +4008,7 @@ export default function OperacaoPage() {
           <section className="flex min-h-0 flex-col gap-2 overflow-hidden">
             <div className="rounded-[18px] border border-white/10 bg-slate-950/40 p-2 backdrop-blur">
               <div className="grid gap-2 sm:grid-cols-4">
-                <Button onClick={() => openQuickPersonByCategory('VISITOR')} className={`h-8 rounded-lg px-3 text-xs ${brandClasses.solidAccent}`}>
+                <Button onClick={() => setOpenQuickPersonTypeModal(true)} className={`h-8 rounded-lg px-3 text-xs ${brandClasses.solidAccent}`}>
                   <UserPlus className="mr-2 h-4 w-4" />
                   Novo cadastro
                 </Button>
@@ -3624,11 +4040,15 @@ export default function OperacaoPage() {
                   );
                   const className = '';
                   if (module.label === 'Moradores') return <button key={module.label} type="button" className={className} onClick={openResidentsConsultation}>{tile}</button>;
-                  if (module.label === 'Visitantes') return <button key={module.label} type="button" className={className} onClick={() => openQuickPersonByCategory('VISITOR')}>{tile}</button>;
+                  if (module.label === 'Visitantes') return <button key={module.label} type="button" className={className} onClick={() => openOperationalPeopleConsultation('VISITOR')}>{tile}</button>;
+                  if (module.label.startsWith('Locat')) return <button key={module.label} type="button" className={className} onClick={() => openOperationalPeopleConsultation('RENTER')}>{tile}</button>;
+                  if (module.label === 'LocatÃ¡rios') return <button key={module.label} type="button" className={className} onClick={() => openOperationalConsultation('RENTER')}>{tile}</button>;
+                  if (module.label === 'Prestadores') return <button key={module.label} type="button" className={className} onClick={() => openOperationalPeopleConsultation('SERVICE_PROVIDER')}>{tile}</button>;
+                  if (module.label === 'Encomendas') return <button key={module.label} type="button" className={className} onClick={() => { setDeliveriesHistoryFilter('PENDING'); setOpenDeliveriesHistoryModal(true); }}>{tile}</button>;
                   if (module.label === 'Locatários') return <button key={module.label} type="button" className={className} onClick={() => openQuickPersonByCategory('RENTER')}>{tile}</button>;
                   if (module.label === 'Prestadores') return <button key={module.label} type="button" className={className} onClick={() => openQuickPersonByCategory('SERVICE_PROVIDER')}>{tile}</button>;
                   if (module.label === 'Encomendas') return <button key={module.label} type="button" className={className} onClick={openDeliveryRegistration}>{tile}</button>;
-                  if (module.label === 'Cameras') return <button key={module.label} type="button" className={className} onClick={openCameraMonitor}>{tile}</button>;
+                  if (module.label === 'Cameras') return <button key={module.label} type="button" className={className} onClick={() => setOpenCamerasListModal(true)}>{tile}</button>;
                   return <button key={module.label} type="button" className={className}>{tile}</button>;
                 })}
               </div>
@@ -3646,6 +4066,30 @@ export default function OperacaoPage() {
                       nova ocorrência
                     </button>
                   </div>
+                  <div className="mb-2 flex flex-wrap gap-2">
+                    {[
+                      { key: 'ALL', label: 'Todos' },
+                      { key: 'VISITOR', label: 'Visitantes' },
+                      { key: 'SERVICE_PROVIDER', label: 'Prestadores' },
+                      { key: 'RENTER', label: 'Locatários' },
+                    ].map((option) => (
+                      <button
+                        key={option.key}
+                        type="button"
+                        onClick={() => setOperationalConsultationCategory(option.key as PersonCategory | 'ALL')}
+                        className={`rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] transition ${
+                          operationalConsultationCategory === option.key
+                            ? `${brandClasses.softAccent} text-white`
+                            : 'border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                    <button type="button" onClick={() => setOpenQuickPersonTypeModal(true)} className={`rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] ${brandClasses.softAccent}`}>
+                      + novo
+                    </button>
+                  </div>
                   <input
                     ref={consultationInputRef}
                     value={peopleSearch}
@@ -3655,9 +4099,9 @@ export default function OperacaoPage() {
                   />
                   <div className="mt-3 space-y-2">
                     {peopleError ? <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-100">Erro ao carregar pessoas.</div> : null}
-                    {!peopleError && hasPeopleSearch && filteredOperationalPeople.length === 0 ? <div className="rounded-2xl border border-white/10 bg-white/5 p-3 text-sm text-slate-300">Nenhuma pessoa encontrada para essa busca.</div> : null}
-                    {!hasPeopleSearch ? <div className="rounded-2xl border border-dashed border-white/10 bg-white/5 p-3 text-sm text-slate-300">Nenhum resultado exibido ainda. Comece digitando para consultar.</div> : null}
-                    {hasPeopleSearch ? filteredOperationalPeople.slice(0, 6).map((person) => (
+                    {!peopleError && hasOperationalConsultation && filteredOperationalPeople.length === 0 ? <div className="rounded-2xl border border-white/10 bg-white/5 p-3 text-sm text-slate-300">Nenhuma pessoa encontrada para essa busca.</div> : null}
+                    {!hasOperationalConsultation ? <div className="rounded-2xl border border-dashed border-white/10 bg-white/5 p-3 text-sm text-slate-300">Nenhum resultado exibido ainda. Comece digitando para consultar.</div> : null}
+                    {hasOperationalConsultation ? filteredOperationalPeople.slice(0, 6).map((person) => (
                       <button key={person.id} type="button" onClick={() => setSelectedSearchPerson(person)} className="w-full text-left">
                         <OperationalPersonSummaryCard
                           person={person}
@@ -3974,6 +4418,48 @@ export default function OperacaoPage() {
         </CrudModal>
 
         <CrudModal
+          open={openOperationExitModal}
+          title="Sair da operação"
+          description="Escolha se o turno continua aberto ou se será encerrado agora."
+          onClose={() => setOpenOperationExitModal(false)}
+          maxWidth="md"
+        >
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+              <p className="text-sm text-slate-200">
+                O turno está em andamento desde {activeShift ? formatOptionalDateTime(activeShift.startedAt) : 'agora'}.
+              </p>
+              <p className="mt-2 text-sm text-slate-400">
+                Use pausa quando for sair da tela e voltar depois. Use finalizar quando estiver encerrando o trabalho na portaria.
+              </p>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => void handleConfirmLogout()}
+                className="rounded-2xl border border-cyan-400/25 bg-cyan-400/10 p-4 text-left text-cyan-50 transition hover:bg-cyan-400/15"
+              >
+                <p className="font-semibold">Pausar e sair</p>
+                <p className="mt-1 text-sm text-cyan-100/80">Mantém o turno aberto para continuar quando retornar.</p>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setExitAfterShiftClose(true);
+                  setOpenOperationExitModal(false);
+                  setOpenShiftCloseModal(true);
+                }}
+                className="rounded-2xl border border-amber-400/25 bg-amber-400/10 p-4 text-left text-amber-50 transition hover:bg-amber-400/15"
+              >
+                <p className="font-semibold">Finalizar turno</p>
+                <p className="mt-1 text-sm text-amber-100/80">Abre o resumo para registrar observações e encerrar.</p>
+              </button>
+            </div>
+          </div>
+        </CrudModal>
+
+        <CrudModal
           open={openOfflineQueueModal}
           title="Fila offline da operação"
           description="Itens salvos localmente enquanto a conexão estava indisponível ou instável."
@@ -4083,6 +4569,32 @@ export default function OperacaoPage() {
                 </div>
               )}
             </div>
+          </div>
+        </CrudModal>
+
+        <CrudModal
+          open={openQuickPersonTypeModal}
+          title="Novo cadastro"
+          description="Selecione o tipo de pessoa que será cadastrada."
+          onClose={() => setOpenQuickPersonTypeModal(false)}
+          maxWidth="md"
+        >
+          <div className="grid gap-3 md:grid-cols-3">
+            {[
+              { category: 'VISITOR' as const, title: 'Visitante', description: 'Acesso temporário para visita.' },
+              { category: 'SERVICE_PROVIDER' as const, title: 'Prestador', description: 'Serviço, manutenção ou entrega técnica.' },
+              { category: 'RENTER' as const, title: 'Locatário', description: 'Pessoa vinculada por locação.' },
+            ].map((option) => (
+              <button
+                key={option.category}
+                type="button"
+                onClick={() => openQuickPersonByCategory(option.category)}
+                className={`rounded-2xl border p-4 text-left transition hover:scale-[1.01] ${brandClasses.softAccentPanel}`}
+              >
+                <p className="font-semibold text-white">{option.title}</p>
+                <p className="mt-2 text-sm text-slate-300">{option.description}</p>
+              </button>
+            ))}
           </div>
         </CrudModal>
 
@@ -4351,11 +4863,17 @@ export default function OperacaoPage() {
                 ))}
                 {filteredOperationalAlerts.map(({ alert, workflow, unitLabel, title, description, statusLabel, severityRank }) => {
                   const evidenceUrl = getAlertEvidenceUrl(alert);
+                  const showEvidence = Boolean(evidenceUrl && !brokenAlertImageUrls[evidenceUrl]);
                   return (
                     <div key={`${alert.id}-modal`} className={`rounded-2xl border p-3 text-left ${getAlertTone(alert.type)} ${severityRank >= 3 ? 'shadow-[0_0_0_1px_rgba(248,113,113,0.28)]' : ''}`}>
                       <div className="flex items-start gap-3">
-                        {evidenceUrl ? (
-                          <img src={evidenceUrl} alt={title} className="h-16 w-16 rounded-xl border border-white/10 object-cover" />
+                        {showEvidence ? (
+                          <img
+                            src={evidenceUrl!}
+                            alt={title}
+                            className="h-16 w-16 rounded-xl border border-white/10 object-cover"
+                            onError={() => markAlertImageAsUnavailable(evidenceUrl)}
+                          />
                         ) : null}
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-start justify-between gap-2">
@@ -4543,6 +5061,156 @@ export default function OperacaoPage() {
                 })
               )}
             </div>
+          </div>
+        </CrudModal>
+
+        <CrudModal
+          open={openOperationalPeopleModal}
+          title={
+            operationalPeopleModalCategory === 'VISITOR'
+              ? 'Consulta de visitantes'
+              : operationalPeopleModalCategory === 'SERVICE_PROVIDER'
+                ? 'Consulta de prestadores'
+                : operationalPeopleModalCategory === 'RENTER'
+                  ? 'Consulta de locatarios'
+                  : 'Consulta operacional'
+          }
+          description="Consulte cadastros operacionais e registre entrada ou saida quando necessario."
+          onClose={() => {
+            setOpenOperationalPeopleModal(false);
+            setOperationalPeopleModalSearch('');
+            setOperationalPeopleModalCategory('ALL');
+          }}
+          maxWidth="xl"
+        >
+          <div className="space-y-4">
+            <div className="flex flex-wrap gap-2">
+              {[
+                { key: 'ALL', label: 'Todos' },
+                { key: 'VISITOR', label: 'Visitantes' },
+                { key: 'SERVICE_PROVIDER', label: 'Prestadores' },
+                { key: 'RENTER', label: 'Locatarios' },
+              ].map((option) => (
+                <button
+                  key={option.key}
+                  type="button"
+                  onClick={() => setOperationalPeopleModalCategory(option.key as PersonCategory | 'ALL')}
+                  className={`rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] transition ${
+                    operationalPeopleModalCategory === option.key
+                      ? `${brandClasses.softAccent} text-white`
+                      : 'border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => {
+                  setOpenOperationalPeopleModal(false);
+                  if (operationalPeopleModalCategory === 'VISITOR' || operationalPeopleModalCategory === 'SERVICE_PROVIDER' || operationalPeopleModalCategory === 'RENTER') {
+                    openQuickPersonByCategory(operationalPeopleModalCategory);
+                  } else {
+                    setOpenQuickPersonTypeModal(true);
+                  }
+                }}
+                className={`rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] ${brandClasses.softAccent}`}
+              >
+                + novo cadastro
+              </button>
+            </div>
+
+            <input
+              value={operationalPeopleModalSearch}
+              onChange={(event) => setOperationalPeopleModalSearch(event.target.value)}
+              placeholder="Buscar por nome, documento, telefone ou unidade..."
+              className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none"
+            />
+
+            <div className="max-h-[58vh] space-y-3 overflow-y-auto pr-1">
+              {operationalPeopleModalResults.length === 0 ? (
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">Nenhum cadastro encontrado.</div>
+              ) : (
+                operationalPeopleModalResults.map((person) => {
+                  const latestAccess = latestAccessByPerson.get(person.id);
+                  const isInside = latestAccess?.action === 'ENTRY' || (!latestAccess && person.status === 'ACTIVE');
+                  return (
+                    <div key={`${person.id}-operational-consultation`} className="rounded-2xl border border-white/10 bg-white/[0.035] p-3">
+                      <OperationalPersonSummaryCard
+                        person={person}
+                        now={now}
+                        latestAccessAction={latestAccess?.action}
+                        accessSummary={accessSummaryByPerson.get(person.id)}
+                      />
+                      <div className="mt-3 flex flex-wrap justify-end gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="border-white/10 bg-white/5 text-white hover:bg-white/10"
+                          onClick={() => {
+                            setOpenOperationalPeopleModal(false);
+                            setSelectedSearchPerson(person);
+                          }}
+                        >
+                          Abrir ficha
+                        </Button>
+                        <Button
+                          type="button"
+                          className={`text-slate-950 ${brandClasses.solidAccent}`}
+                          onClick={() => void (isInside ? handleRegisterExit(person) : handleRegisterEntry(person))}
+                          disabled={personUpdatingId === person.id}
+                        >
+                          {personUpdatingId === person.id ? 'Registrando...' : isInside ? 'Registrar saida' : 'Registrar entrada'}
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </CrudModal>
+
+        <CrudModal
+          open={openCamerasListModal}
+          title="Consulta de cameras"
+          description="Veja as cameras liberadas e abra uma delas no monitor da operacao."
+          onClose={() => setOpenCamerasListModal(false)}
+          maxWidth="xl"
+        >
+          <div className="max-h-[62vh] space-y-3 overflow-y-auto pr-1">
+            {cameras.length === 0 ? (
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">Nenhuma camera cadastrada ou liberada para este usuario.</div>
+            ) : (
+              cameras.map((camera) => (
+                <div key={`${camera.id}-camera-consultation`} className="grid gap-3 rounded-2xl border border-white/10 bg-white/[0.035] p-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="truncate font-medium text-white">{camera.name || camera.location || 'Camera sem nome'}</p>
+                      <span className={`rounded-full border px-3 py-1 text-[11px] ${getCameraBadgeTone(camera.status)}`}>{camera.status}</span>
+                    </div>
+                    <p className="mt-1 truncate text-sm text-slate-400">{camera.location || 'Local nao informado'}</p>
+                    <p className="mt-1 truncate text-xs text-slate-500">{getScopeLabel(camera, unitLabels)}</p>
+                  </div>
+                  <div className="flex flex-wrap justify-end gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="border-white/10 bg-white/5 text-white hover:bg-white/10"
+                      onClick={() => {
+                        setOpenCamerasListModal(false);
+                        focusCameraOnMonitor(camera.id);
+                      }}
+                    >
+                      Ver na tela
+                    </Button>
+                    <Button type="button" className={`text-slate-950 ${brandClasses.solidAccent}`} onClick={openCameraMonitor}>
+                      Monitor externo
+                    </Button>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </CrudModal>
 
@@ -5094,6 +5762,7 @@ export default function OperacaoPage() {
           onClose={() => {
             setSelectedResidentPerson(null);
             setResidentMessageText('');
+            setResidentMessageChannel('PORTARIA');
           }}
           maxWidth="xl"
         >
@@ -5130,6 +5799,82 @@ export default function OperacaoPage() {
                   </div>
                 </div>
 
+                <div className="mt-3 rounded-2xl border border-white/10 bg-slate-950/50 p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Smartphone className="h-4 w-4 text-emerald-300" />
+                        <p className="text-sm font-medium text-white">Conexao WhatsApp</p>
+                      </div>
+                      <p className="text-sm text-slate-300">
+                        {residentPhone ? `Telefone do morador: ${maskPhone(residentPhone)}` : 'Morador sem telefone cadastrado para o WhatsApp.'}
+                      </p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className={`rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${residentWhatsAppReady ? 'border-emerald-400/30 bg-emerald-500/10 text-emerald-100' : 'border-amber-400/30 bg-amber-500/10 text-amber-100'}`}>
+                          {getWhatsAppConnectionLabel(residentWhatsAppConnection?.state, residentWhatsAppConnection?.enabled)}
+                        </span>
+                        {residentWhatsAppConnection?.instance ? (
+                          <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[10px] uppercase tracking-[0.14em] text-slate-300">
+                            Instancia {residentWhatsAppConnection.instance}
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void handleConnectResidentWhatsApp()}
+                      disabled={!selectedResidentUnitId || residentWhatsAppConnecting}
+                      className={`rounded-xl border px-4 py-3 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-60 ${brandClasses.softAccent}`}
+                    >
+                      {residentWhatsAppConnecting ? 'Preparando...' : residentWhatsAppReady ? 'Reconectar WhatsApp' : 'Conectar WhatsApp'}
+                    </button>
+                  </div>
+
+                  {residentWhatsAppError ? (
+                    <div className="mt-3 rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-sm text-amber-100">
+                      Nao foi possivel consultar a conexao do WhatsApp neste ambiente.
+                    </div>
+                  ) : null}
+
+                  {residentWhatsAppLoading && !residentWhatsAppConnection ? (
+                    <div className="mt-3 rounded-xl border border-white/10 bg-white/5 p-3 text-sm text-slate-300">Carregando status do WhatsApp...</div>
+                  ) : null}
+
+                  {residentWhatsAppQrCodeImage ? (
+                    <div className="mt-4 grid gap-4 lg:grid-cols-[220px_1fr]">
+                      <div className="rounded-2xl border border-white/10 bg-white p-3">
+                        <Image
+                          src={residentWhatsAppQrCodeImage}
+                          alt="QR code do WhatsApp"
+                          width={220}
+                          height={220}
+                          unoptimized
+                          className="h-auto w-full rounded-xl"
+                        />
+                      </div>
+                      <div className="space-y-3 rounded-2xl border border-white/10 bg-white/5 p-4">
+                        <div className="flex items-center gap-2 text-white">
+                          <QrCode className="h-4 w-4 text-emerald-300" />
+                          <p className="text-sm font-medium">Leia o QR code no celular da portaria para concluir a conexao.</p>
+                        </div>
+                        <p className="text-sm text-slate-300">
+                          A tela atualiza sozinha ate a conexao ficar pronta.
+                        </p>
+                        {residentWhatsAppPairingCode ? (
+                          <div className="rounded-xl border border-white/10 bg-slate-950/60 p-3">
+                            <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Codigo de pareamento</p>
+                            <p className="mt-2 break-all font-mono text-sm text-white">{residentWhatsAppPairingCode}</p>
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : residentWhatsAppConnection?.enabled ? (
+                    <div className="mt-3 rounded-xl border border-white/10 bg-white/5 p-3 text-sm text-slate-300">
+                      {residentWhatsAppReady ? 'WhatsApp conectado e pronto para uso.' : 'A conexao esta em preparacao. Assim que o QR code ficar disponivel, ele aparecera aqui.'}
+                    </div>
+                  ) : null}
+                </div>
+
                 <div className="mt-3 max-h-48 space-y-2 overflow-y-auto pr-1">
                   {!selectedResidentUnitId ? (
                     <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-sm text-amber-100">Morador sem unidade vinculada.</div>
@@ -5145,6 +5890,9 @@ export default function OperacaoPage() {
                         <div className="flex items-center justify-between gap-3">
                           <div className="flex items-center gap-2">
                             <span className="text-[10px] uppercase tracking-[0.14em] text-slate-400">{message.direction === 'OUTBOUND' ? 'Portaria' : message.senderName || 'Morador'}</span>
+                            <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-300">
+                              {getOperationMessageChannelLabel(message.channel)}
+                            </span>
                             {!message.readAt ? (
                               <span className="rounded-full border border-amber-400/25 bg-amber-400/12 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-amber-100">
                                 Nova
@@ -5174,20 +5922,58 @@ export default function OperacaoPage() {
                 <form
                   onSubmit={(event) => {
                     event.preventDefault();
-                    void handleSendResidentMessage();
+                    void handleSendResidentMessageV55();
                   }}
                   className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]"
                 >
-                  <input
-                    value={residentMessageText}
-                    onChange={(event) => setResidentMessageText(event.target.value)}
-                    disabled={!selectedResidentUnitId}
-                    placeholder="Mensagem para a unidade"
-                    className="rounded-xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500 disabled:opacity-60"
-                  />
+                  <div className="grid gap-2">
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setResidentMessageChannel('PORTARIA')}
+                        className={`rounded-xl border px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] transition ${residentMessageChannel === 'PORTARIA' ? `${brandClasses.softAccent} text-white` : 'border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'}`}
+                      >
+                        <span className="inline-flex items-center gap-2">
+                          <MessageCircle className="h-3.5 w-3.5" />
+                          Aplicativo
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setResidentMessageChannel('WHATSAPP')}
+                        className={`rounded-xl border px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] transition ${residentMessageChannel === 'WHATSAPP' ? `${brandClasses.softAccent} text-white` : 'border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'}`}
+                      >
+                        <span className="inline-flex items-center gap-2">
+                          <Smartphone className="h-3.5 w-3.5" />
+                          WhatsApp
+                        </span>
+                      </button>
+                    </div>
+                    <input
+                      value={residentMessageText}
+                      onChange={(event) => setResidentMessageText(event.target.value)}
+                      disabled={!selectedResidentUnitId}
+                      placeholder={residentMessageChannel === 'WHATSAPP' ? 'Mensagem para enviar pelo WhatsApp' : 'Mensagem para a unidade'}
+                      className="rounded-xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500 disabled:opacity-60"
+                    />
+                    {residentMessageChannel === 'WHATSAPP' ? (
+                      <div className={`rounded-xl border p-3 text-xs ${residentWhatsAppReady ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-100' : 'border-amber-500/20 bg-amber-500/10 text-amber-100'}`}>
+                        {!residentWhatsAppCanSend
+                          ? 'Cadastre um telefone no morador para liberar o envio por WhatsApp.'
+                          : residentWhatsAppReady
+                            ? 'WhatsApp conectado. A mensagem sera enviada no mesmo historico da conversa.'
+                            : 'Conecte o WhatsApp da unidade para liberar esse envio.'}
+                      </div>
+                    ) : null}
+                  </div>
                   <button
                     type="submit"
-                    disabled={!selectedResidentUnitId || residentMessageSaving || !residentMessageText.trim()}
+                    disabled={
+                      !selectedResidentUnitId ||
+                      residentMessageSaving ||
+                      !residentMessageText.trim() ||
+                      (residentMessageChannel === 'WHATSAPP' && (!residentWhatsAppCanSend || !residentWhatsAppReady))
+                    }
                     className={`rounded-xl border px-4 py-3 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-60 ${brandClasses.softAccent}`}
                   >
                     {residentMessageSaving ? 'Enviando...' : 'Enviar'}
@@ -5227,17 +6013,18 @@ export default function OperacaoPage() {
                 </div>
               ) : null}
 
-              {selectedAlertImageUrl ? (
+              {selectedAlertImageUrl && !selectedAlertImageUnavailable ? (
                 <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/20">
                   <img
                     src={selectedAlertImageUrl}
                     alt={selectedAlert.title || 'Registro do alerta'}
                     className="h-72 w-full object-cover"
+                    onError={() => markAlertImageAsUnavailable(selectedAlertImageUrl)}
                   />
                 </div>
               ) : (
                 <div className="rounded-2xl border border-dashed border-white/10 bg-white/5 p-4 text-sm text-slate-300">
-                  Nenhuma imagem foi enviada pela API para esta ocorrência.
+                  {selectedAlertImageUnavailable ? 'A imagem desta ocorrência não está disponível no momento.' : 'Nenhuma imagem foi enviada para esta ocorrência.'}
                 </div>
               )}
 

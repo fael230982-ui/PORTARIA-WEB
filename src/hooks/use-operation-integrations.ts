@@ -52,3 +52,19 @@ export function useOperationMessages(params?: OperationMessagesParams, enabled =
     retry: 1,
   });
 }
+
+export function useOperationWhatsAppConnection(unitId?: string | null, enabled = false) {
+  return useQuery({
+    queryKey: ['operation-whatsapp-connection', unitId],
+    queryFn: () => operationService.getWhatsAppConnection(unitId as string),
+    enabled: enabled && Boolean(unitId),
+    staleTime: 5 * 1000,
+    retry: 1,
+    refetchInterval: (query) => {
+      if (!enabled || !unitId) return false;
+      const state = query.state.data?.state?.trim().toLowerCase();
+      if (!state) return 5 * 1000;
+      return state === 'open' ? false : 5 * 1000;
+    },
+  });
+}

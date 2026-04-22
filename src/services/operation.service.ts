@@ -20,6 +20,7 @@ import type {
   OperationShiftChange,
   OperationShiftChangePayload,
   OperationUnitSearchResult,
+  OperationWhatsAppConnection,
   PersonAccessSummary,
 } from '@/types/operation';
 
@@ -52,9 +53,13 @@ type ApiOperationMessage = OperationMessage & {
   unitName?: string | null;
   senderUserId?: string | null;
   senderUserName?: string | null;
+  recipientPersonId?: string | null;
+  recipientPhone?: string | null;
   origin?: OperationMessage['channel'];
   body?: string;
 };
+
+type ApiOperationWhatsAppConnection = OperationWhatsAppConnection;
 
 type ApiOperationDevice = OperationDevice & {
   metadata?: Record<string, unknown>;
@@ -86,6 +91,35 @@ let heartbeatEndpointUnavailable = false;
 let shiftChangeEndpointUnavailable = false;
 let operationUnitsEndpointUnavailable = false;
 
+function normalizeAssetUrl(value?: string | null) {
+  const url = String(value ?? '').trim();
+  if (!url) return null;
+  if (url.startsWith('data:') || url.startsWith('blob:') || url.startsWith('/api/proxy/')) return url;
+  if (url.startsWith('/api/v1/')) return `/api/proxy/${url.slice('/api/v1/'.length)}`;
+  if (url.startsWith('api/v1/')) return `/api/proxy/${url.slice('api/v1/'.length)}`;
+  if (url.startsWith('/people/') || url.startsWith('/uploads/') || url.startsWith('/files/') || url.startsWith('/storage/')) {
+    return `/api/proxy${url}`;
+  }
+
+  try {
+    const parsed = new URL(url);
+    const pathWithQuery = `${parsed.pathname}${parsed.search}`;
+    if (parsed.pathname.startsWith('/api/v1/')) return `/api/proxy/${pathWithQuery.slice('/api/v1/'.length)}`;
+    if (
+      parsed.pathname.startsWith('/people/') ||
+      parsed.pathname.startsWith('/uploads/') ||
+      parsed.pathname.startsWith('/files/') ||
+      parsed.pathname.startsWith('/storage/')
+    ) {
+      return `/api/proxy${pathWithQuery}`;
+    }
+  } catch {
+    // Keep original value when it is not a URL we know how to proxy.
+  }
+
+  return url;
+}
+
 function normalizeOperationAction(action: ApiOperationAction): OperationAction {
   return {
     ...action,
@@ -112,6 +146,8 @@ function normalizeOperationMessage(message: ApiOperationMessage): OperationMessa
   return {
     ...message,
     unitLabel: message.unitLabel ?? message.unitName ?? null,
+    recipientPersonId: message.recipientPersonId ?? null,
+    recipientPhone: message.recipientPhone ?? null,
     senderId: message.senderId ?? message.senderUserId ?? null,
     senderName: message.senderName ?? message.senderUserName ?? null,
     channel: message.channel ?? message.origin ?? 'APP',
@@ -188,7 +224,10 @@ function normalizePhotoSearchMatch(match: ApiOperationPhotoSearchMatch): Operati
 
   return {
     ...match,
-    person: match.person as Person,
+    person: {
+      ...(match.person as Person),
+      photoUrl: normalizeAssetUrl((match.person as Person).photoUrl),
+    },
     residentUnit,
     activeVisitForecasts: Array.isArray(match.activeVisitForecasts) ? match.activeVisitForecasts : [],
     possibleDestination: match.possibleDestination ?? null,
@@ -199,7 +238,7 @@ function normalizePhotoSearchResponse(response: ApiOperationPhotoSearchResponse)
   return {
     matched: response.matched,
     matchStrategy: response.matchStrategy,
-    capturedPhotoUrl: response.capturedPhotoUrl,
+    capturedPhotoUrl: normalizeAssetUrl(response.capturedPhotoUrl),
     matches: Array.isArray(response.matches) ? response.matches.map(normalizePhotoSearchMatch) : [],
   };
 }
@@ -223,10 +262,13 @@ export const operationService = {
   },
 
   async searchPeopleByPhoto(payload: OperationPhotoSearchRequest): Promise<OperationPhotoSearchResponse> {
+    const photoBase64 = payload.photoBase64?.trim();
+    const photoUrl = payload.photoUrl?.trim();
+    const cameraId = payload.cameraId?.trim();
+    const sourcePayload = photoBase64 ? { photoBase64 } : photoUrl ? { photoUrl } : cameraId ? { cameraId } : {};
+
     const response = await api.post<ApiOperationPhotoSearchResponse>('/operation/people/search-by-photo', {
-      photoUrl: payload.photoUrl ?? null,
-      photoBase64: payload.photoBase64 ?? null,
-      cameraId: payload.cameraId ?? null,
+      ...sourcePayload,
       fileName: payload.fileName ?? null,
       maxMatches: payload.maxMatches ?? 5,
     });
@@ -292,11 +334,27 @@ export const operationService = {
   async sendMessage(payload: OperationMessagePayload): Promise<OperationMessage> {
     const response = await api.post<ApiOperationMessage>('/messages', {
       unitId: payload.unitId,
+      recipientPersonId: payload.recipientPersonId ?? payload.personId ?? null,
+      recipientPhone: payload.recipientPhone ?? null,
       body: payload.text,
       origin: payload.channel === 'INTERNAL' ? 'PORTARIA' : payload.channel,
       direction: 'PORTARIA_TO_RESIDENT',
     });
     return normalizeOperationMessage(response.data);
+  },
+
+  async getWhatsAppConnection(unitId: string): Promise<OperationWhatsAppConnection> {
+    const response = await api.get<ApiOperationWhatsAppConnection>('/messages/whatsapp/connection', {
+      params: { unitId },
+    });
+    return response.data;
+  },
+
+  async connectWhatsApp(unitId: string): Promise<OperationWhatsAppConnection> {
+    const response = await api.post<ApiOperationWhatsAppConnection>('/messages/whatsapp/connect', null, {
+      params: { unitId },
+    });
+    return response.data;
   },
 
   async markMessageRead(messageId: string): Promise<OperationMessage> {
@@ -306,13 +364,18 @@ export const operationService = {
 
   async searchUnits(query: string, limit = 10): Promise<OperationUnitSearchResult[]> {
     if (operationUnitsEndpointUnavailable) return [];
+    const normalizedQuery = query.trim();
+
+    if (normalizedQuery.length < 2) {
+      return [];
+    }
 
     try {
-      const response = await api.get<OperationUnitSearchResult[]>('/operation/units', { params: { q: query, limit } });
+      const response = await api.get<OperationUnitSearchResult[]>('/operation/units', { params: { q: normalizedQuery, limit } });
       return Array.isArray(response.data) ? response.data : [];
     } catch (error) {
       const status = (error as { response?: { status?: number } }).response?.status;
-      if (status === 404 || status === 405 || status === 501) {
+      if (status === 400 || status === 404 || status === 405 || status === 501) {
         operationUnitsEndpointUnavailable = true;
         return [];
       }
@@ -353,8 +416,19 @@ export const operationService = {
   },
 
   async listShiftChanges(limit = 20): Promise<OperationShiftChange[]> {
-    const response = await api.get<OperationShiftChange[]>('/operation/shift-changes', { params: { limit } });
-    return Array.isArray(response.data) ? response.data : [];
+    if (shiftChangeEndpointUnavailable) return [];
+
+    try {
+      const response = await api.get<OperationShiftChange[]>('/operation/shift-changes', { params: { limit } });
+      return Array.isArray(response.data) ? response.data : [];
+    } catch (error) {
+      const status = (error as { response?: { status?: number } }).response?.status;
+      if (status === 404 || status === 405 || status === 500 || status === 501) {
+        shiftChangeEndpointUnavailable = true;
+        return [];
+      }
+      throw error;
+    }
   },
 
   async listOperationDevices(): Promise<OperationDevice[]> {

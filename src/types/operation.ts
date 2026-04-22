@@ -119,6 +119,8 @@ export type OperationMessage = {
   unitId?: string | null;
   unitLabel?: string | null;
   personId?: string | null;
+  recipientPersonId?: string | null;
+  recipientPhone?: string | null;
   senderId?: string | null;
   senderName?: string | null;
   channel: OperationMessageChannel;
@@ -132,12 +134,23 @@ export type OperationMessage = {
 export type OperationMessagePayload = {
   unitId: string;
   personId?: string | null;
+  recipientPersonId?: string | null;
+  recipientPhone?: string | null;
   channel: OperationMessageChannel;
   text: string;
 };
 
 export type OperationMessagesResponse = {
   data: OperationMessage[];
+};
+
+export type OperationWhatsAppConnection = {
+  enabled: boolean;
+  instance?: string | null;
+  state?: string | null;
+  qrCodeText?: string | null;
+  qrCodeImageDataUrl?: string | null;
+  pairingCode?: string | null;
 };
 
 export type OperationEventType =
