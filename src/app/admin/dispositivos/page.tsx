@@ -99,8 +99,6 @@ const initialControlForm: ControlForm = {
 const deviceTypeOptions: Array<{ value: DeviceType; label: string }> = [
   { value: 'FACIAL_DEVICE', label: 'Dispositivo facial' },
   { value: 'IA_FACES', label: 'IA Faces' },
-  { value: 'CAMERA_IA', label: 'Câmera IA' },
-  { value: 'CAMERA', label: 'Câmera comum' },
 ];
 
 const usageOptions: Array<{ value: DeviceUsageType; label: string }> = [
@@ -141,6 +139,10 @@ function getDeviceTypeLabel(type: DeviceType | string) {
 
 function getUsageLabel(type?: DeviceUsageType | null) {
   return usageOptions.find((option) => option.value === type)?.label ?? 'Não configurado';
+}
+
+function isCameraOnlyDevice(device: Device) {
+  return device.type === 'CAMERA' || device.type === 'CAMERA_IA';
 }
 
 function buildPayload(form: DeviceForm): DevicePayload {
@@ -187,7 +189,7 @@ function formFromDevice(device: Device): DeviceForm {
 
 export default function AdminDevicesPage() {
   const { isChecking, canAccess } = useProtectedRoute({ allowedRoles: ['ADMIN', 'MASTER'] });
-  const [devices, setDevices] = useState<Device[]>([]);
+  const [allDevices, setAllDevices] = useState<Device[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -198,6 +200,9 @@ export default function AdminDevicesPage() {
   const [form, setForm] = useState<DeviceForm>(initialForm);
   const [controlForm, setControlForm] = useState<ControlForm>(initialControlForm);
   const [modal, setModal] = useState<'form' | 'control' | null>(null);
+
+  const devices = useMemo(() => allDevices.filter((device) => !isCameraOnlyDevice(device)), [allDevices]);
+  const hiddenCameraCount = allDevices.length - devices.length;
 
   const filteredDevices = useMemo(() => {
     const normalized = search.trim().toLowerCase();
@@ -224,7 +229,7 @@ export default function AdminDevicesPage() {
     setLoading(true);
     setError(null);
     try {
-      setDevices(await devicesService.list());
+      setAllDevices(await devicesService.list());
     } catch (loadError) {
       setError(getErrorMessage(loadError, 'Não foi possível carregar os dispositivos.'));
     } finally {
@@ -330,6 +335,7 @@ export default function AdminDevicesPage() {
               <h1 className="mt-2 text-3xl font-semibold">Dispositivos e comandos físicos</h1>
               <p className="mt-2 max-w-3xl text-sm text-slate-300">
                 Cadastre equipamentos faciais, configure comunicação Control-ID e deixe a abertura remota pronta para a operação.
+                As câmeras ficam separadas na tela Câmeras.
               </p>
             </div>
 
@@ -384,6 +390,11 @@ export default function AdminDevicesPage() {
             <div>
               <h2 className="text-xl font-semibold">Dispositivos</h2>
               <p className="text-sm text-slate-400">Use esta tela para equipamentos, ramais físicos e abertura remota.</p>
+              {hiddenCameraCount > 0 && (
+                <p className="mt-1 text-xs text-slate-500">
+                  {hiddenCameraCount} câmera(s) retornada(s) pelo cadastro de equipamentos foram ocultadas aqui para evitar duplicidade.
+                </p>
+              )}
             </div>
             <div className="relative w-full md:max-w-md">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
