@@ -65,6 +65,29 @@ export async function logout() {
   }
 }
 
+export async function requestPasswordReset(email: string) {
+  try {
+    const response = await api.post('/auth/forgot-password', {
+      email: email.trim(),
+    });
+    return response.data;
+  } catch (error) {
+    throw new Error(getErrorMessage(error));
+  }
+}
+
+export async function resetPassword(token: string, password: string) {
+  try {
+    const response = await api.post('/auth/reset-password', {
+      token: token.trim(),
+      password,
+    });
+    return response.data;
+  } catch (error) {
+    throw new Error(getErrorMessage(error));
+  }
+}
+
 export async function getSyncCapabilities() {
   try {
     const response = await api.get<AuthSyncCapabilities>('/auth/sync-capabilities');

@@ -10,7 +10,11 @@ import { brandConfig } from '@/config/brand';
 import { getRouteForRole } from '@/features/auth/access-control';
 import { acceptCurrentLegalVersion } from '@/features/legal/legal-documents';
 import { useAuth } from '@/hooks/use-auth';
-import { login as loginService } from '@/services/auth.service';
+import {
+  login as loginService,
+  requestPasswordReset,
+  resetPassword,
+} from '@/services/auth.service';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -28,6 +32,20 @@ export default function LoginPage() {
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetSubmitting, setResetSubmitting] = useState(false);
+  const [resetMessage, setResetMessage] = useState<string | null>(null);
+  const [resetError, setResetError] = useState<string | null>(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [resetToken, setResetToken] = useState('');
+  const isResetMode = Boolean(resetToken);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setResetToken(params.get('token') ?? params.get('resetToken') ?? '');
+  }, []);
 
   useEffect(() => {
     if (loading) return;
@@ -57,6 +75,59 @@ export default function LoginPage() {
       setError(message);
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleForgotPassword = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setResetError(null);
+    setResetMessage(null);
+
+    const targetEmail = resetEmail.trim() || email.trim();
+    if (!targetEmail) {
+      setResetError('Informe o e-mail cadastrado.');
+      return;
+    }
+
+    setResetSubmitting(true);
+    try {
+      await requestPasswordReset(targetEmail);
+      setResetMessage('Se o e-mail estiver cadastrado, você receberá as instruções para criar uma nova senha.');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Não foi possível solicitar a recuperação de senha.';
+      setResetError(message);
+    } finally {
+      setResetSubmitting(false);
+    }
+  };
+
+  const handleResetPassword = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setResetError(null);
+    setResetMessage(null);
+
+    if (newPassword.length < 6) {
+      setResetError('A nova senha deve ter pelo menos 6 caracteres.');
+      return;
+    }
+
+    if (newPassword !== confirmNewPassword) {
+      setResetError('As senhas informadas não conferem.');
+      return;
+    }
+
+    setResetSubmitting(true);
+    try {
+      await resetPassword(resetToken, newPassword);
+      setResetMessage('Senha alterada. Entre usando a nova senha.');
+      setNewPassword('');
+      setConfirmNewPassword('');
+      router.replace('/login');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Não foi possível alterar a senha.';
+      setResetError(message);
+    } finally {
+      setResetSubmitting(false);
     }
   };
 
@@ -102,8 +173,57 @@ export default function LoginPage() {
           </p>
         </div>
 
-        <h1 className="mb-6 text-2xl font-bold text-white">Entrar</h1>
+        <h1 className="mb-6 text-2xl font-bold text-white">
+          {isResetMode ? 'Criar nova senha' : 'Entrar'}
+        </h1>
 
+        {isResetMode ? (
+          <form onSubmit={handleResetPassword} className="space-y-4">
+            <div>
+              <label className="mb-1 block text-sm text-zinc-300">Nova senha</label>
+              <input
+                type="password"
+                className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none"
+                value={newPassword}
+                onChange={(event) => setNewPassword(event.target.value)}
+                required
+                autoComplete="new-password"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-sm text-zinc-300">Confirmar nova senha</label>
+              <input
+                type="password"
+                className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none"
+                value={confirmNewPassword}
+                onChange={(event) => setConfirmNewPassword(event.target.value)}
+                required
+                autoComplete="new-password"
+              />
+            </div>
+
+            {resetError && (
+              <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+                {resetError}
+              </div>
+            )}
+
+            {resetMessage && (
+              <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
+                {resetMessage}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={resetSubmitting}
+              className="w-full rounded-lg bg-white px-4 py-3 font-medium text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {resetSubmitting ? 'Salvando...' : 'Salvar nova senha'}
+            </button>
+          </form>
+        ) : (
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="mb-1 block text-sm text-zinc-300">E-mail</label>
@@ -179,7 +299,21 @@ export default function LoginPage() {
           >
             {submitting ? 'Entrando...' : 'Entrar'}
           </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setResetEmail(email);
+              setResetError(null);
+              setResetMessage(null);
+              setShowForgotPassword(true);
+            }}
+            className="w-full text-center text-sm font-semibold text-primary transition hover:opacity-80"
+          >
+            Esqueci minha senha
+          </button>
         </form>
+        )}
 
         <div className="mt-8 border-t border-zinc-800 pt-5">
           <div className="mt-3 flex justify-center">
@@ -189,6 +323,62 @@ export default function LoginPage() {
           </div>
         </div>
       </div>
+
+      {showForgotPassword && !isResetMode && (
+        <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/70 px-4">
+          <div className="w-full max-w-md rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-2xl">
+            <div className="mb-5">
+              <h2 className="text-xl font-semibold text-white">Recuperar senha</h2>
+              <p className="mt-2 text-sm text-zinc-400">
+                Informe seu e-mail para receber as instruções de acesso.
+              </p>
+            </div>
+
+            <form onSubmit={handleForgotPassword} className="space-y-4">
+              <div>
+                <label className="mb-1 block text-sm text-zinc-300">E-mail</label>
+                <input
+                  type="email"
+                  className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none"
+                  value={resetEmail}
+                  onChange={(event) => setResetEmail(event.target.value)}
+                  required
+                  autoComplete="email"
+                />
+              </div>
+
+              {resetError && (
+                <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+                  {resetError}
+                </div>
+              )}
+
+              {resetMessage && (
+                <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
+                  {resetMessage}
+                </div>
+              )}
+
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowForgotPassword(false)}
+                  className="flex-1 rounded-lg border border-zinc-700 px-4 py-3 text-sm font-medium text-zinc-200 transition hover:bg-zinc-800"
+                >
+                  Fechar
+                </button>
+                <button
+                  type="submit"
+                  disabled={resetSubmitting}
+                  className="flex-1 rounded-lg bg-white px-4 py-3 text-sm font-medium text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {resetSubmitting ? 'Enviando...' : 'Enviar'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
