@@ -41,6 +41,9 @@ Para fechar 100%, os endpoints foram separados em tres grupos:
 | Encomendas - retirada | `POST /deliveries/{id}/validate-withdrawal`, `GET /deliveries/withdrawal-qr/{code}` | Implementado |
 | Encomendas - foto/OCR | `POST /deliveries/photo/upload`, `/ocr`, `/ocr-label` | Implementado |
 | Aviso de encomenda | `POST /deliveries/{id}/renotify` | Implementado |
+| Grupos de acesso | `GET/POST /access-groups`, `GET/PUT/DELETE /access-groups/{id}` | Parcial |
+| Dispositivos fisicos | `GET/POST /devices`, `GET/PUT /devices/{id}` | Parcial |
+| Control-ID | `/devices/{id}/control-id/*` | Parcial |
 | Alertas | `GET /alerts`, `GET /alerts/{id}`, `PATCH /alerts/{id}/status`, `PATCH /alerts/{id}/workflow` | Implementado |
 | Acessos | `GET /access-logs`, `GET /access-logs/{id}` | Implementado |
 | Acionamentos | `GET /actions`, `POST /actions/{action_id}/execute` | Implementado |
@@ -82,10 +85,17 @@ Endpoints:
 - `GET/POST /access-groups`
 - `GET/PUT/DELETE /access-groups/{id}`
 
+Status:
+
+- Tela administrativa criada em `/admin/grupos-acesso`.
+- Listagem, criacao, edicao e remocao implementadas.
+- Vinculo visual com pessoas e cameras implementado.
+
 Falta:
 
-- Tela para criar grupos como morador, visitante, prestador, funcionario, admin, operador ou grupos personalizados.
-- Vinculo visual com pessoas, dispositivos e regras de acesso.
+- Homologar sincronizacao com listas faciais reais.
+- Confirmar se o backend vai permitir vinculo direto com dispositivos alem das cameras.
+- Evoluir para regras por horario, perfil ou tipo de pessoa se o backend publicar esses campos.
 
 Prioridade: alta.
 
@@ -103,11 +113,17 @@ Endpoints:
 - `POST /devices/{id}/control-id/remote-open`
 - `POST /devices/{id}/control-id/people/{person_id}/sync`
 
+Status:
+
+- Tela administrativa criada em `/admin/dispositivos`.
+- Listagem, cadastro e edicao basica de dispositivos implementados.
+- Acoes Control-ID implementadas: testar conexao, configurar envio, configurar monitoramento, ativar/desativar online, abertura remota e sincronizar pessoa.
+
 Falta:
 
-- Tela de configuracao de equipamentos.
-- Botoes de teste, configurar monitoramento, habilitar/desabilitar online, abertura remota e sincronizar pessoa.
-- Padronizar onde ficam "ramais", "comandos fisicos" e "acoes imediatas".
+- Homologar cada comando com equipamento real.
+- Melhorar selecao de pessoa por busca nominal em vez de informar o codigo manualmente.
+- Confirmar com backend se deve existir exclusao ou desativacao administrativa de dispositivo.
 
 Prioridade: muito alta, porque o usuario ja perguntou onde configurar acionamentos e comandos fisicos.
 

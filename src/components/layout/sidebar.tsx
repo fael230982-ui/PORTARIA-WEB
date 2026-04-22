@@ -16,6 +16,7 @@ import {
   Cctv,
   Car,
   AlertTriangle,
+  Cpu,
   Menu,
   UserCircle,
 } from 'lucide-react';
@@ -50,6 +51,8 @@ const adminNavigation: NavigationItem[] = [
   { label: 'Relatorios', href: '/admin/relatorios', icon: FileText, moduleKey: 'reports' },
   { label: 'Alertas', href: '/admin/alertas', icon: Bell, moduleKey: 'alerts' },
   { label: 'Cameras', href: '/admin/cameras', icon: Cctv, moduleKey: 'cameras' },
+  { label: 'Dispositivos', href: '/admin/dispositivos', icon: Cpu, moduleKey: 'devices' },
+  { label: 'Grupos de acesso', href: '/admin/grupos-acesso', icon: Shield, moduleKey: 'access-groups' },
 ];
 
 const residentNavigation: NavigationItem[] = [
