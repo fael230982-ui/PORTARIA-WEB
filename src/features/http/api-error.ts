@@ -28,7 +28,23 @@ export function getApiErrorStatus(error: unknown) {
 
 function extractApiMessage(data?: ApiErrorData) {
   if (typeof data === 'string') {
-    return data.trim();
+    const trimmed = data.trim();
+    if (!trimmed) return '';
+
+    const withoutHtml = trimmed
+      .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if (withoutHtml && withoutHtml.length < trimmed.length) {
+      if (/bad gateway/i.test(withoutHtml)) return 'Bad gateway';
+      if (/error code 502/i.test(withoutHtml)) return 'Bad gateway';
+      return withoutHtml;
+    }
+
+    return trimmed;
   }
 
   if (!data || typeof data !== 'object') {

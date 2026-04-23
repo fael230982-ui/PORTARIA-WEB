@@ -7,11 +7,16 @@ function getVehicleServiceErrorMessage(error: unknown, fallback: string) {
     fallback,
     byStatus: {
       403: 'Seu usuário não tem permissão para cadastrar veículo nesta unidade. Selecione uma unidade do seu condomínio ou peça ajuste de acesso.',
+      502: 'O servidor de veículos está indisponível no momento. Tente novamente em instantes.',
     },
     keywordMap: [
       {
         includes: ['unidade solicitada'],
         message: 'Seu usuário não tem permissão para cadastrar veículo nesta unidade. Selecione uma unidade do seu condomínio ou peça ajuste de acesso.',
+      },
+      {
+        includes: ['bad gateway', 'error code 502', 'cloudflare'],
+        message: 'O servidor de veículos está indisponível no momento. Tente novamente em instantes.',
       },
     ],
   });

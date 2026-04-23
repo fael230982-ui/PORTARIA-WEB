@@ -308,6 +308,8 @@ export default function AdminVeiculosPage() {
   const [lookupMessage, setLookupMessage] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Vehicle | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [handledInitialQuery, setHandledInitialQuery] = useState(false);
   const [activeUnitId, setActiveUnitId] = useState(() => {
     if (typeof window === 'undefined') return '';
@@ -565,6 +567,29 @@ export default function AdminVeiculosPage() {
     }
   }
 
+  function openDeleteVehicleDialog(vehicle: Vehicle) {
+    setDeleteTarget(vehicle);
+  }
+
+  async function confirmDeleteVehicleDialog() {
+    if (!deleteTarget) return;
+
+    setMessage(null);
+    setFormError(null);
+    setDeleting(true);
+
+    try {
+      await deleteVehicle(deleteTarget.id);
+      setMessage('Veículo removido com sucesso.');
+      setDeleteTarget(null);
+      await refetch();
+    } catch (deleteError) {
+      setMessage(getVehicleErrorMessage(deleteError, 'Não foi possível remover o veículo.'));
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   if (isChecking) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center rounded-3xl border border-white/10 bg-white/5 text-white">
@@ -715,7 +740,7 @@ export default function AdminVeiculosPage() {
                 <button type="button" onClick={() => openEditForm(vehicle)} className="rounded-lg bg-white/10 p-2 text-white transition hover:bg-white/15" aria-label="Editar veículo">
                   <Pencil className="h-4 w-4" />
                 </button>
-                <button type="button" onClick={() => void handleDeleteVehicle(vehicle)} className="rounded-lg bg-red-500/15 p-2 text-red-100 transition hover:bg-red-500/25" aria-label="Remover veículo">
+                <button type="button" onClick={() => openDeleteVehicleDialog(vehicle)} className="rounded-lg bg-red-500/15 p-2 text-red-100 transition hover:bg-red-500/25" aria-label="Remover veículo">
                   <Trash2 className="h-4 w-4" />
                 </button>
               </div>
@@ -762,6 +787,53 @@ export default function AdminVeiculosPage() {
           units={scopedUnits}
           people={people}
         />
+      </CrudModal>
+
+      <CrudModal
+        open={Boolean(deleteTarget)}
+        title="Excluir veículo"
+        description="Confirme se deseja remover este veículo do cadastro."
+        onClose={() => {
+          if (deleting) return;
+          setDeleteTarget(null);
+        }}
+        maxWidth="md"
+        footer={(
+          <>
+            <button
+              type="button"
+              onClick={() => setDeleteTarget(null)}
+              disabled={deleting}
+              className="rounded-xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-white transition hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={() => void confirmDeleteVehicleDialog()}
+              disabled={deleting}
+              className="rounded-xl bg-red-500 px-4 py-3 text-sm font-medium text-white transition hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {deleting ? 'Excluindo...' : 'Excluir veículo'}
+            </button>
+          </>
+        )}
+      >
+        {deleteTarget ? (
+          <div className="space-y-4 text-sm text-slate-300">
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+              <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Veículo selecionado</p>
+              <p className="mt-2 text-lg font-semibold text-white">{deleteTarget.plate}</p>
+              <p className="mt-1 text-slate-400">
+                {[vehicleTypeLabels[deleteTarget.type], deleteTarget.brand, deleteTarget.model, deleteTarget.color].filter(Boolean).join(' / ') || 'Sem detalhes complementares'}
+              </p>
+              <p className="mt-2 text-slate-400">
+                {[deleteTarget.condominiumName, deleteTarget.structureLabel, deleteTarget.unitLabel].filter(Boolean).join(' / ') || 'Sem unidade vinculada'}
+              </p>
+            </div>
+            <p className="text-slate-400">Esta ação remove o veículo da lista e do vínculo com a unidade.</p>
+          </div>
+        ) : null}
       </CrudModal>
     </div>
   );
