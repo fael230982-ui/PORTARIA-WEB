@@ -70,7 +70,11 @@ function normalizeSearch(value: unknown) {
 
 function formatUnitLabel(unit: Unit | null) {
   if (!unit) return '';
-  return [unit.condominium.name, unit.structure.label, unit.label].filter(Boolean).join(' / ') || unit.label;
+  return [
+    unit.condominium?.name ?? unit.condominiumName,
+    unit.structure?.label ?? unit.structureLabel,
+    unit.label,
+  ].filter(Boolean).join(' / ') || unit.label;
 }
 
 function vehicleToForm(vehicle: Vehicle): VehicleFormState {
