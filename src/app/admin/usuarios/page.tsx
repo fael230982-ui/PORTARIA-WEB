@@ -182,6 +182,7 @@ function getRoleLabel(role: UserRole | string) {
   const normalized = normalizeString(role);
 
   if (normalized === 'master') return 'Master';
+  if (normalized === 'parceiro') return 'Parceiro';
   if (normalized === 'admin') return 'Admin';
   if (normalized === 'operador' || normalized === 'operacional') return 'Operação';
   if (normalized === 'central') return 'Central';
@@ -256,6 +257,7 @@ function getRoleBadgeClass(role: UserRole | string) {
   const normalized = normalizeString(role);
 
   if (normalized === 'master') return 'border-violet-400/30 bg-violet-500/15 text-violet-100';
+  if (normalized === 'parceiro') return 'border-fuchsia-400/30 bg-fuchsia-500/15 text-fuchsia-100';
   if (normalized === 'admin') return 'border-sky-400/30 bg-sky-500/15 text-sky-100';
   if (normalized === 'operador' || normalized === 'operacional') return 'border-emerald-400/30 bg-emerald-500/15 text-emerald-100';
   if (normalized === 'central') return 'border-amber-400/30 bg-amber-500/15 text-amber-100';
@@ -877,6 +879,7 @@ export default function AdminUsuariosPage() {
             >
               <option value="">Todos os perfis</option>
               <option value="MASTER">Master</option>
+              <option value="PARCEIRO">Parceiro</option>
               <option value="ADMIN">Admin</option>
               <option value="OPERADOR">Operação</option>
               <option value="CENTRAL">Central</option>

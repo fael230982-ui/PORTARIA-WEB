@@ -1,5 +1,5 @@
 export type UserScopeType = 'GLOBAL' | 'ASSIGNED' | 'RESIDENT' | 'UNSCOPED';
-export type ApiUserRole = 'MASTER' | 'ADMIN' | 'OPERACIONAL' | 'CENTRAL' | 'MORADOR';
+export type ApiUserRole = 'MASTER' | 'PARCEIRO' | 'ADMIN' | 'OPERACIONAL' | 'CENTRAL' | 'MORADOR';
 
 export type UserResponse = {
   id: string;

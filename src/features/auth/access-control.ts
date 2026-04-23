@@ -19,6 +19,8 @@ export function getRouteForRole(role?: UserRole | null) {
       return '/admin';
     case 'MASTER':
       return '/master';
+    case 'PARCEIRO':
+      return '/parceiro';
     case 'MORADOR':
       return '/dashboard/profile';
     default:

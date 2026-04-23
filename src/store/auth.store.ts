@@ -4,7 +4,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { UserScopeType } from '@/types/user';
 
-export type UserRole = 'MASTER' | 'ADMIN' | 'OPERADOR' | 'CENTRAL' | 'MORADOR';
+export type UserRole = 'MASTER' | 'PARCEIRO' | 'ADMIN' | 'OPERADOR' | 'CENTRAL' | 'MORADOR';
 
 export type AuthUser = {
   id: string;

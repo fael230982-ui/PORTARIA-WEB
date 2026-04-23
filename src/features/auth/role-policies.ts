@@ -7,6 +7,8 @@ export type UserScope =
   | 'single_unit';
 
 export type UserCapability =
+  | 'manage_partner_clients'
+  | 'manage_partner_licenses'
   | 'manage_people'
   | 'manage_deliveries'
   | 'manage_alerts'
@@ -39,6 +41,17 @@ export const ROLE_POLICIES: Record<UserRole, RolePolicy> = {
       'manage_structures',
       'handle_events',
       'manage_own_unit_contacts',
+    ],
+  },
+  PARCEIRO: {
+    role: 'PARCEIRO',
+    label: 'Parceiro',
+    scope: 'multi_condominium',
+    capabilities: [
+      'manage_partner_clients',
+      'manage_partner_licenses',
+      'manage_secondary_users',
+      'manage_structures',
     ],
   },
   ADMIN: {
