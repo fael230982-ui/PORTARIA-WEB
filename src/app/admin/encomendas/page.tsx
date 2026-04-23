@@ -178,12 +178,12 @@ function getErrorMessage(error: unknown, fallback: string) {
   return getApiErrorMessage(error, {
     fallback,
     byStatus: {
-      403: 'Voce nao tem permissao para registrar encomenda nessa unidade.',
-      500: 'O backend retornou erro interno ao salvar a encomenda. Tente novamente ou acione o suporte tecnico.',
+      403: 'Você não tem permissão para registrar encomenda nessa unidade.',
+      500: 'Não foi possível salvar a encomenda agora. Tente novamente em instantes.',
     },
     keywordMap: [
       { includes: ['unitid', 'recipientunitid'], message: 'Selecione uma unidade valida para registrar a encomenda.' },
-      { includes: ['recipientpersonid'], message: 'Selecione um destinatario valido ou deixe o vinculo de pessoa em branco.' },
+      { includes: ['recipientpersonid'], message: 'Selecione um destinatário válido ou deixe o vínculo de pessoa em branco.' },
       { includes: ['deliverycompany'], message: 'Informe a transportadora ou origem da encomenda.' },
     ],
   });
@@ -193,20 +193,30 @@ function getDeliveryPreviewUrl(delivery: DeliveryRow) {
   return getDeliveryPhotoUrl(delivery);
 }
 
-function DeliveryThumbnail({ delivery, label }: { delivery: DeliveryRow; label: string }) {
+function DeliveryThumbnail({ delivery, label, onClick }: { delivery: DeliveryRow; label: string; onClick?: () => void }) {
   const [hidden, setHidden] = useState(false);
   const previewUrl = getDeliveryPreviewUrl(delivery);
 
   if (!previewUrl || hidden) {
     return (
-      <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-dashed border-white/10 bg-white/5 text-[10px] uppercase tracking-[0.16em] text-slate-500">
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={!onClick}
+        className="flex h-14 w-14 items-center justify-center rounded-2xl border border-dashed border-white/10 bg-white/5 text-[10px] uppercase tracking-[0.16em] text-slate-500"
+      >
         Sem foto
-      </div>
+      </button>
     );
   }
 
   return (
-    <div className="h-14 w-14 overflow-hidden rounded-2xl border border-white/10 bg-slate-950/60">
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={!onClick}
+      className="h-14 w-14 overflow-hidden rounded-2xl border border-white/10 bg-slate-950/60"
+    >
       <img
         src={previewUrl}
         alt={label}
@@ -214,7 +224,7 @@ function DeliveryThumbnail({ delivery, label }: { delivery: DeliveryRow; label: 
         loading="lazy"
         onError={() => setHidden(true)}
       />
-    </div>
+    </button>
   );
 }
 
@@ -493,8 +503,8 @@ function DeliveryForm({
               <p className="text-xs uppercase tracking-[0.16em] text-white/60">Sugestoes</p>
               <p className="mt-2">Unidade: {ocrReview.suggestedUnitName ?? 'Sem sugestao direta'}</p>
               <p className="mt-1">Destinatario: {ocrReview.suggestedResidentName ?? 'Sem sugestao direta'}</p>
-              <p className="mt-1">Transportadora: {ocrReview.deliveryCompany ?? 'Nao identificada'}</p>
-              <p className="mt-1">Rastreio: {ocrReview.trackingCode ?? 'Nao identificado'}</p>
+              <p className="mt-1">Transportadora: {ocrReview.deliveryCompany ?? 'Não identificada'}</p>
+              <p className="mt-1">Rastreio: {ocrReview.trackingCode ?? 'Não identificado'}</p>
             </div>
             <div className="rounded-xl border border-white/10 bg-black/20 p-3">
               <p className="text-xs uppercase tracking-[0.16em] text-white/60">Campos aplicados</p>
@@ -724,7 +734,9 @@ export default function EncomendasPage() {
   const [viewMode, setViewMode] = useState<DeliveryViewMode>('list');
   const [openCreate, setOpenCreate] = useState(false);
   const [openStatus, setOpenStatus] = useState(false);
+  const [openDetails, setOpenDetails] = useState(false);
   const [selected, setSelected] = useState<DeliveryRow | null>(null);
+  const [detailsDelivery, setDetailsDelivery] = useState<DeliveryRow | null>(null);
   const [saving, setSaving] = useState(false);
   const [notifyingId, setNotifyingId] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -1032,6 +1044,11 @@ export default function EncomendasPage() {
     setSelected(delivery);
     setStatusError(null);
     setOpenStatus(true);
+  }
+
+  function openDetailsModal(delivery: DeliveryRow) {
+    setDetailsDelivery(delivery);
+    setOpenDetails(true);
   }
 
   async function handleRefresh() {
@@ -1448,6 +1465,7 @@ export default function EncomendasPage() {
                         <DeliveryThumbnail
                           delivery={delivery}
                           label={`Foto da encomenda de ${recipient || 'destinatário não identificado'}`}
+                          onClick={() => openDetailsModal(delivery)}
                         />
                         <div>
                           <p className="font-medium text-white">{recipient || 'Sem destinatário vinculado'}</p>
@@ -1500,6 +1518,7 @@ export default function EncomendasPage() {
                   <DeliveryThumbnail
                     delivery={delivery}
                     label={`Foto da encomenda de ${recipient || 'destinatário não identificado'}`}
+                    onClick={() => openDetailsModal(delivery)}
                   />
                   <div>
                     <p className="font-medium text-white">{recipient || 'Sem destinatário vinculado'}</p>
@@ -1568,6 +1587,70 @@ export default function EncomendasPage() {
           people={people}
           hasSelectedPhoto={Boolean(selectedPhotoFile)}
         />
+      </CrudModal>
+
+      <CrudModal
+        open={openDetails}
+        title="Detalhes da encomenda"
+        description="Resumo da encomenda selecionada."
+        onClose={() => {
+          setOpenDetails(false);
+          setDetailsDelivery(null);
+        }}
+        maxWidth="lg"
+      >
+        {detailsDelivery ? (
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+              <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Foto</p>
+              <div className="mt-3">
+                {getDeliveryPhotoUrl(detailsDelivery) ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={getDeliveryPhotoUrl(detailsDelivery)}
+                    alt="Foto da encomenda"
+                    className="max-h-[420px] w-full rounded-2xl object-contain"
+                  />
+                ) : (
+                  <div className="flex h-48 items-center justify-center rounded-2xl border border-dashed border-white/10 bg-white/5 text-sm text-slate-400">
+                    Sem foto cadastrada
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Destinatário</p>
+                <p className="mt-2 text-base font-medium text-white">
+                  {detailsDelivery.recipientPersonName || (detailsDelivery.recipientPersonId ? peopleMap.get(detailsDelivery.recipientPersonId)?.name : null) || 'Não informado'}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Unidade</p>
+                <p className="mt-2 text-base font-medium text-white">
+                  {unitLabelMap.get(detailsDelivery.recipientUnitId) ?? 'Unidade não identificada'}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Origem</p>
+                <p className="mt-2 text-base font-medium text-white">{safeDeliveryText(detailsDelivery.deliveryCompany, 'Não informada')}</p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Código de rastreio</p>
+                <p className="mt-2 text-base font-medium text-white">{safeDeliveryText(detailsDelivery.trackingCode, 'Não informado')}</p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Status</p>
+                <p className="mt-2 text-base font-medium text-white">{getDeliveryStatusLabel(detailsDelivery.status)}</p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Recebida em</p>
+                <p className="mt-2 text-base font-medium text-white">{toDatetimeLocal(detailsDelivery.receivedAt).replace('T', ' ') || 'Horário indisponível'}</p>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </CrudModal>
 
       <CrudModal open={openStatus} title="Atualizar status da encomenda" description="Use os status reais do backend: aguardando retirada, aviso enviado e retirada." onClose={() => { setOpenStatus(false); setSelected(null); setStatusError(null); }} maxWidth="lg">

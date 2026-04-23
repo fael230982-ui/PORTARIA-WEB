@@ -102,8 +102,8 @@ export function CameraView({ activeCameraId }: CameraViewProps) {
               camera={camera}
               className="absolute inset-0 bg-black"
               imageClassName="h-full w-full object-cover"
-              emptyLabel="Nenhum preview disponível"
-              emptyHint="Sem stream, image stream ou snapshot disponível."
+              emptyLabel="Nenhuma imagem disponível"
+              emptyHint="A câmera ainda não possui imagem liberada para visualização."
             />
           </div>
         </div>

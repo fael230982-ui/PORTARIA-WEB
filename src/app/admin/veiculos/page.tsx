@@ -310,9 +310,25 @@ export default function AdminVeiculosPage() {
     return new URLSearchParams(window.location.search).get('unitId') ?? '';
   });
 
-  const people = useMemo(() => peopleData.data ?? [], [peopleData.data]);
-  const vehicles = useMemo(() => vehiclesData.data ?? [], [vehiclesData.data]);
-  const unitsById = useMemo(() => new Map(units.map((unit) => [unit.id, unit])), [units]);
+  const people = useMemo(() => peopleData?.data ?? [], [peopleData?.data]);
+  const vehicles = useMemo(() => vehiclesData?.data ?? [], [vehiclesData?.data]);
+  const allowedCondominiumIds = useMemo(() => {
+    if (user?.role !== 'ADMIN') return [];
+    return [user.condominiumId, ...(user.condominiumIds ?? [])].filter(Boolean) as string[];
+  }, [user?.condominiumId, user?.condominiumIds, user?.role]);
+  const allowedUnitIds = useMemo(() => {
+    if (user?.role !== 'ADMIN') return [];
+    return [user.unitId, ...(user.unitIds ?? [])].filter(Boolean) as string[];
+  }, [user?.role, user?.unitId, user?.unitIds]);
+  const scopedUnits = useMemo(() => {
+    if (user?.role !== 'ADMIN') return units;
+    if (allowedUnitIds.length > 0) {
+      return units.filter((unit) => allowedUnitIds.includes(unit.id) || Boolean(unit.legacyUnitId && allowedUnitIds.includes(unit.legacyUnitId)));
+    }
+    if (allowedCondominiumIds.length === 0) return [];
+    return units.filter((unit) => unit.condominiumId && allowedCondominiumIds.includes(unit.condominiumId));
+  }, [allowedCondominiumIds, allowedUnitIds, units, user?.role]);
+  const unitsById = useMemo(() => new Map(scopedUnits.map((unit) => [unit.id, unit])), [scopedUnits]);
   const activeUnit = activeUnitId ? unitsById.get(activeUnitId) ?? null : null;
   const peopleById = useMemo(() => new Map(people.map((person) => [person.id, person])), [people]);
   const duplicatePlateSet = useMemo(() => {
@@ -367,7 +383,7 @@ export default function AdminVeiculosPage() {
   }), [duplicatePlateSet.size, vehicles]);
 
   useEffect(() => {
-    if (handledInitialQuery || units.length === 0) return;
+    if (handledInitialQuery || scopedUnits.length === 0) return;
 
     const params = new URLSearchParams(window.location.search);
     const unitId = params.get('unitId');
@@ -394,7 +410,7 @@ export default function AdminVeiculosPage() {
     }
 
     setHandledInitialQuery(true);
-  }, [handledInitialQuery, units.length, unitsById]);
+  }, [handledInitialQuery, scopedUnits.length, unitsById]);
 
   function setField(field: keyof VehicleFormState, nextValue: string) {
     setFormError(null);
@@ -475,12 +491,12 @@ export default function AdminVeiculosPage() {
       color: form.color,
       type: form.type,
       status: form.status,
-      ownerId: owner.id,
-      ownerName: owner.name,
-      unitId: unit.id,
-      unitLabel: unit.label,
-      structureLabel: unit.structure.label,
-      condominiumName: unit.condominium.name,
+      ownerId: owner?.id || undefined,
+      ownerName: owner?.name || undefined,
+      unitId: unit?.id ?? form.unitId,
+      unitLabel: unit?.label ?? '',
+      structureLabel: unit?.structure?.label ?? '',
+      condominiumName: unit?.condominium?.name ?? '',
       tag: form.tag,
       notes: form.notes,
     };
@@ -634,6 +650,12 @@ export default function AdminVeiculosPage() {
         <div className="rounded-3xl border border-red-500/30 bg-red-500/10 p-5 text-sm text-red-100">Não foi possível carregar os veículos.</div>
       ) : null}
 
+      {user.role === 'ADMIN' && !scopedUnits.length ? (
+        <div className="rounded-3xl border border-amber-500/30 bg-amber-500/10 p-5 text-sm text-amber-100">
+          Não encontramos unidades liberadas para o seu acesso. Para cadastrar veículos, este administrador precisa estar vinculado às unidades corretas.
+        </div>
+      ) : null}
+
       <section className="rounded-3xl border border-white/10 bg-white/5 p-5">
         <div className="grid gap-3 lg:grid-cols-[1.5fr_0.7fr_0.7fr]">
           <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3">
@@ -733,7 +755,7 @@ export default function AdminVeiculosPage() {
           lookupLoading={lookupLoading}
           lookupMessage={lookupMessage}
           onPlateLookup={handlePlateLookup}
-          units={units}
+          units={scopedUnits}
           people={people}
         />
       </CrudModal>

@@ -82,14 +82,14 @@ function getAccountLabel(scopeType?: UserScopeType | null) {
     case 'RESIDENT':
       return 'Morador';
     case 'UNSCOPED':
-      return 'Nao informado';
+      return 'Não informado';
     default:
-      return 'Nao informado';
+      return 'Não informado';
   }
 }
 
 function formatDateTime(value?: string | null) {
-  if (!value) return 'Nao registrado';
+  if (!value) return 'Não registrado';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleString('pt-BR');
@@ -112,7 +112,7 @@ function formatVisitStatus(status?: string | null) {
     case 'CANCELLED':
       return 'Cancelada';
     default:
-      return status || 'Nao informado';
+      return status || 'Não informado';
   }
 }
 
@@ -166,11 +166,11 @@ export default function ProfilePage() {
           <div className="mt-4 grid gap-3 text-sm md:grid-cols-2">
             <div className="rounded-xl border border-white/10 bg-slate-950/60 p-4">
               <p className="text-slate-500">E-mail</p>
-              <p className="mt-1 text-white">{effectiveProfile?.email || 'Nao informado'}</p>
+              <p className="mt-1 text-white">{effectiveProfile?.email || 'Não informado'}</p>
             </div>
             <div className="rounded-xl border border-white/10 bg-slate-950/60 p-4">
               <p className="text-slate-500">Tipo de acesso</p>
-              <p className="mt-1 text-white">{effectiveProfile?.role || 'Nao informado'}</p>
+              <p className="mt-1 text-white">{effectiveProfile?.role || 'Não informado'}</p>
             </div>
             <div className="rounded-xl border border-white/10 bg-slate-950/60 p-4">
               <p className="text-slate-500">Unidade atual</p>
@@ -197,7 +197,7 @@ export default function ProfilePage() {
 
           {residentProfileQuery.isError ? (
             <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
-              Nao foi possivel atualizar seus dados agora. Estamos exibindo as informacoes mais recentes disponiveis.
+              Não foi possível atualizar seus dados agora. Estamos exibindo as informações mais recentes disponíveis.
             </div>
           ) : null}
         </div>
@@ -264,7 +264,7 @@ export default function ProfilePage() {
 
           {preferencesQuery.isError ? (
             <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-100">
-              Nao foi possivel carregar suas preferencias agora.
+              Não foi possível carregar suas preferências agora.
             </div>
           ) : null}
           {updatePreferences.isSuccess ? (
@@ -285,7 +285,7 @@ export default function ProfilePage() {
             <div className="rounded-xl border border-white/10 bg-slate-950/60 p-4">
               <p className="text-slate-500">Situacao atual</p>
               <p className="mt-1 text-white">{consentQuery.data?.accepted ? 'Aceito' : 'Pendente'}</p>
-              <p className="mt-2 text-xs text-slate-500">Versao: {consentQuery.data?.version || 'Nao registrada'}</p>
+              <p className="mt-2 text-xs text-slate-500">Versão: {consentQuery.data?.version || 'Não registrada'}</p>
             </div>
             <div className="rounded-xl border border-white/10 bg-slate-950/60 p-4">
               <p className="text-slate-500">Aceite registrado em</p>
@@ -297,7 +297,7 @@ export default function ProfilePage() {
             </div>
             <div className="rounded-xl border border-white/10 bg-slate-950/60 p-4">
               <p className="text-slate-500">Versao atual</p>
-              <p className="mt-1 text-white">{lgpdPolicyQuery.data?.currentVersion || 'Nao informada'}</p>
+              <p className="mt-1 text-white">{lgpdPolicyQuery.data?.currentVersion || 'Não informada'}</p>
             </div>
           </div>
 
@@ -336,17 +336,17 @@ export default function ProfilePage() {
 
           {consentQuery.isError ? (
             <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-100">
-              Nao foi possivel carregar os dados de privacidade agora.
+              Não foi possível carregar os dados de privacidade agora.
             </div>
           ) : null}
           {consentHistoryQuery.isError ? (
             <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
-              Nao foi possivel carregar o historico de privacidade agora.
+              Não foi possível carregar o histórico de privacidade agora.
             </div>
           ) : null}
           {lgpdPolicyQuery.isError ? (
             <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
-              Nao foi possivel carregar os detalhes de privacidade agora.
+              Não foi possível carregar os detalhes de privacidade agora.
             </div>
           ) : null}
           {updateConsent.isSuccess ? (
@@ -372,13 +372,13 @@ export default function ProfilePage() {
 
         {visitForecastsQuery.isError ? (
           <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-100">
-            Nao foi possivel carregar as visitas previstas agora.
+            Não foi possível carregar as visitas previstas agora.
           </div>
         ) : null}
 
         {!visitForecastsQuery.isLoading && !visitForecastsQuery.isError && !upcomingVisits.length ? (
           <div className="mt-4 rounded-xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-slate-300">
-            Nao ha visitas previstas no momento.
+            Não há visitas previstas no momento.
           </div>
         ) : null}
 
@@ -406,7 +406,7 @@ export default function ProfilePage() {
                     <span className="text-slate-500">Saida prevista:</span> {formatDateTime(visit.endsAt)}
                   </p>
                   <p>
-                    <span className="text-slate-500">Liberacao:</span> {visit.releaseMode || 'Nao informada'}
+                    <span className="text-slate-500">Liberação:</span> {visit.releaseMode || 'Não informada'}
                   </p>
                 </div>
                 {visit.notes ? <p className="mt-3 text-sm text-slate-400 text-justify">{visit.notes}</p> : null}

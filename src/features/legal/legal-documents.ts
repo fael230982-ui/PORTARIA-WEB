@@ -71,7 +71,7 @@ export const termsSections = [
     title: '3. Tratamento de dados e imagem',
     items: [
       'Dados e imagens tratados na plataforma devem estar vinculados a finalidade legitima e operacional.',
-      'Nao e permitido usar dados, fotos, snapshots ou evidencias fora do fluxo autorizado.',
+      'Não é permitido usar dados, fotos ou evidências fora do fluxo autorizado.',
     ],
   },
   {

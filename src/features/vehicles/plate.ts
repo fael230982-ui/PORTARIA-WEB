@@ -34,7 +34,7 @@ export function getVehiclePlateFormatLabel(value: unknown) {
 
   if (format === 'old') return 'Formato antigo';
   if (format === 'mercosul') return 'Formato Mercosul';
-  if (format === 'invalid') return 'Placa invalida';
+  if (format === 'invalid') return 'Placa inválida';
 
   return 'Digite 3 letras e 4 caracteres finais';
 }

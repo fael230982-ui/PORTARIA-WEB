@@ -32,7 +32,7 @@ export function CameraFeed({
   className = '',
   imageClassName = 'h-full w-full object-cover',
   emptyLabel = 'Nenhum preview dispon\u00edvel',
-  emptyHint = 'A c\u00e2mera precisa responder ao snapshot autenticado ou expor stream pelo backend.',
+  emptyHint = 'A câmera precisa ter uma imagem disponível para visualização.',
   refreshMs = 15000,
   preferStreaming = true,
   controls = true,
@@ -74,12 +74,12 @@ export function CameraFeed({
       document.cookie = `camera_proxy_token=; Path=/api/proxy; Max-Age=0; SameSite=Lax${cookieSecure}`;
     }
 
-    if (user?.selectedUnitId) {
+    if (user?.role === 'MORADOR' && user.selectedUnitId) {
       document.cookie = `camera_selected_unit_id=${encodeURIComponent(user.selectedUnitId)}; Path=/api/proxy; SameSite=Lax${cookieSecure}`;
     } else {
       document.cookie = `camera_selected_unit_id=; Path=/api/proxy; Max-Age=0; SameSite=Lax${cookieSecure}`;
     }
-  }, [cookieSecure, token, user?.selectedUnitId]);
+  }, [cookieSecure, token, user?.role, user?.selectedUnitId]);
 
   useEffect(() => {
     if (!shouldUseImageStream || !imageStreamUrl) return;
@@ -250,24 +250,22 @@ export function CameraFeed({
       <div className="text-center">
         <Camera className="mx-auto mb-4 h-14 w-14 opacity-30" />
         <p className="text-sm text-slate-400">
-          {hasOnlyRtsp ? 'C\u00e2mera cadastrada, mas sem preview no navegador' : emptyLabel}
+          {hasOnlyRtsp ? 'Câmera cadastrada, mas sem imagem no navegador' : emptyLabel}
         </p>
         <p className="mt-1 text-xs text-slate-500">{emptyHint}</p>
         {hasOnlyRtsp ? (
           <p className="mx-auto mt-3 max-w-md text-xs text-amber-200">
-            {'A URL cadastrada \u00e9 RTSP. Para aparecer imagem aqui, o backend precisa converter essa c\u00e2mera para '}
-            `liveUrl` ou `hlsUrl`.
+            {'A câmera foi cadastrada com RTSP. Para aparecer imagem aqui, o sistema precisa converter essa câmera para visualização no navegador.'}
           </p>
         ) : null}
         {streamingError && !compactErrors ? (
           <p className="mx-auto mt-3 max-w-md text-xs text-red-200">
-            {'O contrato de streaming da c\u00e2mera n\u00e3o respondeu agora. Use o bot\u00e3o atualizar ou pe\u00e7a ao backend para validar '}
-            `/cameras/{'{id}'}/streaming`, `liveUrl` e `hlsUrl`.
+            {'A imagem ao vivo não respondeu agora. Use o botão atualizar ou verifique a configuração da câmera.'}
           </p>
         ) : null}
         {(videoError || imageError) && !compactErrors ? (
           <p className="mx-auto mt-3 max-w-md text-xs text-red-200">
-            {'A fonte principal n\u00e3o carregou no navegador. O front tentou v\u00eddeo, preview e snapshot conforme dispon\u00edvel.'}
+            {'A imagem principal não carregou no navegador. O sistema tentou as opções de visualização disponíveis.'}
           </p>
         ) : null}
       </div>

@@ -1114,7 +1114,7 @@ export default function MasterPage() {
       setOpenClientProfileModal(false);
       setMessage(`Dados de "${merged.name}" atualizados.`);
     } catch (profileError) {
-      setError(getErrorMessage(profileError, 'Nao foi possivel atualizar os dados do cliente.'));
+      setError(getErrorMessage(profileError, 'Não foi possível atualizar os dados do cliente.'));
     } finally {
       setSavingClientProfile(false);
     }
@@ -1132,7 +1132,7 @@ export default function MasterPage() {
       const nextEmail = normalizeEmail(adminUserForm.email);
       const emailAlreadyUsed = users.some((user) => user.id !== editingAdminUser.id && normalizeEmail(user.email) === nextEmail);
       if (emailAlreadyUsed) {
-        setError('Este e-mail ja esta vinculado a outro usuario.');
+        setError('Este e-mail já está vinculado a outro usuário.');
         return;
       }
 
@@ -1149,7 +1149,7 @@ export default function MasterPage() {
       setAdminUserForm(initialAdminUserForm);
       setMessage(`Administrador "${updated.name}" atualizado.`);
     } catch (adminError) {
-      setError(getErrorMessage(adminError, 'Nao foi possivel atualizar o administrador.'));
+      setError(getErrorMessage(adminError, 'Não foi possível atualizar o administrador.'));
     } finally {
       setSavingAdminUser(false);
     }
@@ -1164,9 +1164,9 @@ export default function MasterPage() {
 
     try {
       await requestUserPasswordReset(editingAdminUser.id);
-      setMessage(`Envio de redefinicao solicitado para ${editingAdminUser.email}.`);
+      setMessage(`Envio de redefinição solicitado para ${editingAdminUser.email}.`);
     } catch (resetError) {
-      setError(getErrorMessage(resetError, 'Nao foi possivel reenviar a redefinicao de senha.'));
+      setError(getErrorMessage(resetError, 'Não foi possível reenviar a redefinição de senha.'));
     } finally {
       setSendingAdminPasswordReset(false);
     }
@@ -1176,7 +1176,7 @@ export default function MasterPage() {
     if (!editingAdminUser) return;
     const password = adminPasswordForm.temporaryPassword.trim();
     if (password.length < 6) {
-      setError('Informe uma senha provisoria com pelo menos 6 caracteres.');
+      setError('Informe uma senha provisória com pelo menos 6 caracteres.');
       return;
     }
 
@@ -1187,9 +1187,9 @@ export default function MasterPage() {
     try {
       await updateUserPassword(editingAdminUser.id, password);
       setAdminPasswordForm(initialAdminPasswordForm);
-      setMessage(`Senha provisoria definida para ${editingAdminUser.email}.`);
+      setMessage(`Senha provisória definida para ${editingAdminUser.email}.`);
     } catch (passwordError) {
-      setError(getErrorMessage(passwordError, 'Nao foi possivel definir a senha provisoria.'));
+      setError(getErrorMessage(passwordError, 'Não foi possível definir a senha provisória.'));
     } finally {
       setSavingAdminTemporaryPassword(false);
     }
@@ -1204,7 +1204,7 @@ export default function MasterPage() {
     const password = createAdminForm.password.trim();
 
     if (!name || !email || password.length < 6) {
-      setError('Informe nome, e-mail e uma senha provisoria com pelo menos 6 caracteres.');
+      setError('Informe nome, e-mail e uma senha provisória com pelo menos 6 caracteres.');
       return;
     }
 
@@ -1225,7 +1225,7 @@ export default function MasterPage() {
       setCreateAdminForm(initialCreateAdminForm);
       setMessage(`Administrador "${created.name}" criado e vinculado ao cliente.`);
     } catch (createError) {
-      setError(getErrorMessage(createError, 'Nao foi possivel criar ou vincular o administrador. Se este e-mail ja existir, o backend precisa retornar o usuario para edicao.'));
+      setError(getErrorMessage(createError, 'Não foi possível criar ou vincular o administrador. Se este e-mail já existir, verifique se o usuário já está cadastrado.'));
     } finally {
       setSavingCreateAdmin(false);
     }
@@ -1436,7 +1436,7 @@ export default function MasterPage() {
           <StatTile title="Câmeras" value={summary.cameraCount} description="Câmeras cadastradas nos clientes" icon={Camera} />
           <StatTile title="Portarias offline" value={summary.offlineOperations} description="Computadores sem sinal recente" icon={AlertTriangle} tone={summary.offlineOperations ? 'rose' : 'emerald'} />
           <StatTile title="Portarias online" value={Math.max(monitoredClients.length - summary.offlineOperations, 0)} description="Portarias com contato recente" icon={ShieldCheck} tone="emerald" />
-          <StatTile title="Licencas ativas" value={summary.activeLicenses} description="Clientes liberados ou em teste" icon={Puzzle} tone="cyan" />
+          <StatTile title="Licenças ativas" value={summary.activeLicenses} description="Clientes liberados ou em teste" icon={Puzzle} tone="cyan" />
           <StatTile title="Vencendo em 7 dias" value={expiring7} description="Clientes para ação imediata" icon={AlertTriangle} tone={expiring7 ? 'rose' : 'emerald'} />
           <StatTile title="Vencendo em 30 dias" value={expiring30} description="Clientes para ação preventiva" icon={RefreshCw} tone={expiring30 ? 'amber' : 'cyan'} />
         </div>
@@ -1713,7 +1713,7 @@ export default function MasterPage() {
                     <div>
                       <p className="font-medium text-white">Administrador nao localizado</p>
                       <p className="mt-2">
-                        A lista de usuarios nao retornou um administrador vinculado a este cliente. Voce pode criar um administrador agora. Se o e-mail ja existir, o backend deve retornar conflito para evitar duplicidade.
+                        A lista de usuários não retornou um administrador vinculado a este cliente. Você pode criar um administrador agora. Se o e-mail já existir, o sistema deve impedir duplicidade.
                       </p>
                     </div>
                     <form onSubmit={handleCreateAdminUser} className="grid gap-3 rounded-2xl border border-white/10 bg-slate-950/45 p-4 md:grid-cols-3">

@@ -19,7 +19,7 @@ export const CameraCard: React.FC<CameraCardProps> = ({ name, status, lastActivi
       <h3 className="mb-2 text-lg font-semibold text-white">{name}</h3>
       <div className="mb-2 flex items-center justify-between">
         <span className={`text-sm ${statusColors[normalizedStatus]}`}>Status: {normalizedStatus}</span>
-        <span className="text-sm text-gray-400">Ultima Atividade: {lastActivity ?? 'Sem dados'}</span>
+        <span className="text-sm text-gray-400">Última atividade: {lastActivity ?? 'Sem dados'}</span>
       </div>
     </div>
   );

@@ -53,7 +53,7 @@ export function EncomendaCard({
         <div className="flex items-center gap-2">
           <User className="h-4 w-4 text-slate-500" />
           <span>
-            <span className="text-white">Destinatario:</span> {destinatario}
+            <span className="text-white">Destinatário:</span> {destinatario}
           </span>
         </div>
 

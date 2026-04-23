@@ -34,7 +34,7 @@ const navigation = [
     icon: Building2,
   },
   {
-    label: 'Licencas',
+    label: 'Licenças',
     href: '/master?section=licenses',
     icon: KeyRound,
   },
@@ -44,7 +44,7 @@ const navigation = [
     icon: Users,
   },
   {
-    label: 'Modulos',
+    label: 'Módulos',
     href: '/master?section=modules',
     icon: Puzzle,
   },
@@ -120,7 +120,7 @@ export function MasterSidebar({ collapsed, onToggle }: MasterSidebarProps) {
 
         {!collapsed && (
           <div className="mt-3 rounded-xl bg-white/5 p-3 text-xs text-slate-400">
-            MASTER cria condomínios e provisiona administradores.
+            O Master cria clientes e administradores.
           </div>
         )}
 

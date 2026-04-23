@@ -16,12 +16,12 @@ export function ProxyAuthCookies() {
       document.cookie = `camera_proxy_token=; Path=/api/proxy; Max-Age=0; SameSite=Lax${cookieSecure}`;
     }
 
-    if (user?.selectedUnitId) {
+    if (user?.role === 'MORADOR' && user.selectedUnitId) {
       document.cookie = `camera_selected_unit_id=${encodeURIComponent(user.selectedUnitId)}; Path=/api/proxy; SameSite=Lax${cookieSecure}`;
     } else {
       document.cookie = `camera_selected_unit_id=; Path=/api/proxy; Max-Age=0; SameSite=Lax${cookieSecure}`;
     }
-  }, [cookieSecure, token, user?.selectedUnitId]);
+  }, [cookieSecure, token, user?.role, user?.selectedUnitId]);
 
   return null;
 }

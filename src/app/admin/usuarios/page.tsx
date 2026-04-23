@@ -279,14 +279,21 @@ function mapUserToRow(
     location: string;
   }
 ): NormalizedUser {
+  const role = mapApiRoleToUi((user?.role ?? 'OPERACIONAL') as ApiUserRole);
+  const normalizedScope = normalizeString(user?.scopeType ?? null);
+  const scopeLabel =
+    normalizedScope === 'assigned'
+      ? context.condominiumName || (role === 'MASTER' ? 'Equipe interna' : 'Vínculo definido')
+      : getScopeLabel(user?.scopeType ?? null);
+
   return {
     id: String(user?.id ?? ''),
     name: user?.name?.trim() || user?.personName?.trim() || 'Usuário sem nome',
     email: user?.email?.trim() || 'sem-email@nao-informado.local',
-    role: mapApiRoleToUi((user?.role ?? 'OPERACIONAL') as ApiUserRole),
+    role,
     status: 'ativo',
     permissions: Array.isArray(user?.permissions) ? user.permissions : [],
-    scopeType: getScopeLabel(user?.scopeType ?? null),
+    scopeType: scopeLabel,
     condominium: context.condominiumName,
     unit: context.unitLabel,
     location: context.location,
@@ -414,7 +421,7 @@ function UserForm({
             className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none"
             disabled={condominiumLocked}
           >
-            {!condominiumLocked ? <option value="">Sem vinculo especifico</option> : null}
+            {!condominiumLocked ? <option value="">Sem vínculo específico</option> : null}
             {condominiumOptions.map((option) => (
               <option key={option.id} value={option.id}>
                 {option.name}
@@ -928,7 +935,7 @@ export default function AdminUsuariosPage() {
             <div className="grid grid-cols-12 bg-white/5 px-4 py-3 text-xs uppercase tracking-[0.16em] text-slate-400">
               <div className="col-span-3">Usuário</div>
               <div className="col-span-2">Perfil</div>
-              <div className="col-span-2">Abrangencia</div>
+              <div className="col-span-2">Abrangência</div>
               <div className="col-span-3">Localização</div>
               <div className="col-span-1">Status</div>
               <div className="col-span-1 text-right">Ações</div>
@@ -1134,7 +1141,7 @@ export default function AdminUsuariosPage() {
             <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
               <div className="flex items-center gap-2 text-slate-400">
                 <MapPin className="h-4 w-4" />
-                <span className="text-xs uppercase tracking-[0.18em]">Abrangencia</span>
+                <span className="text-xs uppercase tracking-[0.18em]">Abrangência</span>
               </div>
               <p className="mt-2 text-base font-medium text-white">{selectedUser.scopeType}</p>
               <button

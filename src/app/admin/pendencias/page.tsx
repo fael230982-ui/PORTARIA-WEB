@@ -23,7 +23,7 @@ function normalize(value: unknown) {
 }
 
 function formatUnit(unit?: Unit | null) {
-  if (!unit) return 'Unidade nÃ£o identificada';
+  if (!unit) return 'Unidade não identificada';
   return [unit.condominium?.name, unit.structure?.label, unit.label].filter(Boolean).join(' / ') || unit.label;
 }
 
@@ -145,8 +145,8 @@ export default function AdminPendenciasPage() {
   const delayed24 = useMemo(() => pendingDeliveries.filter((delivery) => hoursSince(delivery.receivedAt) >= 24), [pendingDeliveries]);
   const delayed48 = useMemo(() => pendingDeliveries.filter((delivery) => hoursSince(delivery.receivedAt) >= 48), [pendingDeliveries]);
   const offlineCameras = useMemo(() => cameras.filter((camera) => camera.status === 'OFFLINE'), [cameras]);
-  const camerasWithoutPreview = useMemo(() => cameras.filter((camera) => !camera.snapshotUrl && !camera.imageStreamUrl), [cameras]);
-  const peopleWithoutFace = useMemo(() => people.filter((person) => !person.photoUrl?.trim()), [people]);
+  const camerasWithoutImage = useMemo(() => cameras.filter((camera) => !camera.snapshotUrl && !camera.imageStreamUrl), [cameras]);
+  const peopleWithoutPhoto = useMemo(() => people.filter((person) => !person.photoUrl?.trim()), [people]);
   const overduePeople = useMemo(
     () => people.filter((person) => person.status === 'ACTIVE' && person.endDate && new Date(person.endDate).getTime() < referenceNow),
     [people, referenceNow]
@@ -161,7 +161,7 @@ export default function AdminPendenciasPage() {
   );
 
   if (isChecking) {
-    return <div className="flex min-h-[60vh] items-center justify-center rounded-3xl border border-white/10 bg-white/5 text-white">Carregando pendÃªncias...</div>;
+    return <div className="flex min-h-[60vh] items-center justify-center rounded-3xl border border-white/10 bg-white/5 text-white">Carregando pendências...</div>;
   }
 
   if (!canAccess || !user) return null;
@@ -171,10 +171,10 @@ export default function AdminPendenciasPage() {
       <section className="rounded-3xl border border-white/10 bg-white/5 p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="text-xs uppercase tracking-[0.22em] text-slate-400">OperaÃ§Ã£o</p>
-            <h1 className="mt-2 text-2xl font-semibold">PendÃªncias da portaria</h1>
+            <p className="text-xs uppercase tracking-[0.22em] text-slate-400">Operação</p>
+            <h1 className="mt-2 text-2xl font-semibold">Pendências da portaria</h1>
             <p className="mt-2 max-w-2xl text-sm text-slate-400 text-justify">
-              VisÃ£o Ãºnica dos pontos que exigem atenÃ§Ã£o usando os dados jÃ¡ disponÃ­veis no front.
+              Visão única dos pontos que exigem atenção com base nos dados disponíveis.
             </p>
           </div>
           <button
@@ -195,17 +195,17 @@ export default function AdminPendenciasPage() {
       </section>
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <StatCard title="Encomendas 24h+" value={delayed24.length} description="Aguardam reforÃ§o de aviso" icon={Package} tone={delayed24.length ? 'warning' : 'success'} />
+        <StatCard title="Encomendas 24h+" value={delayed24.length} description="Aguardam reforço de aviso" icon={Package} tone={delayed24.length ? 'warning' : 'success'} />
         <StatCard title="Encomendas 48h+" value={delayed48.length} description="Prioridade alta para retirada" icon={Clock3} tone={delayed48.length ? 'danger' : 'success'} />
-        <StatCard title="CÃ¢meras offline" value={offlineCameras.length} description="Precisam verificaÃ§Ã£o" icon={CameraOff} tone={offlineCameras.length ? 'danger' : 'success'} />
-        <StatCard title="Pessoas sem face" value={peopleWithoutFace.length} description="Cadastro facial incompleto" icon={ScanFace} tone={peopleWithoutFace.length ? 'warning' : 'success'} />
+        <StatCard title="Câmeras offline" value={offlineCameras.length} description="Precisam de verificação" icon={CameraOff} tone={offlineCameras.length ? 'danger' : 'success'} />
+        <StatCard title="Pessoas sem foto" value={peopleWithoutPhoto.length} description="Cadastro de imagem incompleto" icon={ScanFace} tone={peopleWithoutPhoto.length ? 'warning' : 'success'} />
       </section>
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <StatCard title="PermanÃªncia vencida" value={overduePeople.length} description="Visitantes/prestadores ativos fora do prazo" icon={AlertTriangle} tone={overduePeople.length ? 'danger' : 'success'} />
+        <StatCard title="Permanência vencida" value={overduePeople.length} description="Visitantes/prestadores ativos fora do prazo" icon={AlertTriangle} tone={overduePeople.length ? 'danger' : 'success'} />
         <StatCard title="Unidades sem morador" value={unitsWithoutResidents.length} description="Cadastro residencial incompleto" icon={Home} tone={unitsWithoutResidents.length ? 'warning' : 'success'} />
-        <StatCard title="VeÃ­culos pendentes" value={invalidVehicles.length} description="Bloqueados ou sem unidade" icon={Car} tone={invalidVehicles.length ? 'warning' : 'success'} />
-        <StatCard title="CÃ¢meras sem preview" value={camerasWithoutPreview.length} description="Sem snapshot ou prÃ©via de imagem" icon={CameraOff} tone={camerasWithoutPreview.length ? 'warning' : 'success'} />
+        <StatCard title="Veículos pendentes" value={invalidVehicles.length} description="Bloqueados ou sem unidade" icon={Car} tone={invalidVehicles.length ? 'warning' : 'success'} />
+        <StatCard title="Câmeras sem imagem" value={camerasWithoutImage.length} description="Sem imagem de visualização" icon={CameraOff} tone={camerasWithoutImage.length ? 'warning' : 'success'} />
       </section>
 
       <section className="grid gap-4 xl:grid-cols-2">
@@ -221,34 +221,34 @@ export default function AdminPendenciasPage() {
           }))}
         />
         <PendingList
-          title="CÃ¢meras com atenÃ§Ã£o"
-          empty="Nenhuma pendÃªncia de cÃ¢mera encontrada."
-          items={[...offlineCameras, ...camerasWithoutPreview]
+          title="Câmeras com atenção"
+          empty="Nenhuma pendência de câmera encontrada."
+          items={[...offlineCameras, ...camerasWithoutImage]
             .filter((camera, index, list) => list.findIndex((item) => item.id === camera.id) === index)
             .map((camera) => ({
               id: camera.id,
-              title: camera.name || 'CÃ¢mera',
-              detail: [camera.status, camera.location, camera.snapshotUrl || camera.imageStreamUrl ? null : 'sem preview'].filter(Boolean).join(' | '),
+              title: camera.name || 'Câmera',
+              detail: [camera.status, camera.location, camera.snapshotUrl || camera.imageStreamUrl ? null : 'sem imagem'].filter(Boolean).join(' | '),
               href: '/admin/cameras',
               tone: camera.status === 'OFFLINE' ? 'danger' : 'warning',
             }))}
         />
         <PendingList
           title="Pessoas para revisar"
-          empty="Nenhuma pessoa com pendencia prioritaria."
-          items={[...overduePeople, ...peopleWithoutFace]
+          empty="Nenhuma pessoa com pendência prioritária."
+          items={[...overduePeople, ...peopleWithoutPhoto]
             .filter((person, index, list) => list.findIndex((item) => item.id === person.id) === index)
             .map((person) => ({
               id: person.id,
               title: person.name,
-              detail: [person.endDate && new Date(person.endDate).getTime() < referenceNow ? 'permanÃªncia vencida' : null, person.photoUrl ? null : 'sem foto facial'].filter(Boolean).join(' | '),
+              detail: [person.endDate && new Date(person.endDate).getTime() < referenceNow ? 'permanência vencida' : null, person.photoUrl ? null : 'sem foto'].filter(Boolean).join(' | '),
               href: '/admin/moradores',
               tone: person.endDate && new Date(person.endDate).getTime() < referenceNow ? 'danger' : 'warning',
             }))}
         />
         <PendingList
-          title="Unidades e veÃ­culos"
-          empty="Nenhuma unidade ou veÃ­culo pendente."
+          title="Unidades e veículos"
+          empty="Nenhuma unidade ou veículo pendente."
           items={[
             ...unitsWithoutResidents.slice(0, 8).map((unit) => ({
               id: `unit-${unit.id}`,

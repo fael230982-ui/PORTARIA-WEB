@@ -44,13 +44,13 @@ const adminNavigation: NavigationItem[] = [
   { label: 'Dashboard', href: '/admin', icon: LayoutDashboard },
   { label: 'Unidades', href: '/admin/unidades', icon: Building2, moduleKey: 'units' },
   { label: 'Moradores', href: '/admin/moradores', icon: Users, moduleKey: 'people' },
-  { label: 'Usuarios', href: '/admin/usuarios', icon: Shield, moduleKey: 'users' },
+  { label: 'Usuários', href: '/admin/usuarios', icon: Shield, moduleKey: 'users' },
   { label: 'Encomendas', href: '/admin/encomendas', icon: Package, moduleKey: 'deliveries' },
-  { label: 'Pendencias', href: '/admin/pendencias', icon: AlertTriangle, moduleKey: 'alerts' },
-  { label: 'Veiculos', href: '/admin/veiculos', icon: Car, moduleKey: 'vehicles' },
-  { label: 'Relatorios', href: '/admin/relatorios', icon: FileText, moduleKey: 'reports' },
+  { label: 'Pendências', href: '/admin/pendencias', icon: AlertTriangle, moduleKey: 'alerts' },
+  { label: 'Veículos', href: '/admin/veiculos', icon: Car, moduleKey: 'vehicles' },
+  { label: 'Relatórios', href: '/admin/relatorios', icon: FileText, moduleKey: 'reports' },
   { label: 'Alertas', href: '/admin/alertas', icon: Bell, moduleKey: 'alerts' },
-  { label: 'Cameras', href: '/admin/cameras', icon: Cctv, moduleKey: 'cameras' },
+  { label: 'Câmeras', href: '/admin/cameras', icon: Cctv, moduleKey: 'cameras' },
   { label: 'Dispositivos', href: '/admin/dispositivos', icon: Cpu, moduleKey: 'devices' },
   { label: 'Grupos de acesso', href: '/admin/grupos-acesso', icon: Shield, moduleKey: 'access-groups' },
 ];
@@ -59,10 +59,10 @@ const residentNavigation: NavigationItem[] = [
   { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { label: 'Perfil', href: '/dashboard/profile', icon: UserCircle },
   { label: 'Pessoas', href: '/dashboard/people', icon: Users, moduleKey: 'people' },
-  { label: 'Veiculos', href: '/dashboard/vehicles', icon: Car, moduleKey: 'vehicles' },
+  { label: 'Veículos', href: '/dashboard/vehicles', icon: Car, moduleKey: 'vehicles' },
   { label: 'Alertas', href: '/dashboard/alerts', icon: Bell, moduleKey: 'alerts' },
   { label: 'Encomendas', href: '/dashboard/encomendas', icon: Package, moduleKey: 'deliveries' },
-  { label: 'Cameras', href: '/dashboard/cameras', icon: Cctv, moduleKey: 'cameras' },
+  { label: 'Câmeras', href: '/dashboard/cameras', icon: Cctv, moduleKey: 'cameras' },
 ];
 
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {
@@ -90,7 +90,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         <BrandMark
           collapsed={collapsed}
           title={user?.role === 'MORADOR' ? 'Portal do Morador' : 'Painel Admin'}
-          subtitle={user?.role === 'MORADOR' ? 'Acesso pessoal da unidade' : 'Gestao completa do condominio'}
+          subtitle={user?.role === 'MORADOR' ? 'Acesso pessoal da unidade' : 'Gestão completa do condomínio'}
           imageClassName={collapsed ? 'h-10 w-10 rounded-xl object-contain' : 'h-11 w-auto object-contain'}
         />
 
@@ -141,7 +141,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
         {!collapsed && (
           <div className="mt-3 rounded-xl bg-white/5 p-3 text-xs text-slate-400">
-            Use o menu lateral para acessar as areas da sua conta.
+            Use o menu lateral para acessar as áreas da sua conta.
           </div>
         )}
 

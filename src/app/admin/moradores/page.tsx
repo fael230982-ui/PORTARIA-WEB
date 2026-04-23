@@ -46,6 +46,7 @@ import { getPersonStatusBadgeClass } from '@/features/people/status-badges';
 import { api } from '@/lib/axios';
 import { getPersonById, uploadPersonPhoto, syncPersonFace } from '@/services/people.service';
 import { camerasService } from '@/services/cameras.service';
+import { ensureResidenceUnit } from '@/services/residence.service';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -57,6 +58,21 @@ import type { Report } from '@/types/report';
 type Filters = {
   search: string;
   status: string;
+  category: string;
+};
+
+type PersonImportRow = {
+  line: number;
+  nome: string;
+  email: string;
+  telefone: string;
+  documento: string;
+  tipo: string;
+  unitLabel: string;
+  structureLabel: string;
+  unit?: Unit | null;
+  existing?: MoradorRow | null;
+  selected: boolean;
 };
 
 type AccessAction = 'ENTRY' | 'EXIT';
@@ -80,6 +96,7 @@ type MoradoresSnapshotCache = {
 };
 
 const accessReportMarker = 'PORTARIA_ACCESS';
+const peopleCsvTemplate = 'tipo;nome;email;telefone;documento;estrutura;unidade\nmorador;Maria Silva;maria@email.com;11999999999;12345678909;A;101\nvisitante;João Souza;;;98765432100;A;101\nprestador;Empresa Manutenção;contato@empresa.com;1133334444;;A;102\nlocatario;Ana Locatária;ana@email.com;11888888888;11122233344;B;201\n';
 
 function extractCloudflareRayId(value: string) {
   const match = value.match(/Cloudflare Ray ID:\s*<strong[^>]*>([^<]+)<\/strong>/i);
@@ -192,6 +209,141 @@ function getFaceListSyncLabel(value?: string | null) {
   if (normalized === 'PROCESSING') return 'Processando';
   if (normalized === 'ERROR' || normalized === 'FAILED') return 'Com erro';
   return normalized;
+}
+
+function getFaceStatusLabel(value?: string | null) {
+  const normalized = String(value ?? '').trim().toUpperCase();
+  if (!normalized || normalized === 'NO_PHOTO') return '';
+  if (normalized === 'PHOTO_ONLY') return 'Foto cadastrada';
+  if (normalized === 'FACE_PENDING_SYNC') return 'Reconhecimento facial pendente';
+  if (normalized === 'FACE_SYNCED') return 'Reconhecimento facial ativo';
+  if (normalized === 'FACE_ERROR') return 'Falha no reconhecimento facial';
+  return '';
+}
+
+function getCategoryLabel(value?: string | null) {
+  const normalized = normalizeMoradorCategory(value);
+  if (normalized === 'visitante') return 'Visitante';
+  if (normalized === 'prestador') return 'Prestador';
+  if (normalized === 'locatario') return 'Locatário';
+  if (normalized === 'funcionario') return 'Funcionário';
+  return 'Morador';
+}
+
+function isTechnicalIdentifier(value?: string | null) {
+  const normalized = String(value ?? '').trim();
+  if (!normalized) return false;
+  if (/^[0-9a-f]{8,}$/i.test(normalized)) return true;
+  if (/^[0-9a-f]{8}-[0-9a-f-]{13,}$/i.test(normalized)) return true;
+  return false;
+}
+
+function getFriendlyLocation(row: MoradorRow) {
+  const candidates = [
+    row.localizacao,
+    [row.condominio, row.estruturaLabel, row.unidade].filter(Boolean).join(' / '),
+    [row.bloco, row.unidade].filter(Boolean).join(' / '),
+    row.unidade,
+  ];
+
+  const friendly = candidates.find((candidate) => {
+    const value = String(candidate ?? '').trim();
+    return value && !isTechnicalIdentifier(value);
+  });
+
+  return friendly || 'Unidade não identificada';
+}
+
+function normalizeCsvHeader(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+function detectCsvDelimiter(line: string) {
+  const semicolonCount = (line.match(/;/g) ?? []).length;
+  const commaCount = (line.match(/,/g) ?? []).length;
+  return semicolonCount > commaCount ? ';' : ',';
+}
+
+function parseCsvLine(line: string, delimiter = ',') {
+  const values: string[] = [];
+  let current = '';
+  let quoted = false;
+
+  for (const char of line) {
+    if (char === '"') {
+      quoted = !quoted;
+      continue;
+    }
+
+    if (char === delimiter && !quoted) {
+      values.push(current.trim());
+      current = '';
+      continue;
+    }
+
+    current += char;
+  }
+
+  values.push(current.trim());
+  return values;
+}
+
+function normalizeImportText(value?: string | null) {
+  return String(value ?? '').trim().toLowerCase();
+}
+
+function parsePeopleCsv(content: string, units: Unit[], existingPeople: MoradorRow[]): PersonImportRow[] {
+  const lines = content
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (lines.length < 2) return [];
+
+  const delimiter = detectCsvDelimiter(lines[0]);
+  const headers = parseCsvLine(lines[0], delimiter).map(normalizeCsvHeader);
+
+  return lines.slice(1).map((line, index) => {
+    const values = parseCsvLine(line, delimiter);
+    const row = Object.fromEntries(headers.map((header, valueIndex) => [header, values[valueIndex] ?? '']));
+    const tipo = normalizeMoradorCategory(row.tipo || row.categoria || 'morador');
+    const nome = String(row.nome || row.name || '').trim();
+    const email = String(row.email || row.e_mail || '').trim();
+    const telefone = String(row.telefone || row.celular || row.phone || '').trim();
+    const documento = String(row.documento || row.cpf || row.rg || '').trim();
+    const structureLabel = String(row.estrutura || row.bloco || row.rua || row.quadra || '').trim();
+    const unitLabel = String(row.unidade || row.casa || row.apartamento || '').trim();
+    const unit =
+      units.find((item) =>
+        normalizeImportText(item.label) === normalizeImportText(unitLabel) &&
+        (!structureLabel || normalizeImportText(item.structure?.label) === normalizeImportText(structureLabel))
+      ) ?? null;
+    const existing =
+      existingPeople.find((person) =>
+        (documento && normalizeImportText(person.documento) === normalizeImportText(documento)) ||
+        (email && normalizeImportText(person.email) === normalizeImportText(email))
+      ) ?? null;
+
+    return {
+      line: index + 2,
+      nome,
+      email,
+      telefone,
+      documento,
+      tipo,
+      unitLabel,
+      structureLabel,
+      unit,
+      existing,
+      selected: Boolean(nome && !existing && (unit || (structureLabel && unitLabel))),
+    };
+  }).filter((row) => row.nome);
 }
 
 function getMoradoresSnapshotKey(userId?: string | null) {
@@ -391,6 +543,7 @@ export default function MoradoresPage() {
   const [filters, setFilters] = useState<Filters>({
     search: '',
     status: 'all',
+    category: 'all',
   });
   const [openCreate, setOpenCreate] = useState(false);
   const [openEdit, setOpenEdit] = useState(false);
@@ -402,6 +555,8 @@ export default function MoradoresPage() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [pageNotice, setPageNotice] = useState<{ tone: 'success' | 'warning'; message: string } | null>(null);
   const [brokenMoradorImageUrls, setBrokenMoradorImageUrls] = useState<Record<string, boolean>>({});
+  const [peopleImportRows, setPeopleImportRows] = useState<PersonImportRow[]>([]);
+  const [peopleImportMessage, setPeopleImportMessage] = useState<string | null>(null);
   const [snapshotCache, setSnapshotCache] = useState<MoradoresSnapshotCache>(() => readMoradoresSnapshot(null));
   const snapshotSignatureRef = useRef(
     getMoradoresSnapshotSignature({ moradores: [], appAccessEntries: [], accessSummaryEntries: [], cachedAt: null })
@@ -434,10 +589,7 @@ export default function MoradoresPage() {
     () =>
       peopleData
         ? normalizePeople(
-            {
-              ...peopleData,
-              data: peopleData.data.filter((person) => person.category === 'RESIDENT'),
-            },
+            peopleData,
             {
               condominiums,
               streets,
@@ -520,10 +672,12 @@ export default function MoradoresPage() {
   const filteredMoradores = useMemo(() => {
     return moradores.filter((row) => {
       const status = normalizeMoradorStatus(row.status);
+      const category = normalizeMoradorCategory(row.categoria);
       const statusOk = filters.status === 'all' || status === filters.status;
+      const categoryOk = filters.category === 'all' || category === filters.category;
       const searchOk = matchesMoradorText(row, filters.search);
 
-      return statusOk && searchOk;
+      return statusOk && categoryOk && searchOk;
     });
   }, [moradores, filters]);
 
@@ -555,6 +709,106 @@ export default function MoradoresPage() {
 
   const handleRefresh = async () => {
     await Promise.all([refetchPeople(), refetchResidenceCatalog()]);
+  };
+
+  const downloadPeopleTemplate = () => {
+    const blob = new Blob([peopleCsvTemplate], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'modelo-importacao-pessoas.csv';
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handlePeopleCsvSelected = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    setSubmitError(null);
+    setPeopleImportMessage(null);
+
+    if (!file) return;
+
+    const rows = parsePeopleCsv(await file.text(), availableUnits, moradores);
+    setPeopleImportRows(rows);
+
+    if (!rows.length) {
+      setSubmitError('O arquivo não possui cadastros válidos. Baixe o modelo e preencha pelo menos nome, tipo e unidade.');
+      return;
+    }
+
+    const existingCount = rows.filter((row) => row.existing).length;
+    const missingUnitCount = rows.filter((row) => !row.unit).length;
+    setPeopleImportMessage(
+      `${rows.length} cadastro(s) encontrado(s). ${existingCount} já existem e ${missingUnitCount} precisam de unidade válida antes da importação.`
+    );
+  };
+
+  const togglePeopleImportRow = (line: number) => {
+    setPeopleImportRows((current) =>
+      current.map((row) => row.line === line ? { ...row, selected: !row.selected } : row)
+    );
+  };
+
+  const applyPeopleImport = async () => {
+    const selectedRows = peopleImportRows.filter((row) => row.selected);
+    if (!selectedRows.length) {
+      setSubmitError('Selecione ao menos um cadastro válido para importar.');
+      return;
+    }
+
+    if (!currentCondominium) {
+      setSubmitError('Admin sem condomínio vinculado para importar cadastros.');
+      return;
+    }
+
+    setSaving(true);
+    setSubmitError(null);
+    setPageNotice(null);
+
+    try {
+      for (const row of selectedRows) {
+        let targetUnit = row.unit ?? null;
+
+        if (!targetUnit) {
+          if (!row.structureLabel || !row.unitLabel) {
+            throw new Error(`Linha ${row.line}: informe estrutura e unidade para criar o vínculo.`);
+          }
+
+          const createdResidence = await ensureResidenceUnit({
+            condominiumId: currentCondominium.id,
+            condominiumName: currentCondominium.name,
+            structureType: 'STREET',
+            structureLabel: row.structureLabel,
+            unitLabel: row.unitLabel,
+          });
+          targetUnit = createdResidence.unit;
+        }
+
+        await api.post<Person>('/people', {
+          ...buildPersonUpsertPayload({
+            nome: row.nome,
+            email: row.email,
+            telefone: row.telefone,
+            documento: row.documento,
+            documentType: row.documento.replace(/\D+/g, '').length === 11 ? 'CPF' : null,
+            tipo: row.tipo,
+            photoUrl: null,
+            source: 'PORTARIA_WEB_CSV',
+            unitId: targetUnit.id,
+          }),
+        });
+      }
+
+      setPeopleImportRows([]);
+      setPeopleImportMessage(null);
+      await handleRefresh();
+      setPageNotice({ tone: 'success', message: `${selectedRows.length} cadastro(s) importado(s) com sucesso.` });
+    } catch (error) {
+      setSubmitError(getErrorMessage(error, 'Não foi possível importar os cadastros selecionados.'));
+    } finally {
+      setSaving(false);
+    }
   };
 
   useEffect(() => {
@@ -932,7 +1186,7 @@ export default function MoradoresPage() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-xs uppercase tracking-[0.22em] text-slate-400">Administração</p>
-            <h1 className="mt-2 text-2xl font-semibold">Moradores</h1>
+            <h1 className="mt-2 text-2xl font-semibold">Pessoas</h1>
             <p className="mt-2 max-w-2xl text-sm text-slate-400">
               Cadastro, edição e gerenciamento de moradores com integração direta à API real.
             </p>
@@ -973,16 +1227,16 @@ export default function MoradoresPage() {
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         <StatCard
-          title="Total de moradores"
+          title="Pessoas cadastradas"
           value={peopleLoading ? '...' : String(stats.total)}
           icon={Home}
-          hint="Registros carregados da API"
+          hint="Moradores, visitantes e prestadores"
         />
         <StatCard
           title="Ativos"
           value={peopleLoading ? '...' : String(stats.ativos)}
           icon={UserCheck}
-          hint="Moradores liberados"
+          hint="Pessoas liberadas"
         />
         <StatCard
           title="Inativos"
@@ -1000,18 +1254,18 @@ export default function MoradoresPage() {
           title="Com app"
           value={peopleLoading ? '...' : String(stats.appAccess)}
           icon={KeyRound}
-          hint="Moradores com login"
+          hint="Usuários com login"
         />
       </section>
 
       <section className="rounded-3xl border border-white/10 bg-white/5 p-5 backdrop-blur">
-        <div className="grid gap-3 lg:grid-cols-[1.5fr_0.8fr]">
+        <div className="grid gap-3 lg:grid-cols-[1.5fr_0.8fr_0.8fr]">
           <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3">
             <Search className="h-4 w-4 text-slate-400" />
             <Input
               value={filters.search}
               onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))}
-              placeholder="Buscar por nome, bloco, telefone, documento..."
+              placeholder="Buscar por nome, unidade, telefone ou documento..."
               className="border-0 bg-transparent p-0 text-white shadow-none placeholder:text-slate-500 focus-visible:ring-0"
             />
           </label>
@@ -1029,7 +1283,101 @@ export default function MoradoresPage() {
               <option value="bloqueado">Bloqueado</option>
             </select>
           </label>
+
+          <label className="rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3">
+            <select
+              value={filters.category}
+              onChange={(e) => setFilters((prev) => ({ ...prev, category: e.target.value }))}
+              className="w-full bg-transparent text-sm outline-none"
+            >
+              <option value="all">Todos os tipos</option>
+              <option value="morador">Moradores</option>
+              <option value="visitante">Visitantes</option>
+              <option value="locatario">Locatários</option>
+              <option value="prestador">Prestadores</option>
+              <option value="funcionario">Funcionários</option>
+            </select>
+          </label>
         </div>
+      </section>
+
+      <section className="rounded-3xl border border-white/10 bg-white/5 p-5 backdrop-blur">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h2 className="text-base font-semibold text-white">Importar pessoas por CSV</h2>
+            <p className="mt-1 text-sm text-slate-400">
+              O arquivo pode trazer moradores, visitantes, locatários e prestadores. Se a unidade não existir, ela será criada antes do vínculo.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="outline" onClick={downloadPeopleTemplate} className="border-white/10 bg-white/5 text-white hover:bg-white/10">
+              Baixar modelo
+            </Button>
+            <label className="cursor-pointer rounded-xl bg-white px-4 py-2.5 text-sm font-medium text-slate-950 transition hover:bg-slate-200">
+              Selecionar CSV
+              <input type="file" accept=".csv,text/csv" onChange={handlePeopleCsvSelected} className="hidden" />
+            </label>
+          </div>
+        </div>
+
+        {peopleImportMessage ? (
+          <p className="mt-4 rounded-2xl border border-cyan-500/30 bg-cyan-500/10 px-4 py-3 text-sm text-cyan-100">
+            {peopleImportMessage}
+          </p>
+        ) : null}
+
+        {peopleImportRows.length ? (
+          <div className="mt-4 overflow-hidden rounded-2xl border border-white/10">
+            <div className="grid grid-cols-12 bg-white/5 px-3 py-2 text-xs uppercase tracking-[0.14em] text-slate-400">
+              <div className="col-span-1 text-center">Usar</div>
+              <div className="col-span-3">Nome</div>
+              <div className="col-span-2">Tipo</div>
+              <div className="col-span-3">Unidade</div>
+              <div className="col-span-2">Situação</div>
+              <div className="col-span-1">Linha</div>
+            </div>
+            <div className="divide-y divide-white/10">
+              {peopleImportRows.map((row) => (
+                <label key={row.line} className="grid grid-cols-12 items-center px-3 py-3 text-sm">
+                  <div className="col-span-1 text-center">
+                    <input
+                      type="checkbox"
+                      checked={row.selected}
+                      onChange={() => togglePeopleImportRow(row.line)}
+                      disabled={Boolean(row.existing)}
+                      className="h-4 w-4 accent-cyan-400 disabled:opacity-40"
+                    />
+                  </div>
+                  <div className="col-span-3 font-medium text-white">{row.nome}</div>
+                  <div className="col-span-2 text-slate-300">{getCategoryLabel(row.tipo)}</div>
+                  <div className="col-span-3 text-slate-300">
+                    {[row.structureLabel, row.unitLabel].filter(Boolean).join(' / ') || 'Não informada'}
+                  </div>
+                  <div className="col-span-2 text-slate-300">
+                    {row.existing ? 'Já cadastrado' : row.unit ? 'Vincular unidade existente' : 'Criar unidade e vincular'}
+                  </div>
+                  <div className="col-span-1 text-slate-500">{row.line}</div>
+                </label>
+              ))}
+            </div>
+            <div className="flex justify-end gap-2 border-t border-white/10 p-3">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setPeopleImportRows([]);
+                  setPeopleImportMessage(null);
+                }}
+                className="border-white/10 bg-white/5 text-white hover:bg-white/10"
+              >
+                Cancelar importação
+              </Button>
+              <Button type="button" onClick={applyPeopleImport} disabled={saving} className="bg-white text-slate-950 hover:bg-slate-200">
+                {saving ? 'Importando...' : 'Confirmar importação'}
+              </Button>
+            </div>
+          </div>
+        ) : null}
       </section>
 
       {peopleError ? (
@@ -1053,7 +1401,7 @@ export default function MoradoresPage() {
       <section className="overflow-hidden rounded-3xl border border-white/10 bg-white/5 backdrop-blur">
         <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
           <div>
-            <h2 className="text-lg font-semibold">Lista de moradores</h2>
+            <h2 className="text-lg font-semibold">Pessoas cadastradas</h2>
             <p className="text-sm text-slate-400">
               {filteredMoradores.length} registro(s) encontrado(s)
             </p>
@@ -1065,7 +1413,7 @@ export default function MoradoresPage() {
           <div className="px-5 py-10">
             <div className="rounded-2xl border border-dashed border-white/10 bg-slate-950/50 p-8 text-center">
               <CircleOff className="mx-auto h-10 w-10 text-slate-400" />
-              <h3 className="mt-3 text-base font-medium">Nenhum morador encontrado</h3>
+              <h3 className="mt-3 text-base font-medium">Nenhum cadastro encontrado</h3>
               <p className="mt-1 text-sm text-slate-400">
                 Ajuste os filtros ou clique em Novo para cadastrar.
               </p>
@@ -1080,16 +1428,34 @@ export default function MoradoresPage() {
               return (
               <div
                 key={morador.id}
-                className="grid gap-4 px-5 py-4 lg:grid-cols-[1.2fr_0.7fr_0.7fr_0.6fr_auto] lg:items-center"
+                className="grid gap-4 px-5 py-4 lg:grid-cols-[auto_1.2fr_0.7fr_0.7fr_0.6fr_auto] lg:items-center"
               >
+                <button
+                  type="button"
+                  onClick={() => openViewMorador(morador)}
+                  className="h-14 w-14 overflow-hidden rounded-2xl border border-white/10 bg-white/5 text-xs text-slate-400"
+                  aria-label={`Ver detalhes de ${morador.nome}`}
+                >
+                  {morador.avatarUrl && !brokenMoradorImageUrls[morador.avatarUrl] ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={morador.avatarUrl}
+                      alt={morador.nome}
+                      className="h-full w-full object-cover"
+                      onError={() => markMoradorImageAsUnavailable(morador.avatarUrl)}
+                    />
+                  ) : (
+                    <span className="flex h-full w-full items-center justify-center">Sem foto</span>
+                  )}
+                </button>
                 <div>
                   <p className="font-medium text-white">{morador.nome}</p>
                   <p className="text-sm text-slate-400">
                     {safeText(morador.localizacao, [safeText(morador.condominio), safeText(morador.estruturaLabel), safeText(morador.unidade)].filter(Boolean).join(' / ') || 'Localização não informada')}
                   </p>
-                  {(morador.faceStatus || morador.faceListSyncStatus) ? (
+                  {(getFaceStatusLabel(morador.faceStatus) || morador.faceListSyncStatus) ? (
                     <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                      {morador.faceStatus ? (
+                      {getFaceStatusLabel(morador.faceStatus) ? (
                         <span className={`rounded-full border px-2 py-1 ${
                           morador.faceStatus === 'FACE_SYNCED'
                             ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-100'
@@ -1097,7 +1463,7 @@ export default function MoradoresPage() {
                               ? 'border-red-500/30 bg-red-500/10 text-red-100'
                               : 'border-amber-500/30 bg-amber-500/10 text-amber-100'
                         }`}>
-                          Face: {morador.faceStatus}
+                          {getFaceStatusLabel(morador.faceStatus)}
                         </span>
                       ) : null}
                       {morador.faceListSyncStatus ? (
@@ -1114,8 +1480,8 @@ export default function MoradoresPage() {
                     </div>
                   ) : null}
                   <div className="mt-2 space-y-1 text-xs text-slate-500">
-                    <p>Ultima entrada: {formatAccessDateTime(accessSummary?.entryAt)}</p>
-                    <p>Ultima saida: {formatAccessDateTime(accessSummary?.exitAt)}</p>
+                    <p>Última entrada: {formatAccessDateTime(accessSummary?.entryAt)}</p>
+                    <p>Última saída: {formatAccessDateTime(accessSummary?.exitAt)}</p>
                   </div>
                 </div>
 
@@ -1229,8 +1595,8 @@ export default function MoradoresPage() {
 
       <CrudModal
         open={openView}
-        title="Detalhes do morador"
-        description="Resumo do cadastro retornado pela API."
+        title="Detalhes do cadastro"
+        description="Informações completas da pessoa selecionada."
         onClose={closeModals}
         maxWidth="lg"
       >
@@ -1329,7 +1695,7 @@ export default function MoradoresPage() {
                   <img
                     src={selectedMorador.avatarUrl}
                     alt={selectedMorador.nome}
-                    className="h-24 w-24 rounded-2xl object-cover"
+                    className="h-48 w-48 rounded-2xl object-cover"
                     onError={() => markMoradorImageAsUnavailable(selectedMorador.avatarUrl)}
                   />
                 ) : (
@@ -1344,7 +1710,7 @@ export default function MoradoresPage() {
             </div>
             <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
               <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Categoria</p>
-              <p className="mt-2 text-base font-medium text-white">{safeText(selectedMorador.categoria, 'Morador')}</p>
+              <p className="mt-2 text-base font-medium text-white">{getCategoryLabel(selectedMorador.categoria)}</p>
             </div>
             <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
               <div className="flex items-center gap-2 text-slate-400">
@@ -1365,7 +1731,7 @@ export default function MoradoresPage() {
                 <MapPin className="h-4 w-4" />
                 <span className="text-xs uppercase tracking-[0.18em]">Localização</span>
               </div>
-              <p className="mt-2 text-base font-medium text-white">{safeText(selectedMorador.localizacao, `${safeText(selectedMorador.bloco, '-')}/${safeText(selectedMorador.unidade, '-')}`)}</p>
+              <p className="mt-2 text-base font-medium text-white">{getFriendlyLocation(selectedMorador)}</p>
             </div>
              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                <div className="flex items-center gap-2 text-slate-400">
@@ -1377,7 +1743,7 @@ export default function MoradoresPage() {
              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                <div className="flex items-center gap-2 text-slate-400">
                  <Clock3 className="h-4 w-4" />
-                 <span className="text-xs uppercase tracking-[0.18em]">Ultima entrada</span>
+                 <span className="text-xs uppercase tracking-[0.18em]">Última entrada</span>
                </div>
                <p className="mt-2 text-base font-medium text-white">
                  {formatAccessDateTime(selectedMoradorAccessSummary?.entryAt)}
@@ -1386,7 +1752,7 @@ export default function MoradoresPage() {
              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                <div className="flex items-center gap-2 text-slate-400">
                  <Clock3 className="h-4 w-4" />
-                 <span className="text-xs uppercase tracking-[0.18em]">Ultima saida</span>
+                 <span className="text-xs uppercase tracking-[0.18em]">Última saída</span>
                </div>
                <p className="mt-2 text-base font-medium text-white">
                  {formatAccessDateTime(selectedMoradorAccessSummary?.exitAt)}

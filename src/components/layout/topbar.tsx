@@ -15,10 +15,10 @@ const residentPageLabels: Record<string, string> = {
   '/dashboard': 'Dashboard',
   '/dashboard/profile': 'Perfil',
   '/dashboard/people': 'Pessoas',
-  '/dashboard/vehicles': 'Veiculos',
+  '/dashboard/vehicles': 'Veículos',
   '/dashboard/alerts': 'Alertas',
   '/dashboard/encomendas': 'Encomendas',
-  '/dashboard/cameras': 'Cameras',
+  '/dashboard/cameras': 'Câmeras',
 };
 
 export function Topbar() {
@@ -57,7 +57,7 @@ export function Topbar() {
             <div className="hidden rounded-2xl border border-white/10 bg-white/5 px-4 py-2.5 text-right md:block">
               <p className="text-xs text-slate-400">Morador</p>
               <p className="text-sm font-medium text-white">{residentName}</p>
-              <p className="text-xs text-slate-500">{user?.email || 'E-mail nao informado'}</p>
+              <p className="text-xs text-slate-500">{user?.email || 'E-mail não informado'}</p>
             </div>
             <Link
               href="/dashboard/profile"

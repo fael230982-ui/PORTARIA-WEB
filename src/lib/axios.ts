@@ -23,7 +23,7 @@ api.interceptors.request.use(
       config.headers.Authorization = `Bearer ${token}`;
     }
 
-    if (user?.selectedUnitId) {
+    if (user?.role === 'MORADOR' && user.selectedUnitId) {
       config.headers['X-Selected-Unit-Id'] = user.selectedUnitId;
     }
 

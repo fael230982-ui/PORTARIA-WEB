@@ -29,6 +29,12 @@ type UnitFormState = {
   unitLabel: string;
 };
 
+type UnitImportRow = UnitFormState & {
+  line: number;
+  existingUnit?: Unit | null;
+  selected: boolean;
+};
+
 type UnidadesSnapshotCache = {
   condominiums: Unit['condominium'][];
   units: Unit[];
@@ -55,8 +61,84 @@ const personCategoryGroups: Array<{ key: PersonCategory | 'OTHER'; title: string
   { key: 'OTHER', title: 'Outras categorias' },
 ];
 
+const unitCsvTemplate = 'tipo_estrutura;estrutura;unidade\nSTREET;RUA 1;101\nBLOCK;A;202\nQUAD;QUADRA 2;LOTE 15\n';
+
 function normalizeUnitRef(value?: string | null) {
   return String(value ?? '').trim().toLowerCase();
+}
+
+function normalizeCsvHeader(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+function detectCsvDelimiter(line: string) {
+  const semicolonCount = (line.match(/;/g) ?? []).length;
+  const commaCount = (line.match(/,/g) ?? []).length;
+  return semicolonCount > commaCount ? ';' : ',';
+}
+
+function parseCsvLine(line: string, delimiter = ',') {
+  const values: string[] = [];
+  let current = '';
+  let quoted = false;
+
+  for (const char of line) {
+    if (char === '"') {
+      quoted = !quoted;
+      continue;
+    }
+
+    if (char === delimiter && !quoted) {
+      values.push(current.trim());
+      current = '';
+      continue;
+    }
+
+    current += char;
+  }
+
+  values.push(current.trim());
+  return values;
+}
+
+function parseUnitCsv(content: string, existingUnits: Unit[]): UnitImportRow[] {
+  const lines = content
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (lines.length < 2) return [];
+
+  const delimiter = detectCsvDelimiter(lines[0]);
+  const headers = parseCsvLine(lines[0], delimiter).map(normalizeCsvHeader);
+
+  return lines.slice(1).map((line, index) => {
+    const values = parseCsvLine(line, delimiter);
+    const row = Object.fromEntries(headers.map((header, valueIndex) => [header, values[valueIndex] ?? '']));
+    const structureType = String(row.tipo_estrutura || row.tipo || row.structure_type || 'STREET').trim().toUpperCase() as UnitStructureType;
+    const structureLabel = String(row.estrutura || row.rua || row.bloco || row.quadra || row.structure || '').trim();
+    const unitLabel = String(row.unidade || row.casa || row.apartamento || row.unit || '').trim();
+    const existingUnit =
+      existingUnits.find((unit) =>
+        normalizeUnitRef(unit.label) === normalizeUnitRef(unitLabel) &&
+        normalizeUnitRef(unit.structure?.label) === normalizeUnitRef(structureLabel)
+      ) ?? null;
+
+    return {
+      line: index + 2,
+      structureType: ['STREET', 'BLOCK', 'QUAD', 'LOT'].includes(structureType) ? structureType : 'STREET',
+      structureLabel,
+      unitLabel,
+      existingUnit,
+      selected: !existingUnit,
+    };
+  }).filter((row) => row.structureLabel && row.unitLabel);
 }
 
 function isLinkedToUnit(person: Person, unit: Unit) {
@@ -215,6 +297,8 @@ export default function AdminUnidadesPage() {
   const [selectedUnit, setSelectedUnit] = useState<Unit | null>(null);
   const [unitModalSearch, setUnitModalSearch] = useState('');
   const [handledInitialUnitQuery, setHandledInitialUnitQuery] = useState(false);
+  const [unitImportRows, setUnitImportRows] = useState<UnitImportRow[]>([]);
+  const [unitImportMessage, setUnitImportMessage] = useState<string | null>(null);
   const { data: accessLogsData } = useAccessLogs({ limit: 100, unitId: selectedUnit?.id, enabled: Boolean(user && selectedUnit) });
 
   const effectiveCondominiums = useMemo(
@@ -486,6 +570,91 @@ export default function AdminUnidadesPage() {
     }
   };
 
+  const downloadUnitTemplate = () => {
+    const blob = new Blob([unitCsvTemplate], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'modelo-importacao-unidades.csv';
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleUnitCsvSelected = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    setUnitImportMessage(null);
+    setError(null);
+
+    if (!file) return;
+
+    const content = await file.text();
+    const rows = parseUnitCsv(content, condominiumUnits);
+    setUnitImportRows(rows);
+
+    if (!rows.length) {
+      setError('O arquivo não possui unidades válidas. Baixe o modelo e preencha estrutura e unidade.');
+      return;
+    }
+
+    const existingCount = rows.filter((row) => row.existingUnit).length;
+    setUnitImportMessage(
+      existingCount
+        ? `${rows.length} unidade(s) encontrada(s). ${existingCount} já existem e só serão atualizadas se você confirmar.`
+        : `${rows.length} unidade(s) pronta(s) para importação.`
+    );
+  };
+
+  const toggleUnitImportRow = (line: number) => {
+    setUnitImportRows((current) =>
+      current.map((row) => row.line === line ? { ...row, selected: !row.selected } : row)
+    );
+  };
+
+  const applyUnitImport = async () => {
+    if (!currentCondominium) {
+      setError('Admin sem condomínio vinculado.');
+      return;
+    }
+
+    const selectedRows = unitImportRows.filter((row) => row.selected);
+    if (!selectedRows.length) {
+      setError('Selecione ao menos uma unidade para importar ou atualizar.');
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    setMessage(null);
+
+    try {
+      for (const row of selectedRows) {
+        const payload = {
+          condominiumId: currentCondominium.id,
+          condominiumName: currentCondominium.name,
+          structureType: row.structureType,
+          structureLabel: row.structureLabel,
+          unitLabel: row.unitLabel,
+        };
+
+        if (row.existingUnit) {
+          await updateResidenceUnit(row.existingUnit.id, payload);
+        } else {
+          await ensureResidenceUnit(payload);
+        }
+      }
+
+      setMessage(`${selectedRows.length} unidade(s) importada(s) ou atualizada(s) com sucesso.`);
+      setUnitImportRows([]);
+      setUnitImportMessage(null);
+      await refetchAll();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Não foi possível importar as unidades.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {!isOnline ? (
@@ -523,14 +692,14 @@ export default function AdminUnidadesPage() {
             className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-white/10 px-4 py-3 text-sm text-white transition hover:bg-white/15"
           >
             <RefreshCw className="h-4 w-4" />
-            Atualizar catalogo
+            Atualizar catálogo
           </button>
         </div>
       </section>
 
       <section className="rounded-3xl border border-white/10 bg-white/5 p-5">
         <div className="mb-5">
-          <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Estrutura fisica</p>
+          <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Estrutura física</p>
           <h1 className="mt-2 text-2xl font-semibold text-white">{editingUnit ? `Editando unidade ${editingUnit.label}` : 'Unidades'}</h1>
           <p className="mt-2 text-sm text-slate-400">
             Cadastre unidades antes de vincular moradores. O formulario de moradores agora trabalha apenas com unidades existentes.
@@ -548,6 +717,88 @@ export default function AdminUnidadesPage() {
             {error}
           </div>
         )}
+
+        <div className="mb-5 rounded-2xl border border-white/10 bg-slate-950/40 p-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h2 className="text-base font-semibold text-white">Importar unidades por CSV</h2>
+              <p className="mt-1 text-sm text-slate-400">
+                Baixe o modelo, preencha os dados e confira a prévia antes de gravar.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={downloadUnitTemplate}
+                className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-white transition hover:bg-white/15"
+              >
+                Baixar modelo
+              </button>
+              <label className="cursor-pointer rounded-2xl bg-white px-4 py-3 text-sm font-medium text-slate-950 transition hover:bg-slate-200">
+                Selecionar CSV
+                <input type="file" accept=".csv,text/csv" onChange={handleUnitCsvSelected} className="hidden" />
+              </label>
+            </div>
+          </div>
+
+          {unitImportMessage ? (
+            <p className="mt-4 rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-sm text-cyan-100">
+              {unitImportMessage}
+            </p>
+          ) : null}
+
+          {unitImportRows.length ? (
+            <div className="mt-4 overflow-hidden rounded-2xl border border-white/10">
+              <div className="grid grid-cols-12 bg-white/5 px-3 py-2 text-xs uppercase tracking-[0.14em] text-slate-400">
+                <div className="col-span-1 text-center">Usar</div>
+                <div className="col-span-3">Unidade</div>
+                <div className="col-span-3">Estrutura</div>
+                <div className="col-span-3">Situação</div>
+                <div className="col-span-2">Linha</div>
+              </div>
+              <div className="divide-y divide-white/10">
+                {unitImportRows.map((row) => (
+                  <label key={row.line} className="grid grid-cols-12 items-center px-3 py-3 text-sm">
+                    <div className="col-span-1 text-center">
+                      <input
+                        type="checkbox"
+                        checked={row.selected}
+                        onChange={() => toggleUnitImportRow(row.line)}
+                        className="h-4 w-4 accent-cyan-400"
+                      />
+                    </div>
+                    <div className="col-span-3 font-medium text-white">{row.unitLabel}</div>
+                    <div className="col-span-3 text-slate-300">{getStructureTypeLabel(row.structureType)} {row.structureLabel}</div>
+                    <div className="col-span-3 text-slate-300">
+                      {row.existingUnit ? 'Já existe. Marque para atualizar.' : 'Nova unidade'}
+                    </div>
+                    <div className="col-span-2 text-slate-500">{row.line}</div>
+                  </label>
+                ))}
+              </div>
+              <div className="flex justify-end gap-2 border-t border-white/10 p-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUnitImportRows([]);
+                    setUnitImportMessage(null);
+                  }}
+                  className="rounded-2xl border border-white/10 bg-white/10 px-4 py-2 text-sm text-white transition hover:bg-white/15"
+                >
+                  Cancelar importação
+                </button>
+                <button
+                  type="button"
+                  onClick={applyUnitImport}
+                  disabled={saving}
+                  className="rounded-2xl bg-white px-4 py-2 text-sm font-medium text-slate-950 transition hover:bg-slate-200 disabled:opacity-60"
+                >
+                  {saving ? 'Importando...' : 'Confirmar importação'}
+                </button>
+              </div>
+            </div>
+          ) : null}
+        </div>
 
         <form onSubmit={handleCreateUnit} className="grid gap-4 md:grid-cols-4">
           <label className="space-y-2">
@@ -857,7 +1108,7 @@ export default function AdminUnidadesPage() {
                   </div>
                 ) : (
                   <p className="rounded-xl border border-dashed border-white/10 px-3 py-4 text-center text-xs text-slate-500">
-                    Nenhum veículo vinculado. Este bloco usa o cadastro local de veículos; se o backend tiver endpoint oficial, integramos depois.
+                    Nenhum veículo vinculado a esta unidade.
                   </p>
                 )}
               </section>
@@ -904,7 +1155,7 @@ export default function AdminUnidadesPage() {
                       <div key={camera.id} className="rounded-xl border border-white/10 bg-white/[0.035] px-3 py-2">
                         <p className="text-sm font-medium text-white">{camera.name}</p>
                         <p className="mt-1 text-xs text-slate-400 text-justify">
-                          {[camera.location, camera.status, camera.snapshotUrl || camera.imageStreamUrl ? 'preview configurado' : null].filter(Boolean).join(' • ') || 'Sem detalhes'}
+                          {[camera.location, camera.status, camera.snapshotUrl || camera.imageStreamUrl ? 'imagem configurada' : null].filter(Boolean).join(' • ') || 'Sem detalhes'}
                         </p>
                       </div>
                     ))}

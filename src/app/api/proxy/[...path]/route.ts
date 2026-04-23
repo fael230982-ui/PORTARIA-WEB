@@ -17,10 +17,11 @@ function buildTargetUrl(path: string[], request: NextRequest) {
 function copyHeaders(request: NextRequest) {
   const headers = new Headers();
   const cookieToken = request.cookies.get('camera_proxy_token')?.value;
-  const authorization = request.headers.get('authorization') || (cookieToken ? `Bearer ${cookieToken}` : null);
+  const authorizationHeader = request.headers.get('authorization');
+  const authorization = authorizationHeader || (cookieToken ? `Bearer ${cookieToken}` : null);
   const contentType = request.headers.get('content-type');
   const selectedUnitCookie = request.cookies.get('camera_selected_unit_id')?.value;
-  const selectedUnitId = request.headers.get('x-selected-unit-id') || selectedUnitCookie;
+  const selectedUnitId = request.headers.get('x-selected-unit-id') || (!authorizationHeader ? selectedUnitCookie : null);
 
   if (authorization) {
     headers.set('authorization', authorization);

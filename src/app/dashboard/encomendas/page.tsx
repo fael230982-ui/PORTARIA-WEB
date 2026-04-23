@@ -78,7 +78,7 @@ export default function ResidentDeliveriesPage() {
           <div className="rounded-2xl border border-white/10 bg-white/5 p-5 text-slate-300">Carregando encomendas...</div>
         ) : error ? (
           <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-5 text-red-100">
-            Nao foi possivel carregar suas encomendas agora.
+            Não foi possível carregar suas encomendas agora.
           </div>
         ) : deliveries.length === 0 ? (
           <div className="rounded-2xl border border-white/10 bg-white/5 p-8 text-center text-slate-300">

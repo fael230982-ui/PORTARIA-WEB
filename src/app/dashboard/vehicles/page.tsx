@@ -183,7 +183,7 @@ export default function ResidentVehiclesPage() {
       resetForm();
       await refetch();
     } catch (saveError) {
-      setFormError(saveError instanceof Error ? saveError.message : 'Nao foi possivel salvar o veiculo.');
+      setFormError(saveError instanceof Error ? saveError.message : 'Não foi possível salvar o veículo.');
     } finally {
       setSaving(false);
     }
@@ -198,7 +198,7 @@ export default function ResidentVehiclesPage() {
       setMessage(`Veiculo ${vehicle.plate} removido com sucesso.`);
       await refetch();
     } catch (deleteError) {
-      setMessage(deleteError instanceof Error ? deleteError.message : 'Nao foi possivel remover o veiculo.');
+      setMessage(deleteError instanceof Error ? deleteError.message : 'Não foi possível remover o veículo.');
     }
   }
 
@@ -223,13 +223,13 @@ export default function ResidentVehiclesPage() {
       );
       await refetch();
     } catch (updateError) {
-      setMessage(updateError instanceof Error ? updateError.message : 'Nao foi possivel atualizar o veiculo.');
+      setMessage(updateError instanceof Error ? updateError.message : 'Não foi possível atualizar o veículo.');
     }
   }
 
   return (
     <PageContainer
-      title="Veiculos"
+      title="Veículos"
       description="Cadastre, atualize e acompanhe os veiculos vinculados a sua unidade."
     >
       {!vehiclesEnabled ? (
@@ -244,12 +244,12 @@ export default function ResidentVehiclesPage() {
         <div className="space-y-6">
           <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
-              <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Veiculos ativos</p>
+              <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Veículos ativos</p>
               <p className="mt-2 text-3xl font-semibold text-white">{stats.active}</p>
               <p className="mt-1 text-xs text-slate-400">Prontos para uso.</p>
             </div>
             <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
-              <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Veiculos bloqueados</p>
+              <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Veículos bloqueados</p>
               <p className="mt-2 text-3xl font-semibold text-white">{stats.blocked}</p>
               <p className="mt-1 text-xs text-slate-400">Exigem revisao antes de voltar ao uso.</p>
             </div>
@@ -305,7 +305,7 @@ export default function ResidentVehiclesPage() {
 
             {error ? (
               <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-100">
-                Nao foi possivel carregar os veiculos agora.
+                Não foi possível carregar os veículos agora.
               </div>
             ) : null}
 

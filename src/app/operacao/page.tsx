@@ -116,7 +116,7 @@ const operationalModules: Array<{
   { label: 'Locatários', description: 'Gestão de acesso', icon: Building2 },
   { label: 'Prestadores', description: 'Entrada de serviços', icon: LifeBuoy },
   { label: 'Encomendas', description: 'Registro de mercadorias', icon: Package },
-  { label: 'Cameras', description: 'Monitor em tela separada', icon: Monitor },
+  { label: 'Câmeras', description: 'Monitor em tela separada', icon: Monitor },
 ];
 
 const contactButtons = [
@@ -146,7 +146,7 @@ function getWhatsAppConnectionLabel(state: string | null | undefined, enabled: b
   if (normalized === 'close' || normalized === 'closed' || normalized === 'disconnected') return 'Desconectado';
   if (normalized === 'pairing') return 'Aguardando pareamento';
   if (state?.trim()) return state;
-  return 'Nao conectado';
+  return 'Não conectado';
 }
 
 type OperationSnapshotCache = {
@@ -271,12 +271,12 @@ async function fileToBase64(file: File) {
       const value = typeof reader.result === 'string' ? reader.result : '';
       const [, base64] = value.split(',', 2);
       if (!base64) {
-        reject(new Error('Nao foi possivel ler a imagem selecionada.'));
+        reject(new Error('Não foi possível ler a imagem selecionada.'));
         return;
       }
       resolve(base64);
     };
-    reader.onerror = () => reject(new Error('Nao foi possivel ler a imagem selecionada.'));
+    reader.onerror = () => reject(new Error('Não foi possível ler a imagem selecionada.'));
     reader.readAsDataURL(file);
   });
 }
@@ -3225,9 +3225,9 @@ export default function OperacaoPage() {
       setPhotoSearchPanel((current) => ({
         ...current,
         loading: false,
-        error: getErrorMessage(error, 'Nao foi possivel analisar a imagem enviada.'),
+        error: getErrorMessage(error, 'Não foi possível analisar a imagem enviada.'),
       }));
-      setPageMessage({ tone: 'error', text: getErrorMessage(error, 'Nao foi possivel analisar a imagem enviada.') });
+      setPageMessage({ tone: 'error', text: getErrorMessage(error, 'Não foi possível analisar a imagem enviada.') });
     }
   }
 
@@ -3405,7 +3405,7 @@ export default function OperacaoPage() {
       });
       await refetchResidentMessages();
     } catch (error) {
-      setPageMessage({ tone: 'error', text: getErrorMessage(error, 'Nao foi possivel enviar a mensagem.') });
+      setPageMessage({ tone: 'error', text: getErrorMessage(error, 'Não foi possível enviar a mensagem.') });
     } finally {
       setResidentMessageSaving(false);
     }
@@ -3426,7 +3426,7 @@ export default function OperacaoPage() {
     } catch (error) {
       setPageMessage({
         tone: 'error',
-        text: getErrorMessage(error, 'Nao foi possivel preparar a conexao do WhatsApp.'),
+        text: getErrorMessage(error, 'Não foi possível preparar a conexão do WhatsApp.'),
       });
     } finally {
       setResidentWhatsAppConnecting(false);
@@ -4042,13 +4042,13 @@ export default function OperacaoPage() {
                   if (module.label === 'Moradores') return <button key={module.label} type="button" className={className} onClick={openResidentsConsultation}>{tile}</button>;
                   if (module.label === 'Visitantes') return <button key={module.label} type="button" className={className} onClick={() => openOperationalPeopleConsultation('VISITOR')}>{tile}</button>;
                   if (module.label.startsWith('Locat')) return <button key={module.label} type="button" className={className} onClick={() => openOperationalPeopleConsultation('RENTER')}>{tile}</button>;
-                  if (module.label === 'LocatÃ¡rios') return <button key={module.label} type="button" className={className} onClick={() => openOperationalConsultation('RENTER')}>{tile}</button>;
+                  if (module.label === 'Locatários') return <button key={module.label} type="button" className={className} onClick={() => openOperationalConsultation('RENTER')}>{tile}</button>;
                   if (module.label === 'Prestadores') return <button key={module.label} type="button" className={className} onClick={() => openOperationalPeopleConsultation('SERVICE_PROVIDER')}>{tile}</button>;
                   if (module.label === 'Encomendas') return <button key={module.label} type="button" className={className} onClick={() => { setDeliveriesHistoryFilter('PENDING'); setOpenDeliveriesHistoryModal(true); }}>{tile}</button>;
                   if (module.label === 'Locatários') return <button key={module.label} type="button" className={className} onClick={() => openQuickPersonByCategory('RENTER')}>{tile}</button>;
                   if (module.label === 'Prestadores') return <button key={module.label} type="button" className={className} onClick={() => openQuickPersonByCategory('SERVICE_PROVIDER')}>{tile}</button>;
                   if (module.label === 'Encomendas') return <button key={module.label} type="button" className={className} onClick={openDeliveryRegistration}>{tile}</button>;
-                  if (module.label === 'Cameras') return <button key={module.label} type="button" className={className} onClick={() => setOpenCamerasListModal(true)}>{tile}</button>;
+                  if (module.label === 'Câmeras') return <button key={module.label} type="button" className={className} onClick={() => setOpenCamerasListModal(true)}>{tile}</button>;
                   return <button key={module.label} type="button" className={className}>{tile}</button>;
                 })}
               </div>
@@ -5832,7 +5832,7 @@ export default function OperacaoPage() {
 
                   {residentWhatsAppError ? (
                     <div className="mt-3 rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-sm text-amber-100">
-                      Nao foi possivel consultar a conexao do WhatsApp neste ambiente.
+                      Não foi possível consultar a conexão do WhatsApp neste ambiente.
                     </div>
                   ) : null}
 

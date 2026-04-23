@@ -192,22 +192,22 @@ export function getCameraDiagnostics(
     {
       label: 'HLS/live',
       ok: hasBrowserVideo,
-      detail: hasBrowserVideo ? 'Disponivel para video ao vivo.' : 'Nao informado pelo backend.',
+      detail: hasBrowserVideo ? 'Disponível para vídeo ao vivo.' : 'Não informado.',
     },
     {
       label: 'MJPEG/frame',
       ok: Boolean(imageStreamUrl),
-      detail: imageStreamUrl ? 'Disponivel para fallback e preview.' : 'Nao informado pelo backend.',
+      detail: imageStreamUrl ? 'Disponível para visualização alternativa.' : 'Não informado.',
     },
     {
       label: 'Snapshot',
       ok: Boolean(snapshotUrl),
-      detail: snapshotUrl ? 'Disponivel para imagem atualizada.' : 'Nao informado pelo backend.',
+      detail: snapshotUrl ? 'Disponível para imagem atualizada.' : 'Não informado.',
     },
     {
       label: 'RTSP',
       ok: hasRtsp,
-      detail: hasRtsp ? 'Cadastrado, mas precisa conversao para navegador.' : 'Nao cadastrado.',
+      detail: hasRtsp ? 'Cadastrado, mas precisa de conversão para o navegador.' : 'Não cadastrado.',
     },
   ];
 

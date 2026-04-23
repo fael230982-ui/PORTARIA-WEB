@@ -23,8 +23,8 @@ export function CameraSnapshot({
   refreshMs = 15000,
   fallbackSrc = null,
   fallback = null,
-  loadingLabel = 'Carregando snapshot...',
-  errorLabel = 'Não foi possível carregar o snapshot da câmera.',
+  loadingLabel = 'Carregando imagem...',
+  errorLabel = 'Não foi possível carregar a imagem da câmera.',
 }: CameraSnapshotProps) {
   const { token } = useAuth();
   const normalizedFallbackSrc = resolveCameraMediaUrl(fallbackSrc);

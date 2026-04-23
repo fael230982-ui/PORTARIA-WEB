@@ -16,9 +16,9 @@ export default function CamerasPage() {
   const cameras = data?.data ?? [];
 
   return (
-    <PageContainer title="Cameras" description="Veja as cameras disponiveis para a sua unidade.">
+    <PageContainer title="Câmeras" description="Veja as câmeras disponíveis para a sua unidade.">
       <div className="mb-5 flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300 md:flex-row md:items-center md:justify-between">
-        <div>As cameras liberadas para a unidade ativa aparecem aqui.</div>
+        <div>As câmeras liberadas para a unidade ativa aparecem aqui.</div>
         <button
           type="button"
           onClick={() => refetch()}
@@ -30,17 +30,17 @@ export default function CamerasPage() {
 
       {!activeUnitId ? (
         <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-5 text-amber-100">
-          Selecione uma unidade ativa para consultar cameras.
+          Selecione uma unidade ativa para consultar câmeras.
         </div>
       ) : isLoading ? (
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-5 text-slate-300">Carregando cameras...</div>
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-5 text-slate-300">Carregando câmeras...</div>
       ) : error ? (
         <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-5 text-red-100">
-          Nao foi possivel carregar cameras para esta unidade.
+          Não foi possível carregar câmeras para esta unidade.
         </div>
       ) : cameras.length === 0 ? (
         <div className="rounded-2xl border border-white/10 bg-white/5 p-5 text-slate-300">
-          Nenhuma camera liberada para a unidade ativa.
+          Nenhuma câmera liberada para a unidade ativa.
         </div>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -53,7 +53,7 @@ export default function CamerasPage() {
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <h3 className="font-semibold text-white">{camera.name}</h3>
-                    <p className="mt-1 text-sm text-slate-400">{camera.location || 'Sem localizacao'}</p>
+                    <p className="mt-1 text-sm text-slate-400">{camera.location || 'Sem localização'}</p>
                   </div>
                   <span className="rounded-lg bg-white/10 px-2 py-1 text-xs text-slate-200">
                     {camera.status === 'ONLINE' ? 'Online' : 'Offline'}

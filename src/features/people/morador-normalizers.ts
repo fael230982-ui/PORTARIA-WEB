@@ -193,10 +193,18 @@ export function getStructureTypeLabel(type?: UnitStructureType | null) {
   return structureTypeLabels[type] ?? '';
 }
 
+function isTechnicalIdentifier(value?: string | null) {
+  const normalized = String(value ?? '').trim();
+  if (!normalized) return false;
+  if (/^[0-9a-f]{8,}$/i.test(normalized)) return true;
+  if (/^[0-9a-f]{8}-[0-9a-f-]{13,}$/i.test(normalized)) return true;
+  return false;
+}
+
 export function getResidenceDisplay(unit?: Unit | null, legacyUnitId?: string | null) {
   const effectiveReference = getUnitReference(safeText(unit?.legacyUnitId, safeText(legacyUnitId)));
   const legacy = splitLegacyUnitId(effectiveReference);
-  const unitLabel = safeText(unit?.label, safeText(legacy.unidade, effectiveReference));
+  const unitLabel = safeText(unit?.label, isTechnicalIdentifier(legacy.unidade) ? '' : safeText(legacy.unidade));
   const structureLabel = safeText(unit?.structure?.label, legacy.bloco);
   const structureType = getStructureTypeLabel(unit?.structureType ?? unit?.structure?.type);
   const condominium = safeText(unit?.condominium?.name, '');
@@ -210,7 +218,7 @@ export function getResidenceDisplay(unit?: Unit | null, legacyUnitId?: string | 
     condominio: condominium,
     estruturaTipo: structureType,
     estruturaLabel: structureLabel,
-    localizacao: localizacao || effectiveReference,
+    localizacao: localizacao || (unitLabel && !isTechnicalIdentifier(unitLabel) ? unitLabel : 'Unidade não identificada'),
   };
 }
 
@@ -441,7 +449,7 @@ export function normalizePerson(person: Person): MoradorRow {
     id: person.id,
     nome: person.name,
     email: person.email ?? '',
-    unidade: residence.unidade || person.unitName || person.unitId || '',
+    unidade: residence.unidade || (!isTechnicalIdentifier(person.unitName) ? person.unitName : '') || (!isTechnicalIdentifier(person.unitId) ? person.unitId : '') || '',
     bloco: residence.bloco,
     telefone: person.phone ?? '',
     documento: person.document ?? '',

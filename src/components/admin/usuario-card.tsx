@@ -38,7 +38,7 @@ export function UsuarioCard({
             <CardTitle className="text-base text-white">{nome}</CardTitle>
             <p className="mt-1 flex items-center gap-2 text-xs text-slate-500">
               <Clock className="h-3.5 w-3.5" />
-              Ultima atividade: {ultimaAtividade}
+              Última atividade: {ultimaAtividade}
             </p>
           </div>
           <UsuarioStatusBadge status={status} />
