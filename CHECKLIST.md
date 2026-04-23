@@ -11,10 +11,10 @@
 ## Antes de publicar
 
 - [ ] Typecheck executado, quando aplicavel
-- [ ] Build executado
+- [x] Build executado em 2026-04-23 com `npm run build`
 - [ ] Testes aplicaveis executados
-- [ ] `CHANGELOG.md` atualizado
-- [ ] `CHECKLIST.md` revisado
+- [x] `CHANGELOG.md` atualizado em 2026-04-23
+- [x] `CHECKLIST.md` revisado em 2026-04-23
 
 ## Release
 
