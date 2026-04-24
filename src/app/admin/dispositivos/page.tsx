@@ -97,6 +97,8 @@ const initialControlForm: ControlForm = {
   personId: '',
 };
 
+const DEVICES_PENDING_SYNC_STORAGE_KEY = 'admin-devices-pending-sync';
+
 function getDeviceCacheKey(condominiumId?: string | null) {
   return condominiumId ? `admin-devices:${condominiumId}` : 'admin-devices:global';
 }
@@ -121,6 +123,33 @@ function readCachedDevicesTimestamp(condominiumId?: string | null) {
     return window.localStorage.getItem(`${getDeviceCacheKey(condominiumId)}:updatedAt`);
   } catch {
     return null;
+  }
+}
+
+function readPendingDeviceIds() {
+  if (typeof window === 'undefined') return [] as string[];
+
+  try {
+    const raw = window.localStorage.getItem(DEVICES_PENDING_SYNC_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+function persistPendingDeviceIds(deviceIds: string[]) {
+  if (typeof window === 'undefined') return;
+
+  try {
+    if (deviceIds.length > 0) {
+      window.localStorage.setItem(DEVICES_PENDING_SYNC_STORAGE_KEY, JSON.stringify(deviceIds));
+    } else {
+      window.localStorage.removeItem(DEVICES_PENDING_SYNC_STORAGE_KEY);
+    }
+  } catch {
+    // Ignore storage failures and keep normal page flow.
   }
 }
 
@@ -258,6 +287,7 @@ export default function AdminDevicesPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [snapshotUpdatedAt, setSnapshotUpdatedAt] = useState<string | null>(null);
+  const [pendingDeviceIds, setPendingDeviceIds] = useState<string[]>([]);
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
   const [form, setForm] = useState<DeviceForm>(initialForm);
   const [controlForm, setControlForm] = useState<ControlForm>(initialControlForm);
@@ -301,6 +331,12 @@ export default function AdminDevicesPage() {
           return currentDevices;
         }
 
+        setPendingDeviceIds((currentPending) => {
+          const confirmedIds = new Set(nextDevices.map((device) => device.id));
+          const nextPending = currentPending.filter((id) => !confirmedIds.has(id));
+          persistPendingDeviceIds(nextPending);
+          return nextPending;
+        });
         persistCachedDevices(scopedCondominiumId, nextDevices);
         setSnapshotUpdatedAt(readCachedDevicesTimestamp(scopedCondominiumId));
         return nextDevices;
@@ -315,6 +351,7 @@ export default function AdminDevicesPage() {
   useEffect(() => {
     if (!canAccess) return;
     const cachedDevices = readCachedDevices(scopedCondominiumId);
+    setPendingDeviceIds(readPendingDeviceIds());
     if (cachedDevices.length > 0) {
       setAllDevices(cachedDevices);
       setSnapshotUpdatedAt(readCachedDevicesTimestamp(scopedCondominiumId));
@@ -379,7 +416,12 @@ export default function AdminDevicesPage() {
         setAllDevices(nextDevices);
         persistCachedDevices(scopedCondominiumId, nextDevices);
         setSnapshotUpdatedAt(readCachedDevicesTimestamp(scopedCondominiumId));
-        setMessage('Dispositivo cadastrado. Se ele não reaparecer após atualizar, a listagem do servidor ainda não devolveu esse registro.');
+        setPendingDeviceIds((current) => {
+          const nextPending = Array.from(new Set([createdDevice.id, ...current]));
+          persistPendingDeviceIds(nextPending);
+          return nextPending;
+        });
+        setMessage('Dispositivo cadastrado. Ele ficará como sincronização pendente até o servidor confirmar esse registro na lista.');
       }
 
       setModal(null);
@@ -534,6 +576,11 @@ export default function AdminDevicesPage() {
                         <Badge className={device.status === 'ONLINE' ? 'bg-emerald-500/15 text-emerald-200' : 'bg-red-500/15 text-red-200'}>
                           {device.status === 'ONLINE' ? 'Online' : 'Offline'}
                         </Badge>
+                        {pendingDeviceIds.includes(device.id) ? (
+                          <Badge className="border-amber-500/20 bg-amber-500/10 text-amber-100">
+                            Sincronização pendente
+                          </Badge>
+                        ) : null}
                       </div>
                       <p className="mt-2 text-sm text-slate-400">
                         {getDeviceTypeLabel(device.type)} · {getUsageLabel(device.deviceUsageType)}
@@ -541,6 +588,11 @@ export default function AdminDevicesPage() {
                       <p className="mt-1 text-sm text-slate-500">
                         {[device.vendor, device.model, device.host].filter(Boolean).join(' · ') || 'Sem detalhes de conexão cadastrados'}
                       </p>
+                      {pendingDeviceIds.includes(device.id) ? (
+                        <p className="mt-2 text-xs text-amber-200">
+                          O cadastro já foi salvo localmente. Assim que o servidor confirmar esse item na lista, esse aviso desaparece.
+                        </p>
+                      ) : null}
                     </div>
 
                     <div className="flex flex-wrap gap-2">
