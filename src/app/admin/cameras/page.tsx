@@ -88,6 +88,16 @@ const DEVICE_USAGE_OPTIONS: Array<{ value: CameraDeviceUsageType; label: string 
 
 const CAMERA_RTSP_JOB_STORAGE_KEY = 'admin-cameras-last-rtsp-job';
 const CAMERAS_SNAPSHOT_STORAGE_KEY = 'admin-cameras-snapshot';
+const CAMERAS_LOCAL_DRAFTS_STORAGE_KEY = 'admin-cameras-local-drafts';
+
+type LocalCameraSyncState = 'PENDING' | 'RUNNING' | 'SUCCEEDED' | 'FAILED';
+
+type LocalCameraDraft = CameraRecord & {
+  localOnly: true;
+  localSyncState: LocalCameraSyncState;
+  localJobId?: string | null;
+  localCreatedAt: string;
+};
 
 function getJobStatusLabel(status: string) {
   if (status === 'PENDING') return 'Processando fila';
@@ -101,6 +111,10 @@ function getJobStatusClass(status: string) {
   if (status === 'SUCCEEDED') return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-100';
   if (status === 'FAILED') return 'border-red-500/30 bg-red-500/10 text-red-100';
   return 'border-sky-500/30 bg-sky-500/10 text-sky-100';
+}
+
+function isLocalCameraDraft(camera: CameraRecord | LocalCameraDraft): camera is LocalCameraDraft {
+  return 'localOnly' in camera && camera.localOnly === true;
 }
 
 function supportsDeviceUsageType(deviceType: CameraDeviceType) {
@@ -138,6 +152,48 @@ function getCameraDeviceUsageLabel(deviceUsageType: CameraDeviceUsageType | stri
   if (deviceUsageType === 'MONITORING') return 'Monitoramento';
   if (deviceUsageType === 'PASSAGE') return 'Passagem';
   return 'Não configurado';
+}
+
+function buildLocalCameraDraft(form: CameraFormData, job?: BackgroundJob | null): LocalCameraDraft {
+  const now = new Date().toISOString();
+
+  return {
+    id: `local-camera-${job?.id ?? crypto.randomUUID()}`,
+    name: form.name.trim() || 'Câmera em processamento',
+    location: form.location.trim() || null,
+    deviceType: form.deviceType,
+    deviceUsageType: supportsDeviceUsageType(form.deviceType) ? form.deviceUsageType || null : null,
+    streamUrl: form.streamUrl.trim() || null,
+    snapshotUrl: form.snapshotUrl.trim() || null,
+    imageStreamUrl: null,
+    thumbnailUrl: null,
+    liveUrl: null,
+    hlsUrl: null,
+    webRtcUrl: null,
+    vmsStreamingUrl: null,
+    provider: null,
+    transport: null,
+    status: getAutomaticCameraStatusFromForm(form),
+    lastSeen: null,
+    engineStreamId: form.engineStreamId.trim() ? Number(form.engineStreamId) || null : null,
+    engineStreamUuid: form.engineStreamUuid.trim() || null,
+    faceAnalyticsId: form.faceAnalyticsId.trim() ? Number(form.faceAnalyticsId) || null : null,
+    unitId: form.unitId || null,
+    personId: null,
+    localOnly: true,
+    localSyncState: (job?.status as LocalCameraSyncState | undefined) ?? 'PENDING',
+    localJobId: job?.id ?? null,
+    localCreatedAt: now,
+  };
+}
+
+function cameraMatchesDraft(camera: CameraRecord, draft: LocalCameraDraft) {
+  const sameUnit = (camera.unitId ?? null) === (draft.unitId ?? null);
+  const sameName = normalizeString(camera.name) === normalizeString(draft.name);
+  const sameStream = normalizeString(camera.streamUrl) === normalizeString(draft.streamUrl);
+  const sameSnapshot = normalizeString(camera.snapshotUrl) === normalizeString(draft.snapshotUrl);
+
+  return sameUnit && ((sameName && sameStream) || (sameName && sameSnapshot) || (sameStream && sameSnapshot));
 }
 
 function isRtspStreamUrl(value: string | null | undefined) {
@@ -548,6 +604,7 @@ export default function AdminCamerasPage() {
   const [lastRtspJob, setLastRtspJob] = useState<BackgroundJob | null>(null);
   const [snapshotCameras, setSnapshotCameras] = useState<CameraRecord[]>([]);
   const [snapshotUpdatedAt, setSnapshotUpdatedAt] = useState<string | null>(null);
+  const [localDraftCameras, setLocalDraftCameras] = useState<LocalCameraDraft[]>([]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -565,6 +622,20 @@ export default function AdminCamerasPage() {
       }
     } catch {
       // Ignore invalid local cache for RTSP jobs.
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    try {
+      const raw = window.localStorage.getItem(CAMERAS_LOCAL_DRAFTS_STORAGE_KEY);
+      if (!raw) return;
+
+      const parsed = JSON.parse(raw) as LocalCameraDraft[];
+      setLocalDraftCameras(Array.isArray(parsed) ? parsed : []);
+    } catch {
+      setLocalDraftCameras([]);
     }
   }, []);
 
@@ -602,9 +673,30 @@ export default function AdminCamerasPage() {
     }
   }, [lastRtspJob]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    try {
+      if (localDraftCameras.length > 0) {
+        window.localStorage.setItem(CAMERAS_LOCAL_DRAFTS_STORAGE_KEY, JSON.stringify(localDraftCameras));
+      } else {
+        window.localStorage.removeItem(CAMERAS_LOCAL_DRAFTS_STORAGE_KEY);
+      }
+    } catch {
+      // Ignore storage failures and keep page flow.
+    }
+  }, [localDraftCameras]);
+
   const cameras = useMemo(() => camerasData?.data ?? [], [camerasData]);
   const usingSnapshot = Boolean(error && snapshotCameras.length > 0);
-  const visibleCameras = usingSnapshot ? snapshotCameras : cameras;
+  const visibleCameras = useMemo(() => {
+    const baseCameras = usingSnapshot ? snapshotCameras : cameras;
+    const unmatchedDrafts = localDraftCameras.filter(
+      (draft) => !baseCameras.some((camera) => cameraMatchesDraft(camera, draft))
+    );
+
+    return [...unmatchedDrafts, ...baseCameras];
+  }, [cameras, localDraftCameras, snapshotCameras, usingSnapshot]);
   const isAdminScope = user.role === 'ADMIN';
   const accessibleUnits = useMemo(() => {
     if (!isAdminScope) {
@@ -669,6 +761,16 @@ export default function AdminCamerasPage() {
 
         setPendingRtspJob(nextJob);
         setLastRtspJob(nextJob);
+        setLocalDraftCameras((current) =>
+          current.map((draft) =>
+            draft.localJobId === nextJob.id
+              ? {
+                  ...draft,
+                  localSyncState: nextJob.status as LocalCameraSyncState,
+                }
+              : draft
+          )
+        );
 
         if (nextJob.status === 'SUCCEEDED') {
           setActionMessage('Câmera RTSP processada com sucesso e lista atualizada.');
@@ -712,6 +814,14 @@ export default function AdminCamerasPage() {
       search: current.search || unit.label,
     }));
   }, [activeUnitId, unitOptions]);
+
+  useEffect(() => {
+    if (cameras.length === 0 || localDraftCameras.length === 0) return;
+
+    setLocalDraftCameras((current) =>
+      current.filter((draft) => !cameras.some((camera) => cameraMatchesDraft(camera, draft)))
+    );
+  }, [cameras, localDraftCameras.length]);
 
   const filteredCameras = useMemo(() => {
     const search = normalizeString(filters.search);
@@ -769,9 +879,11 @@ export default function AdminCamerasPage() {
 
       if (isRtspCamera) {
         const job = await camerasService.createAsync(payload);
+        const localDraft = buildLocalCameraDraft(form, job);
         setOpenCreate(false);
         setPendingRtspJob(job);
         setLastRtspJob(job);
+        setLocalDraftCameras((current) => [localDraft, ...current.filter((draft) => draft.localJobId !== job.id)]);
         setActionMessage(
           `Cadastro RTSP enviado para processamento em background. Job ${job.id} com status ${job.status}. O sistema vai acompanhar automaticamente até a câmera aparecer na lista.`
         );
@@ -1058,11 +1170,27 @@ export default function AdminCamerasPage() {
           {filteredCameras.map((camera) => (
             <div
               key={camera.id}
-              className="grid gap-4 px-5 py-4 lg:grid-cols-[1.3fr_1fr_0.7fr_auto] lg:items-center"
+              className={`grid gap-4 px-5 py-4 lg:grid-cols-[1.3fr_1fr_0.7fr_auto] lg:items-center ${
+                isLocalCameraDraft(camera) ? 'bg-amber-500/5' : ''
+              }`}
             >
               <div>
-                <p className="font-medium text-white">{camera.name}</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="font-medium text-white">{camera.name}</p>
+                  {isLocalCameraDraft(camera) ? (
+                    <Badge className={`border-white/10 ${getJobStatusClass(camera.localSyncState)}`}>
+                      {camera.localSyncState === 'SUCCEEDED'
+                        ? 'Aguardando aparecer na lista'
+                        : getJobStatusLabel(camera.localSyncState)}
+                    </Badge>
+                  ) : null}
+                </div>
                 <p className="text-sm text-slate-400">{camera.location || 'Local não informado'}</p>
+                {isLocalCameraDraft(camera) ? (
+                  <p className="mt-1 text-xs text-amber-200">
+                    Cadastro salvo localmente enquanto o servidor conclui a sincronização.
+                  </p>
+                ) : null}
               </div>
 
               <div className="text-sm text-slate-300">
@@ -1114,6 +1242,7 @@ export default function AdminCamerasPage() {
                     setSelectedCamera(camera);
                     setOpenEdit(true);
                   }}
+                  disabled={isLocalCameraDraft(camera)}
                   className="border-white/10 bg-white/5 text-white hover:bg-white/10"
                   aria-label="Editar câmera"
                 >
@@ -1124,7 +1253,7 @@ export default function AdminCamerasPage() {
                   size="icon"
                   variant="outline"
                   onClick={() => void handleDeleteCamera(camera)}
-                  disabled={saving}
+                  disabled={saving || isLocalCameraDraft(camera)}
                   className="border-red-500/20 bg-red-500/10 text-red-100 hover:bg-red-500/20 disabled:opacity-60"
                   aria-label="Excluir câmera"
                 >
@@ -1144,6 +1273,7 @@ export default function AdminCamerasPage() {
                 <Button
                   variant="outline"
                   onClick={() => captureCameraPhoto(camera)}
+                  disabled={isLocalCameraDraft(camera)}
                   className="border-white/10 bg-white/5 text-white hover:bg-white/10"
                 >
                   Capturar foto
@@ -1210,7 +1340,7 @@ export default function AdminCamerasPage() {
       <CrudModal
         open={openView}
         title="Detalhes da câmera"
-        description="Resumo técnico retornado pela API."
+        description={selectedCamera && isLocalCameraDraft(selectedCamera) ? 'Cadastro aguardando confirmação completa do servidor.' : 'Resumo da câmera cadastrada.'}
         onClose={() => setOpenView(false)}
         maxWidth="lg"
       >
@@ -1273,15 +1403,21 @@ export default function AdminCamerasPage() {
               </div>
             </div>
             <div className="md:col-span-2">
-              <Button
-                variant="outline"
-                onClick={() => void handleDeleteCamera(selectedCamera)}
-                disabled={saving}
-                className="border-red-500/20 bg-red-500/10 text-red-100 hover:bg-red-500/20 disabled:opacity-60"
-              >
-                <Trash2 className="mr-2 h-4 w-4" />
-                Excluir câmera
-              </Button>
+              {!isLocalCameraDraft(selectedCamera) ? (
+                <Button
+                  variant="outline"
+                  onClick={() => void handleDeleteCamera(selectedCamera)}
+                  disabled={saving}
+                  className="border-red-500/20 bg-red-500/10 text-red-100 hover:bg-red-500/20 disabled:opacity-60"
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Excluir câmera
+                </Button>
+              ) : (
+                <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+                  A câmera ainda está em sincronização. Assim que o servidor confirmar o cadastro, ela ficará disponível para edição, captura e exclusão.
+                </div>
+              )}
             </div>
           </div>
         ) : null}
