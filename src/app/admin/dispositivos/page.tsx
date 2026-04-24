@@ -114,11 +114,22 @@ function readCachedDevices(condominiumId?: string | null): Device[] {
   }
 }
 
+function readCachedDevicesTimestamp(condominiumId?: string | null) {
+  if (typeof window === 'undefined') return null;
+
+  try {
+    return window.localStorage.getItem(`${getDeviceCacheKey(condominiumId)}:updatedAt`);
+  } catch {
+    return null;
+  }
+}
+
 function persistCachedDevices(condominiumId: string | null | undefined, devices: Device[]) {
   if (typeof window === 'undefined') return;
 
   try {
     window.localStorage.setItem(getDeviceCacheKey(condominiumId), JSON.stringify(devices));
+    window.localStorage.setItem(`${getDeviceCacheKey(condominiumId)}:updatedAt`, new Date().toISOString());
   } catch {
     // Ignore cache failures and keep normal page flow.
   }
@@ -246,6 +257,7 @@ export default function AdminDevicesPage() {
   const [search, setSearch] = useState('');
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [snapshotUpdatedAt, setSnapshotUpdatedAt] = useState<string | null>(null);
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
   const [form, setForm] = useState<DeviceForm>(initialForm);
   const [controlForm, setControlForm] = useState<ControlForm>(initialControlForm);
@@ -254,6 +266,7 @@ export default function AdminDevicesPage() {
   const devices = useMemo(() => allDevices.filter((device) => !isCameraOnlyDevice(device)), [allDevices]);
   const hiddenCameraCount = allDevices.length - devices.length;
   const scopedCondominiumId = user?.condominiumId ?? user?.condominiumIds?.[0] ?? null;
+  const usingSnapshot = Boolean(error && allDevices.length > 0);
 
   const filteredDevices = useMemo(() => {
     const normalized = search.trim().toLowerCase();
@@ -284,10 +297,12 @@ export default function AdminDevicesPage() {
       setAllDevices((currentDevices) => {
         if (options?.preserveExistingOnEmpty && shouldPreserveDevices(currentDevices, nextDevices)) {
           persistCachedDevices(scopedCondominiumId, currentDevices);
+          setSnapshotUpdatedAt(readCachedDevicesTimestamp(scopedCondominiumId));
           return currentDevices;
         }
 
         persistCachedDevices(scopedCondominiumId, nextDevices);
+        setSnapshotUpdatedAt(readCachedDevicesTimestamp(scopedCondominiumId));
         return nextDevices;
       });
     } catch (loadError) {
@@ -302,6 +317,7 @@ export default function AdminDevicesPage() {
     const cachedDevices = readCachedDevices(scopedCondominiumId);
     if (cachedDevices.length > 0) {
       setAllDevices(cachedDevices);
+      setSnapshotUpdatedAt(readCachedDevicesTimestamp(scopedCondominiumId));
       setLoading(false);
     }
     void loadDevices();
@@ -355,13 +371,15 @@ export default function AdminDevicesPage() {
         const nextDevices = mergeDeviceList(allDevices, updatedDevice);
         setAllDevices(nextDevices);
         persistCachedDevices(scopedCondominiumId, nextDevices);
-        setMessage('Dispositivo atualizado.');
+        setSnapshotUpdatedAt(readCachedDevicesTimestamp(scopedCondominiumId));
+        setMessage('Dispositivo atualizado. Se a lista do servidor oscilar, o item continuará visível com a última atualização salva.');
       } else {
         const createdDevice = await devicesService.create(buildPayload(form));
         const nextDevices = mergeDeviceList(allDevices, createdDevice);
         setAllDevices(nextDevices);
         persistCachedDevices(scopedCondominiumId, nextDevices);
-        setMessage('Dispositivo cadastrado.');
+        setSnapshotUpdatedAt(readCachedDevicesTimestamp(scopedCondominiumId));
+        setMessage('Dispositivo cadastrado. Se ele não reaparecer após atualizar, a listagem do servidor ainda não devolveu esse registro.');
       }
 
       setModal(null);
@@ -391,6 +409,7 @@ export default function AdminDevicesPage() {
           const nextDevices = updateDeviceStatus(allDevices, selectedDevice.id, nextStatus);
           setAllDevices(nextDevices);
           persistCachedDevices(scopedCondominiumId, nextDevices);
+          setSnapshotUpdatedAt(readCachedDevicesTimestamp(scopedCondominiumId));
         }
       }
       setMessage('Comando enviado com sucesso.');
@@ -470,6 +489,13 @@ export default function AdminDevicesPage() {
           </div>
         )}
 
+        {usingSnapshot ? (
+          <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+            Mostrando a última atualização disponível de dispositivos. O servidor está instável agora e novas alterações podem demorar para refletir.
+            {snapshotUpdatedAt ? ` Última sincronização: ${new Date(snapshotUpdatedAt).toLocaleString('pt-BR')}.` : ''}
+          </div>
+        ) : null}
+
         <section className="rounded-3xl border border-white/10 bg-white/[0.04] p-5">
           <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
@@ -533,7 +559,9 @@ export default function AdminDevicesPage() {
             </div>
           ) : (
             <div className="rounded-2xl border border-dashed border-white/10 bg-slate-950 p-8 text-center text-slate-300">
-              Nenhum dispositivo encontrado.
+              {error
+                ? 'Nenhum dispositivo disponível agora. O servidor não retornou a lista neste momento.'
+                : 'Nenhum dispositivo encontrado.'}
             </div>
           )}
         </section>

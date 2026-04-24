@@ -18,6 +18,7 @@ Todas as alteracoes relevantes deste projeto devem ser registradas aqui.
 - Proxy deixa de reutilizar unidade antiga de morador quando a chamada ja possui autenticacao propria.
 - Catalogo de condominios e unidades passa a usar fallback da sessao quando a API oscila.
 - Telas de cameras e veiculos passam a manter a ultima atualizacao valida em modo degradado.
+- Tela de dispositivos passa a manter cache com data da ultima sincronizacao e feedback mais claro quando a listagem do servidor oscila.
 
 ### Fixed
 
