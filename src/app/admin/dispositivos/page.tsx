@@ -20,6 +20,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { getApiErrorMessage } from '@/features/http/api-error';
+import { useAuth } from '@/hooks/use-auth';
 import { useProtectedRoute } from '@/hooks/use-protected-route';
 import { devicesService } from '@/services/devices.service';
 import type {
@@ -95,6 +96,54 @@ const initialControlForm: ControlForm = {
   portalId: '',
   personId: '',
 };
+
+function getDeviceCacheKey(condominiumId?: string | null) {
+  return condominiumId ? `admin-devices:${condominiumId}` : 'admin-devices:global';
+}
+
+function readCachedDevices(condominiumId?: string | null): Device[] {
+  if (typeof window === 'undefined') return [];
+
+  try {
+    const raw = window.localStorage.getItem(getDeviceCacheKey(condominiumId));
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed) ? (parsed as Device[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function persistCachedDevices(condominiumId: string | null | undefined, devices: Device[]) {
+  if (typeof window === 'undefined') return;
+
+  try {
+    window.localStorage.setItem(getDeviceCacheKey(condominiumId), JSON.stringify(devices));
+  } catch {
+    // Ignore cache failures and keep normal page flow.
+  }
+}
+
+function mergeDeviceList(devices: Device[], nextDevice: Device) {
+  if (!nextDevice?.id) return devices;
+
+  const nextIndex = devices.findIndex((device) => device.id === nextDevice.id);
+  if (nextIndex === -1) {
+    return [nextDevice, ...devices];
+  }
+
+  const nextDevices = [...devices];
+  nextDevices[nextIndex] = nextDevice;
+  return nextDevices;
+}
+
+function updateDeviceStatus(devices: Device[], deviceId: string, status: DeviceStatus) {
+  return devices.map((device) => (device.id === deviceId ? { ...device, status } : device));
+}
+
+function shouldPreserveDevices(currentDevices: Device[], nextDevices: Device[]) {
+  return currentDevices.length > 0 && nextDevices.length === 0;
+}
 
 const deviceTypeOptions: Array<{ value: DeviceType; label: string }> = [
   { value: 'FACIAL_DEVICE', label: 'Dispositivo facial' },
@@ -189,6 +238,7 @@ function formFromDevice(device: Device): DeviceForm {
 
 export default function AdminDevicesPage() {
   const { isChecking, canAccess } = useProtectedRoute({ allowedRoles: ['ADMIN', 'MASTER'] });
+  const { user } = useAuth();
   const [allDevices, setAllDevices] = useState<Device[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -203,6 +253,7 @@ export default function AdminDevicesPage() {
 
   const devices = useMemo(() => allDevices.filter((device) => !isCameraOnlyDevice(device)), [allDevices]);
   const hiddenCameraCount = allDevices.length - devices.length;
+  const scopedCondominiumId = user?.condominiumId ?? user?.condominiumIds?.[0] ?? null;
 
   const filteredDevices = useMemo(() => {
     const normalized = search.trim().toLowerCase();
@@ -225,11 +276,20 @@ export default function AdminDevicesPage() {
   const onlineCount = devices.filter((device) => device.status === 'ONLINE').length;
   const commandReadyCount = devices.filter((device) => device.host || device.remoteAccessConfig).length;
 
-  async function loadDevices() {
+  async function loadDevices(options?: { preserveExistingOnEmpty?: boolean }) {
     setLoading(true);
     setError(null);
     try {
-      setAllDevices(await devicesService.list());
+      const nextDevices = await devicesService.list({ condominiumId: scopedCondominiumId });
+      setAllDevices((currentDevices) => {
+        if (options?.preserveExistingOnEmpty && shouldPreserveDevices(currentDevices, nextDevices)) {
+          persistCachedDevices(scopedCondominiumId, currentDevices);
+          return currentDevices;
+        }
+
+        persistCachedDevices(scopedCondominiumId, nextDevices);
+        return nextDevices;
+      });
     } catch (loadError) {
       setError(getErrorMessage(loadError, 'Não foi possível carregar os dispositivos.'));
     } finally {
@@ -239,8 +299,13 @@ export default function AdminDevicesPage() {
 
   useEffect(() => {
     if (!canAccess) return;
+    const cachedDevices = readCachedDevices(scopedCondominiumId);
+    if (cachedDevices.length > 0) {
+      setAllDevices(cachedDevices);
+      setLoading(false);
+    }
     void loadDevices();
-  }, [canAccess]);
+  }, [canAccess, scopedCondominiumId]);
 
   function openCreateModal() {
     setSelectedDevice(null);
@@ -286,15 +351,21 @@ export default function AdminDevicesPage() {
       }
 
       if (selectedDevice) {
-        await devicesService.update(selectedDevice.id, buildPayload(form));
+        const updatedDevice = await devicesService.update(selectedDevice.id, buildPayload(form));
+        const nextDevices = mergeDeviceList(allDevices, updatedDevice);
+        setAllDevices(nextDevices);
+        persistCachedDevices(scopedCondominiumId, nextDevices);
         setMessage('Dispositivo atualizado.');
       } else {
-        await devicesService.create(buildPayload(form));
+        const createdDevice = await devicesService.create(buildPayload(form));
+        const nextDevices = mergeDeviceList(allDevices, createdDevice);
+        setAllDevices(nextDevices);
+        persistCachedDevices(scopedCondominiumId, nextDevices);
         setMessage('Dispositivo cadastrado.');
       }
 
       setModal(null);
-      await loadDevices();
+      void loadDevices({ preserveExistingOnEmpty: true });
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : getErrorMessage(saveError, 'Não foi possível salvar o dispositivo.'));
     } finally {
@@ -308,8 +379,22 @@ export default function AdminDevicesPage() {
     setMessage(null);
     try {
       await action();
+      if (selectedDevice) {
+        const nextStatus =
+          label === 'test' || label === 'online'
+            ? 'ONLINE'
+            : label === 'offline'
+              ? 'OFFLINE'
+              : null;
+
+        if (nextStatus) {
+          const nextDevices = updateDeviceStatus(allDevices, selectedDevice.id, nextStatus);
+          setAllDevices(nextDevices);
+          persistCachedDevices(scopedCondominiumId, nextDevices);
+        }
+      }
       setMessage('Comando enviado com sucesso.');
-      await loadDevices();
+      void loadDevices({ preserveExistingOnEmpty: true });
     } catch (actionError) {
       setError(getErrorMessage(actionError, 'Não foi possível executar o comando.'));
     } finally {
@@ -340,7 +425,7 @@ export default function AdminDevicesPage() {
             </div>
 
             <div className="flex flex-wrap gap-3">
-              <Button type="button" variant="secondary" onClick={loadDevices} disabled={loading}>
+              <Button type="button" variant="secondary" onClick={() => void loadDevices()} disabled={loading}>
                 <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
                 Atualizar
               </Button>
@@ -502,11 +587,25 @@ export default function AdminDevicesPage() {
             </label>
             <label className="space-y-1 text-sm text-slate-300">
               Usuário
-              <Input value={form.username} onChange={(event) => setForm({ ...form, username: event.target.value })} className="border-white/10 bg-slate-900 text-white" />
+              <Input
+                value={form.username}
+                onChange={(event) => setForm({ ...form, username: event.target.value })}
+                className="border-white/10 bg-slate-900 text-white"
+                autoComplete="off"
+                name="device-username"
+              />
             </label>
             <label className="space-y-1 text-sm text-slate-300">
               Senha do equipamento
-              <Input type="password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} placeholder={selectedDevice ? 'Deixe em branco para manter' : ''} className="border-white/10 bg-slate-900 text-white" />
+              <Input
+                type="password"
+                value={form.password}
+                onChange={(event) => setForm({ ...form, password: event.target.value })}
+                placeholder={selectedDevice ? 'Deixe em branco para manter' : ''}
+                className="border-white/10 bg-slate-900 text-white"
+                autoComplete="new-password"
+                name="device-password"
+              />
             </label>
           </div>
 

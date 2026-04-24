@@ -52,7 +52,13 @@ api.interceptors.response.use(
         authState.clearSession();
 
         if (typeof window !== 'undefined') {
-          window.location.href = '/login';
+          try {
+            window.sessionStorage.setItem('login_flash_message', 'Sua sessão expirou. Entre novamente.');
+          } catch {
+            // Ignore storage failures and keep redirect flow.
+          }
+
+          window.location.href = '/login?motivo=sessao-expirada';
         }
       }
     }

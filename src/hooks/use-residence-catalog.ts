@@ -29,6 +29,41 @@ function parseStreetStructure(name: string | null | undefined) {
   return { type: 'STREET' as const, label: raw };
 }
 
+function buildSessionCondominiums(user: ReturnType<typeof useAuth>['user']) {
+  const ids = [user?.condominiumId, ...(user?.condominiumIds ?? [])]
+    .filter(Boolean)
+    .map((value) => String(value));
+
+  return ids.map((id, index) => ({
+    id,
+    name: user?.selectedUnitName?.trim() || `Condomínio ${index + 1}`,
+  })) as Condominium[];
+}
+
+function buildSessionUnits(user: ReturnType<typeof useAuth>['user'], condominiums: Condominium[]) {
+  const unitIds = user?.unitIds ?? [];
+  const unitNames = user?.unitNames ?? [];
+  const condominiumId = user?.condominiumId ?? condominiums[0]?.id ?? null;
+  const condominium =
+    condominiums.find((item) => item.id === condominiumId) ??
+    (condominiumId ? { id: condominiumId, name: user?.selectedUnitName?.trim() || 'Condomínio' } : null);
+
+  return unitIds
+    .filter(Boolean)
+    .map((id, index) => ({
+      id,
+      label: unitNames[index]?.trim() || `Unidade ${index + 1}`,
+      condominiumId,
+      condominiumName: condominium?.name ?? null,
+      condominium,
+      structureType: null,
+      structureLabel: null,
+      structure: null,
+      streetId: null,
+      legacyUnitId: null,
+    })) as Unit[];
+}
+
 export function useResidenceCatalog(enabled = true, condominiumId?: string) {
   const { user } = useAuth();
   const isResident = user?.role === 'MORADOR';
@@ -82,10 +117,21 @@ export function useResidenceCatalog(enabled = true, condominiumId?: string) {
     ],
   });
 
-  const condominiums = useMemo(() => condominiumsQuery.data ?? [], [condominiumsQuery.data]);
+  const sessionCondominiums = useMemo(() => buildSessionCondominiums(user), [user]);
+  const sessionUnits = useMemo(
+    () => buildSessionUnits(user, sessionCondominiums),
+    [sessionCondominiums, user]
+  );
+  const condominiums = useMemo(() => {
+    if ((condominiumsQuery.data?.length ?? 0) > 0) {
+      return condominiumsQuery.data ?? [];
+    }
+
+    return sessionCondominiums;
+  }, [condominiumsQuery.data, sessionCondominiums]);
   const streets = useMemo(() => streetsQuery.data ?? [], [streetsQuery.data]);
   const units = useMemo(() => {
-    const rawUnits = unitsQuery.data ?? [];
+    const rawUnits = (unitsQuery.data?.length ?? 0) > 0 ? unitsQuery.data ?? [] : sessionUnits;
 
     return rawUnits.map((unit) => {
       const street =
@@ -112,7 +158,7 @@ export function useResidenceCatalog(enabled = true, condominiumId?: string) {
             : null),
       };
     });
-  }, [condominiums, streets, unitsQuery.data]);
+  }, [condominiums, sessionUnits, streets, unitsQuery.data]);
 
   return {
     condominiums,

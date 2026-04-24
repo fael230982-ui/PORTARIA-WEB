@@ -10,6 +10,7 @@ import {
   getPreferredImageStreamUrl,
   getPreferredSnapshotUrl,
   getPreferredVideoStreamUrl,
+  getPreferredWebRtcUrl,
   isRtspUrl,
 } from '@/features/cameras/camera-media';
 import type { Camera as CameraRecord } from '@/types/camera';
@@ -44,9 +45,11 @@ export function CameraFeed({
   const { data: streamingData, error: streamingError } = useCameraStreaming(camera?.id, Boolean(camera?.id) && preferStreaming);
   const previewMode = getCameraPreviewMode(camera, streamingData);
   const videoStreamUrl = getPreferredVideoStreamUrl(camera, streamingData);
+  const webRtcUrl = getPreferredWebRtcUrl(camera, streamingData);
   const imageStreamUrl = getPreferredImageStreamUrl(camera, streamingData);
   const snapshotUrl = getPreferredSnapshotUrl(camera, streamingData);
   const hasOnlyRtsp = Boolean(camera?.streamUrl) && isRtspUrl(camera?.streamUrl) && !videoStreamUrl && !imageStreamUrl && !snapshotUrl;
+  const hasOnlyWebRtc = Boolean(webRtcUrl) && !videoStreamUrl && !imageStreamUrl && !snapshotUrl;
   const mediaKey = `${camera?.id ?? 'none'}|${videoStreamUrl ?? ''}|${imageStreamUrl ?? ''}|${snapshotUrl ?? ''}`;
   const [failedVideoMediaKey, setFailedVideoMediaKey] = useState<string | null>(null);
   const [failedImageMediaKey, setFailedImageMediaKey] = useState<string | null>(null);
@@ -256,6 +259,11 @@ export function CameraFeed({
         {hasOnlyRtsp ? (
           <p className="mx-auto mt-3 max-w-md text-xs text-amber-200">
             {'A câmera foi cadastrada com RTSP. Para aparecer imagem aqui, o sistema precisa converter essa câmera para visualização no navegador.'}
+          </p>
+        ) : null}
+        {hasOnlyWebRtc ? (
+          <p className="mx-auto mt-3 max-w-md text-xs text-sky-200">
+            {'Esta cÃ¢mera informou webRtcUrl. O player padrÃ£o usa liveUrl ou hlsUrl para reproduÃ§Ã£o principal, entÃ£o valide esse contrato com o backend.'}
           </p>
         ) : null}
         {streamingError && !compactErrors ? (

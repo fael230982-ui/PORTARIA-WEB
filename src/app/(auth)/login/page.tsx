@@ -45,6 +45,18 @@ export default function LoginPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     setResetToken(params.get('token') ?? params.get('resetToken') ?? '');
+    const motivo = params.get('motivo') ?? '';
+    const flashMessage = window.sessionStorage.getItem('login_flash_message');
+
+    if (flashMessage) {
+      setError(flashMessage);
+      window.sessionStorage.removeItem('login_flash_message');
+      return;
+    }
+
+    if (motivo === 'sessao-expirada') {
+      setError('Sua sessão expirou. Entre novamente.');
+    }
   }, []);
 
   useEffect(() => {

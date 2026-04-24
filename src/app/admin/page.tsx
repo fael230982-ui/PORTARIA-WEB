@@ -2,30 +2,28 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { AlertsPanel } from '@/components/alerts/alerts-panel';
-import { getPersonStatusBadgeClass } from '@/features/people/status-badges';
 import { useOfflineOperationQueue } from '@/hooks/use-offline-operation-queue';
 import { useProtectedRoute } from '@/hooks/use-protected-route';
+import { useAccessLogs } from '@/hooks/use-access-logs';
 import { useAllPeople } from '@/hooks/use-people';
 import { useAlerts } from '@/hooks/use-alerts';
 import { useCameras } from '@/hooks/use-cameras';
 import { useAllDeliveries } from '@/hooks/use-deliveries';
 import { useVehicles } from '@/hooks/use-vehicles';
+import { devicesService } from '@/services/devices.service';
 import { normalizeDeliveryStatus } from '@/features/deliveries/delivery-normalizers';
-import { maskEmail } from '@/features/legal/data-masking';
-import { getCondominiumEnabledModules, getCurrentCondominium } from '@/features/condominiums/condominium-contract';
-import { brandClasses } from '@/config/brand-classes';
 import type { Alert } from '@/types/alert';
 import type { Camera } from '@/types/camera';
+import type { Device } from '@/types/device';
 import type { Person } from '@/types/person';
 import type { Vehicle } from '@/types/vehicle';
-import { useResidenceCatalog } from '@/hooks/use-residence-catalog';
+const ADMIN_MONITOR_MODE_KEY = 'admin-dashboard-monitor-mode';
 
 type AdminSnapshotCache = {
   people: Person[];
   alerts: Alert[];
   cameras: Camera[];
-  deliveries: Array<{ id: string; status: string }>;
+  deliveries: Array<{ id: string; status: string; createdAt?: string | null; receivedAt?: string | null }>;
   vehicles: Vehicle[];
   cachedAt: string | null;
 };
@@ -61,7 +59,14 @@ function readAdminSnapshot(userId?: string | null): AdminSnapshotCache {
       people: Array.isArray(parsed.people) ? parsed.people : [],
       alerts: Array.isArray(parsed.alerts) ? parsed.alerts : [],
       cameras: Array.isArray(parsed.cameras) ? parsed.cameras : [],
-      deliveries: Array.isArray(parsed.deliveries) ? parsed.deliveries : [],
+      deliveries: Array.isArray(parsed.deliveries)
+        ? parsed.deliveries.map((delivery) => ({
+            id: String(delivery?.id ?? ''),
+            status: String(delivery?.status ?? ''),
+            createdAt: typeof delivery?.createdAt === 'string' ? delivery.createdAt : null,
+            receivedAt: typeof delivery?.receivedAt === 'string' ? delivery.receivedAt : null,
+          }))
+        : [],
       vehicles: Array.isArray(parsed.vehicles) ? parsed.vehicles : [],
       cachedAt: typeof parsed.cachedAt === 'string' ? parsed.cachedAt : null,
     };
@@ -133,7 +138,7 @@ function buildAdminSnapshot(params: {
   people: Person[];
   alerts: Alert[];
   cameras: Camera[];
-  deliveries: Array<{ id: string; status: string }>;
+  deliveries: Array<{ id: string; status: string; createdAt?: string | null; receivedAt?: string | null }>;
   vehicles: Vehicle[];
 }): AdminSnapshotCache {
   return {
@@ -143,6 +148,8 @@ function buildAdminSnapshot(params: {
     deliveries: params.deliveries.slice(0, 40).map((delivery) => ({
       id: delivery.id,
       status: delivery.status,
+      createdAt: delivery.createdAt ?? null,
+      receivedAt: delivery.receivedAt ?? null,
     })),
     vehicles: sanitizeSnapshotVehicles(params.vehicles),
     cachedAt: new Date().toISOString(),
@@ -183,67 +190,276 @@ function persistAdminSnapshot(userId: string, snapshot: AdminSnapshotCache) {
   }
 }
 
-function getPersonCategoryLabel(category?: string | null, categoryLabel?: string | null) {
-  if (categoryLabel && categoryLabel !== category) return categoryLabel;
-
-  switch (category) {
-    case 'RESIDENT':
-      return 'Morador';
-    case 'VISITOR':
-      return 'Visitante';
-    case 'SERVICE_PROVIDER':
-      return 'Prestador';
-    case 'DELIVERER':
-      return 'Entregador';
-    case 'RENTER':
-      return 'Locatário';
-    default:
-      return category || 'Pessoa';
-  }
+function toTimestamp(value?: string | null) {
+  if (!value) return null;
+  const parsed = new Date(value).getTime();
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
-function getCameraStatusLabel(status?: string | null) {
-  return String(status ?? '').toLowerCase() === 'online' ? 'Online' : 'Offline';
+function isWithinDays(value?: string | null, days = 1) {
+  const timestamp = toTimestamp(value);
+  if (!timestamp) return false;
+  const now = Date.now();
+  return timestamp >= now - days * 24 * 60 * 60 * 1000;
+}
+
+function countWithinWindow<T>(items: T[], getDate: (item: T) => string | null | undefined, days: number) {
+  return items.filter((item) => isWithinDays(getDate(item), days)).length;
+}
+
+function countPreviousWindow<T>(items: T[], getDate: (item: T) => string | null | undefined, days: number) {
+  const now = Date.now();
+  const currentWindowStart = now - days * 24 * 60 * 60 * 1000;
+  const previousWindowStart = now - days * 2 * 24 * 60 * 60 * 1000;
+
+  return items.filter((item) => {
+    const timestamp = toTimestamp(getDate(item));
+    if (!timestamp) return false;
+    return timestamp >= previousWindowStart && timestamp < currentWindowStart;
+  }).length;
+}
+
+function formatDelta(current: number, previous: number) {
+  if (previous === 0 && current === 0) return 'Sem variação';
+  if (previous === 0) return `+${current}`;
+
+  const delta = Math.round(((current - previous) / previous) * 100);
+  if (delta === 0) return 'Estável';
+  return `${delta > 0 ? '+' : ''}${delta}%`;
+}
+
+function groupTopEntries(source: Record<string, number> | Array<{ label: string; value: number }>, limit = 5) {
+  const items = Array.isArray(source)
+    ? source
+    : Object.entries(source).map(([label, value]) => ({ label, value }));
+
+  return items
+    .filter((item) => item.label && item.value > 0)
+    .sort((a, b) => b.value - a.value)
+    .slice(0, limit);
 }
 
 type StatCardProps = {
   label: string;
   value: string;
   helper: string;
+  onClick?: (() => void) | null;
 };
 
-function StatCard({ label, value, helper }: StatCardProps) {
-  return (
-    <div className="rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur">
+function StatCard({ label, value, helper, onClick }: StatCardProps) {
+  const content = (
+    <>
       <p className="text-sm text-slate-300">{label}</p>
       <p className="mt-2 text-center text-3xl font-semibold tabular-nums text-white">{value}</p>
-      <p className="mt-2 text-xs text-slate-400 text-justify">{helper}</p>
+      <p className="mt-2 text-center text-xs text-slate-400">{helper}</p>
+    </>
+  );
+
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className="rounded-2xl border border-white/10 bg-white/5 p-4 text-left backdrop-blur transition hover:bg-white/10"
+      >
+        {content}
+      </button>
+    );
+  }
+
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur">
+      {content}
     </div>
   );
 }
 
-type EmptyStateProps = {
-  title: string;
-  description: string;
+type InsightCardProps = {
+  label: string;
+  value: string;
+  helper: string;
+  period: string;
+  tone?: 'default' | 'accent' | 'success' | 'warning';
+  onClick?: (() => void) | null;
 };
 
-function EmptyState({ title, description }: EmptyStateProps) {
-  return (
-    <div className="rounded-2xl border border-dashed border-white/10 bg-white/5 p-6 text-center">
-      <h3 className="text-base font-medium text-white">{title}</h3>
-      <p className="mt-2 text-sm text-slate-400 text-justify">{description}</p>
-    </div>
+function InsightCard({ label, value, helper, period, tone = 'default', onClick }: InsightCardProps) {
+  const toneClasses =
+    tone === 'accent'
+      ? 'border-cyan-400/30 bg-cyan-400/10'
+      : tone === 'success'
+        ? 'border-emerald-400/30 bg-emerald-400/10'
+        : tone === 'warning'
+          ? 'border-amber-400/30 bg-amber-400/10'
+          : 'border-white/10 bg-white/5';
+
+  const content = (
+    <>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs uppercase tracking-[0.18em] text-slate-400">{period}</p>
+          <h3 className="mt-2 text-base font-medium text-white">{label}</h3>
+        </div>
+        <span className="rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-[11px] text-slate-300">
+          Abrir
+        </span>
+      </div>
+      <p className="mt-5 text-center text-4xl font-semibold tabular-nums text-white">{value}</p>
+      <p className="mt-3 text-center text-sm text-slate-300">{helper}</p>
+    </>
   );
+
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className={`rounded-3xl border p-5 text-left backdrop-blur transition hover:bg-white/10 ${toneClasses}`}
+      >
+        {content}
+      </button>
+    );
+  }
+
+  return <div className={`rounded-3xl border p-5 backdrop-blur ${toneClasses}`}>{content}</div>;
+}
+
+type PeriodFilterProps = {
+  active: number;
+  label: string;
+  value: number;
+  onSelect: (value: number) => void;
+};
+
+function PeriodFilter({ active, label, value, onSelect }: PeriodFilterProps) {
+  const selected = active === value;
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(value)}
+      className={`rounded-full px-3 py-2 text-xs font-medium transition ${
+        selected
+          ? 'bg-cyan-400 text-slate-950'
+          : 'border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
+
+type MetricTileProps = {
+  label: string;
+  value: string;
+  delta: string;
+  helper: string;
+  tone?: 'neutral' | 'cyan' | 'emerald' | 'amber';
+  onClick?: (() => void) | null;
+  highlight?: boolean;
+};
+
+function MetricTile({ label, value, delta, helper, tone = 'neutral', onClick, highlight = false }: MetricTileProps) {
+  const toneClass =
+    tone === 'cyan'
+      ? 'border-cyan-400/25 bg-cyan-400/10'
+      : tone === 'emerald'
+        ? 'border-emerald-400/25 bg-emerald-400/10'
+        : tone === 'amber'
+          ? 'border-amber-400/25 bg-amber-400/10'
+          : 'border-white/10 bg-white/5';
+
+  const content = (
+    <>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm text-slate-300">{label}</p>
+        <span className="rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-[11px] text-slate-300">
+          {delta}
+        </span>
+      </div>
+      <p className="mt-3 text-center text-4xl font-semibold tabular-nums text-white">{value}</p>
+      <p className="mt-2 text-center text-xs text-slate-400">{helper}</p>
+    </>
+  );
+
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className={`rounded-3xl border p-4 text-left transition hover:bg-white/10 ${toneClass} ${highlight ? 'ring-2 ring-cyan-300/70 shadow-[0_0_30px_rgba(34,211,238,0.22)]' : ''}`}
+      >
+        {content}
+      </button>
+    );
+  }
+
+  return <div className={`rounded-3xl border p-4 ${toneClass} ${highlight ? 'ring-2 ring-cyan-300/70 shadow-[0_0_30px_rgba(34,211,238,0.22)]' : ''}`}>{content}</div>;
+}
+
+type ComparisonBarProps = {
+  label: string;
+  value: number;
+  total: number;
+  helper: string;
+  tone?: 'cyan' | 'emerald' | 'amber' | 'slate';
+  onClick?: (() => void) | null;
+  highlight?: boolean;
+};
+
+function ComparisonBar({ label, value, total, helper, tone = 'slate', onClick, highlight = false }: ComparisonBarProps) {
+  const width = total > 0 ? Math.max((value / total) * 100, value > 0 ? 6 : 0) : 0;
+  const barClass =
+    tone === 'cyan'
+      ? 'bg-cyan-400'
+      : tone === 'emerald'
+        ? 'bg-emerald-400'
+        : tone === 'amber'
+          ? 'bg-amber-400'
+          : 'bg-slate-300';
+
+  const content = (
+    <>
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-medium text-white">{label}</p>
+          <p className="text-xs text-slate-400">{helper}</p>
+        </div>
+        <p className="text-2xl font-semibold tabular-nums text-white">{value}</p>
+      </div>
+      <div className="mt-3 h-2 rounded-full bg-white/10">
+        <div className={`h-2 rounded-full ${barClass}`} style={{ width: `${Math.min(width, 100)}%` }} />
+      </div>
+    </>
+  );
+
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className={`rounded-2xl border border-white/10 bg-white/5 p-4 text-left transition hover:bg-white/10 ${highlight ? 'ring-2 ring-cyan-300/70 shadow-[0_0_24px_rgba(34,211,238,0.18)]' : ''}`}
+      >
+        {content}
+      </button>
+    );
+  }
+
+  return <div className={`rounded-2xl border border-white/10 bg-white/5 p-4 ${highlight ? 'ring-2 ring-cyan-300/70 shadow-[0_0_24px_rgba(34,211,238,0.18)]' : ''}`}>{content}</div>;
 }
 
 export default function AdminPage() {
   const router = useRouter();
+  const [selectedWindow, setSelectedWindow] = useState(7);
+  const [devices, setDevices] = useState<Device[]>([]);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [monitorMode, setMonitorMode] = useState(false);
+  const [highlightedKeys, setHighlightedKeys] = useState<string[]>([]);
+  const dashboardRef = useRef<HTMLDivElement | null>(null);
+  const previousMetricsRef = useRef<Record<string, number> | null>(null);
   const { user, canAccess, isChecking } = useProtectedRoute({
     allowedRoles: ['ADMIN'],
   });
-  const [peopleCategoryFilter, setPeopleCategoryFilter] = useState('all');
   const snapshotSignatureRef = useRef(getAdminSnapshotSignature(EMPTY_ADMIN_SNAPSHOT));
-  const { condominiums } = useResidenceCatalog(Boolean(user), user?.condominiumId ?? undefined);
   const {
     pendingCount: offlinePendingCount,
     failedCount: offlineFailedCount,
@@ -255,21 +471,18 @@ export default function AdminPage() {
   const {
     data: peopleData,
     isLoading: peopleLoading,
-    error: peopleError,
     refetch: refetchPeople,
   } = useAllPeople({ limit: 100 });
 
   const {
     data: alertsData,
     isLoading: alertsLoading,
-    error: alertsError,
     refetch: refetchAlerts,
   } = useAlerts({ limit: 20 });
 
   const {
     data: camerasData,
     isLoading: camerasLoading,
-    error: camerasError,
     refetch: refetchCameras,
   } = useCameras();
   const {
@@ -282,6 +495,11 @@ export default function AdminPage() {
     isLoading: vehiclesLoading,
     refetch: refetchVehicles,
   } = useVehicles(Boolean(user));
+  const { data: accessLogsData, isLoading: accessLogsLoading, refetch: refetchAccessLogs } = useAccessLogs({
+    limit: 100,
+    result: 'ALLOWED',
+    enabled: Boolean(user),
+  });
   const snapshotCache = useMemo(() => readAdminSnapshot(user?.id ?? null), [user?.id]);
 
   const people = peopleData?.data?.length ? peopleData.data : !isOnline ? snapshotCache.people : peopleData?.data ?? [];
@@ -289,20 +507,6 @@ export default function AdminPage() {
   const cameras = camerasData?.data?.length ? camerasData.data : !isOnline ? snapshotCache.cameras : camerasData?.data ?? [];
   const deliveries = (deliveriesData?.data ?? []).length ? deliveriesData?.data ?? [] : !isOnline ? snapshotCache.deliveries : [];
   const vehicles = (vehiclesData?.data ?? []).length ? vehiclesData?.data ?? [] : !isOnline ? snapshotCache.vehicles : [];
-  const peopleCategories = useMemo(
-    () =>
-      Array.from(new Set(people.map((person) => person.category).filter(Boolean))).sort((a, b) =>
-        getPersonCategoryLabel(a).localeCompare(getPersonCategoryLabel(b), 'pt-BR')
-      ),
-    [people]
-  );
-  const filteredPeople = useMemo(
-    () =>
-      peopleCategoryFilter === 'all'
-        ? people
-        : people.filter((person) => person.category === peopleCategoryFilter),
-    [people, peopleCategoryFilter]
-  );
   const peopleByCategory = useMemo(
     () =>
       people.reduce<Record<string, number>>((acc, person) => {
@@ -314,9 +518,6 @@ export default function AdminPage() {
   );
   const pendingDeliveries = deliveries.filter((delivery) => normalizeDeliveryStatus(delivery.status) !== 'WITHDRAWN');
   const blockedVehicles = vehicles.filter((vehicle) => vehicle.status === 'bloqueado');
-  const currentCondominium = getCurrentCondominium(condominiums, user?.condominiumId);
-  const enabledModules = getCondominiumEnabledModules(currentCondominium);
-  const residentManagementFlags = Object.entries(currentCondominium?.residentManagementSettings ?? {}).filter(([, value]) => Boolean(value)).length;
 
   const activePeople = people.filter((item: Person) => {
     const status = String(item.status).toLowerCase();
@@ -332,9 +533,99 @@ export default function AdminPage() {
     const status = String(item.status).toLowerCase();
     return status === 'online' || status === 'ativo' || status === 'active';
   });
+  const accessLogs = accessLogsData?.data ?? [];
+  const accessDevices = devices.filter((item) => item.type !== 'CAMERA' && item.type !== 'CAMERA_IA');
+  const onlineDevices = accessDevices.filter((item) => item.status === 'ONLINE').length;
+  const offlineCameras = Math.max(cameras.length - onlineCameras.length, 0);
+  const unreadAlerts = alerts.filter((item: Alert) => String(item.status).toLowerCase() === 'unread').length;
+  const residentsCount = peopleByCategory.RESIDENT ?? 0;
+  const visitorsCount = peopleByCategory.VISITOR ?? 0;
+  const serviceProvidersCount = peopleByCategory.SERVICE_PROVIDER ?? 0;
+  const rentersCount = peopleByCategory.RENTER ?? 0;
+  const peopleInWindow = countWithinWindow(people, (item) => item.createdAt, selectedWindow);
+  const previousPeopleInWindow = countPreviousWindow(people, (item) => item.createdAt, selectedWindow);
+  const accessesInWindow = countWithinWindow(accessLogs, (item) => item.timestamp, selectedWindow);
+  const previousAccessesInWindow = countPreviousWindow(accessLogs, (item) => item.timestamp, selectedWindow);
+  const alertsInWindow = countWithinWindow(alerts, (item) => item.timestamp, selectedWindow);
+  const previousAlertsInWindow = countPreviousWindow(alerts, (item) => item.timestamp, selectedWindow);
+  const deliveriesInWindow = countWithinWindow(deliveries, (item) => item.receivedAt ?? item.createdAt, selectedWindow);
+  const previousDeliveriesInWindow = countPreviousWindow(deliveries, (item) => item.receivedAt ?? item.createdAt, selectedWindow);
+  const vehiclesInWindow = countWithinWindow(vehicles, (item) => item.createdAt, selectedWindow);
+  const previousVehiclesInWindow = countPreviousWindow(vehicles, (item) => item.createdAt, selectedWindow);
+  const totalOperationalBase = Math.max(
+    openAlerts.length,
+    pendingDeliveries.length,
+    people.length,
+    vehicles.length,
+    cameras.length
+  );
+  const rankingAlertsToday = groupTopEntries(
+    alerts
+      .filter((item) => isWithinDays(item.timestamp, 1))
+      .reduce<Record<string, number>>((acc, item) => {
+        const key = item.location?.trim() || 'Sem local informado';
+        acc[key] = (acc[key] ?? 0) + 1;
+        return acc;
+      }, {}),
+    5
+  );
+  const rankingAccessToday = groupTopEntries(
+    accessLogs
+      .filter((item) => isWithinDays(item.timestamp, 1))
+      .reduce<Record<string, number>>((acc, item) => {
+        const key = item.location?.trim() || item.personName?.trim() || 'Sem referência';
+        acc[key] = (acc[key] ?? 0) + 1;
+        return acc;
+      }, {}),
+    5
+  );
+  const rankingDeliveriesToday = groupTopEntries(
+    deliveries
+      .filter((item) => isWithinDays(item.receivedAt ?? item.createdAt, 1))
+      .reduce<Record<string, number>>((acc, item) => {
+        const deliveryUnit = item as { recipientUnitName?: string | null; unitLabel?: string | null };
+        const key = deliveryUnit.recipientUnitName?.trim() || deliveryUnit.unitLabel?.trim() || 'Unidade não informada';
+        acc[key] = (acc[key] ?? 0) + 1;
+        return acc;
+      }, {}),
+    5
+  );
+  const trackedMetricValues = useMemo(
+    () => ({
+      cadastros: peopleInWindow,
+      acessos: accessesInWindow,
+      alertas: alertsInWindow,
+      encomendas: deliveriesInWindow,
+      pessoas: people.length,
+      alertas_abertos: openAlerts.length,
+      encomendas_pendentes: pendingDeliveries.length,
+      cameras_offline: offlineCameras,
+      dispositivos_offline: Math.max(accessDevices.length - onlineDevices, 0),
+    }),
+    [accessDevices.length, accessesInWindow, alertsInWindow, deliveriesInWindow, offlineCameras, onlineDevices, openAlerts.length, pendingDeliveries.length, people.length, peopleInWindow]
+  );
 
   useEffect(() => {
     if (!user) return;
+
+    let active = true;
+
+    const loadDevices = async () => {
+      try {
+        const data = await devicesService.list({
+          condominiumId: user.condominiumId ?? undefined,
+        });
+        if (active) {
+          setDevices(Array.isArray(data) ? data : []);
+        }
+      } catch {
+        if (active) {
+          setDevices([]);
+        }
+      }
+    };
+
+    void loadDevices();
 
     const timer = window.setInterval(() => {
       void refetchPeople();
@@ -342,10 +633,66 @@ export default function AdminPage() {
       void refetchCameras();
       void refetchDeliveries();
       void refetchVehicles();
+      void refetchAccessLogs();
+      void loadDevices();
     }, 15000);
 
-    return () => window.clearInterval(timer);
-  }, [refetchAlerts, refetchCameras, refetchDeliveries, refetchPeople, refetchVehicles, user]);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [refetchAccessLogs, refetchAlerts, refetchCameras, refetchDeliveries, refetchPeople, refetchVehicles, user]);
+
+  useEffect(() => {
+    const syncFullscreenState = () => {
+      setIsFullscreen(Boolean(document.fullscreenElement));
+    };
+
+    document.addEventListener('fullscreenchange', syncFullscreenState);
+    return () => {
+      document.removeEventListener('fullscreenchange', syncFullscreenState);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const syncMonitorMode = () => {
+      setMonitorMode(window.localStorage.getItem(ADMIN_MONITOR_MODE_KEY) === 'true');
+    };
+
+    syncMonitorMode();
+    window.addEventListener('storage', syncMonitorMode);
+    window.addEventListener('admin-monitor-mode-change', syncMonitorMode as EventListener);
+
+    return () => {
+      window.removeEventListener('storage', syncMonitorMode);
+      window.removeEventListener('admin-monitor-mode-change', syncMonitorMode as EventListener);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!previousMetricsRef.current) {
+      previousMetricsRef.current = trackedMetricValues;
+      return;
+    }
+
+    const changedKeys = Object.entries(trackedMetricValues)
+      .filter(([key, value]) => previousMetricsRef.current?.[key] !== value)
+      .map(([key]) => key);
+
+    if (changedKeys.length) {
+      setHighlightedKeys(changedKeys);
+      const timeout = window.setTimeout(() => {
+        setHighlightedKeys((current) => current.filter((key) => !changedKeys.includes(key)));
+      }, 3200);
+
+      previousMetricsRef.current = trackedMetricValues;
+      return () => window.clearTimeout(timeout);
+    }
+
+    previousMetricsRef.current = trackedMetricValues;
+  }, [trackedMetricValues]);
 
   useEffect(() => {
     snapshotSignatureRef.current = getAdminSnapshotSignature(snapshotCache);
@@ -389,34 +736,50 @@ export default function AdminPage() {
     return null;
   }
 
+  const pushWithContext = (pathname: string, params?: Record<string, string>) => {
+    const search = new URLSearchParams(params ?? {});
+    router.push(search.size ? `${pathname}?${search.toString()}` : pathname);
+  };
+
+  const toggleMonitorMode = () => {
+    if (typeof window === 'undefined') return;
+    const nextValue = !monitorMode;
+    window.localStorage.setItem(ADMIN_MONITOR_MODE_KEY, String(nextValue));
+    window.dispatchEvent(new Event('admin-monitor-mode-change'));
+    setMonitorMode(nextValue);
+  };
+
+  const exportAsPdf = () => {
+    window.print();
+  };
+
+  const exportAsCsv = () => {
+    const rows = [
+      ['Indicador', 'Valor'],
+      ['Cadastros no período', String(peopleInWindow)],
+      ['Acessos no período', String(accessesInWindow)],
+      ['Alertas no período', String(alertsInWindow)],
+      ['Encomendas no período', String(deliveriesInWindow)],
+      ['Pessoas totais', String(people.length)],
+      ['Alertas abertos', String(openAlerts.length)],
+      ['Encomendas pendentes', String(pendingDeliveries.length)],
+      ['Câmeras online', String(onlineCameras.length)],
+      ['Dispositivos de acesso', String(accessDevices.length)],
+    ];
+
+    const csv = rows.map((row) => row.map((value) => `"${value.replaceAll('"', '""')}"`).join(';')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `painel-admin-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="min-h-screen bg-[#07111f] text-white">
-      <div className="mx-auto max-w-[1600px] space-y-6 p-4 md:p-6">
-        <header className="rounded-3xl border border-white/10 bg-white/5 p-5 shadow-xl backdrop-blur">
-          <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-            <div>
-              <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
-                Painel administrativo
-              </p>
-              <h1 className="mt-2 text-3xl font-semibold text-white">
-                Dashboard do Admin
-              </h1>
-              <p className="mt-2 max-w-3xl text-sm text-slate-300">
-                Visão consolidada para gestão de moradores, alertas, câmeras e operação,
-                com base na API real e pronta para evolução por perfil de usuário.
-              </p>
-            </div>
-
-            <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3">
-              <p className="text-xs text-slate-400">Sessão ativa</p>
-              <p className="mt-1 text-sm font-medium text-white">
-                {user.name}
-              </p>
-              <p className="text-xs text-slate-400">{maskEmail(user.email)}</p>
-            </div>
-          </div>
-        </header>
-
+      <div ref={dashboardRef} className="mx-auto max-w-[1600px] space-y-6 p-4 md:p-6">
         {!isOnline ? (
           <section className="rounded-3xl border border-amber-500/25 bg-amber-500/10 p-4 text-sm text-amber-100">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -438,410 +801,383 @@ export default function AdminPage() {
           </section>
         ) : null}
 
-        <section className="grid gap-4 md:grid-cols-3">
-          <StatCard
-            label="Rede"
-            value={isOnline ? 'Online' : 'Offline'}
-            helper="Conectividade do navegador"
-          />
-          <StatCard
-            label="Fila offline"
-            value={`${offlinePendingCount}`}
-            helper={offlineFailedCount ? `${offlineFailedCount} com falha definitiva` : 'Sem falhas definitivas'}
-          />
-          <StatCard
-            label="Último snapshot"
-            value={snapshotCache.cachedAt ? new Date(snapshotCache.cachedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '--:--'}
-            helper="Base local usada em modo degradado"
-          />
+        <section className="rounded-[2rem] border border-white/10 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.14),transparent_30%),linear-gradient(180deg,rgba(15,23,42,0.94),rgba(2,6,23,0.98))] p-5 shadow-2xl backdrop-blur">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-[0.22em] text-cyan-200/80">Painel analítico</p>
+              <h2 className="mt-2 text-2xl font-semibold text-white">Visão executiva</h2>
+              <p className="mt-2 max-w-3xl text-sm text-slate-300">
+                Uma leitura direta do movimento, da operação e dos pontos que exigem atenção.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <PeriodFilter active={selectedWindow} label="Hoje" value={1} onSelect={setSelectedWindow} />
+              <PeriodFilter active={selectedWindow} label="7 dias" value={7} onSelect={setSelectedWindow} />
+              <PeriodFilter active={selectedWindow} label="30 dias" value={30} onSelect={setSelectedWindow} />
+              <button
+                type="button"
+                onClick={toggleMonitorMode}
+                className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-slate-200 transition hover:bg-white/10"
+              >
+                {monitorMode ? 'Sair do modo monitor' : 'Modo monitor'}
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!document.fullscreenElement) {
+                    await dashboardRef.current?.requestFullscreen();
+                    return;
+                  }
+
+                  await document.exitFullscreen();
+                }}
+                className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-slate-200 transition hover:bg-white/10"
+              >
+                {isFullscreen ? 'Sair da tela cheia' : 'Tela cheia'}
+              </button>
+              <button
+                type="button"
+                onClick={exportAsPdf}
+                className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-slate-200 transition hover:bg-white/10"
+              >
+                Exportar PDF
+              </button>
+              <button
+                type="button"
+                onClick={exportAsCsv}
+                className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-slate-200 transition hover:bg-white/10"
+              >
+                Exportar CSV
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <MetricTile
+              label="Cadastros"
+              value={peopleLoading ? '...' : String(peopleInWindow)}
+              delta={formatDelta(peopleInWindow, previousPeopleInWindow)}
+              helper={`Novos registros em ${selectedWindow === 1 ? '1 dia' : `${selectedWindow} dias`}`}
+              tone="cyan"
+              highlight={highlightedKeys.includes('cadastros')}
+              onClick={() => {
+                pushWithContext('/admin/moradores', { metric: 'cadastros', period: String(selectedWindow) });
+              }}
+            />
+            <MetricTile
+              label="Acessos"
+              value={accessLogsLoading ? '...' : String(accessesInWindow)}
+              delta={formatDelta(accessesInWindow, previousAccessesInWindow)}
+              helper="Movimentações liberadas"
+              tone="emerald"
+              highlight={highlightedKeys.includes('acessos')}
+              onClick={() => {
+                pushWithContext('/operacao', { metric: 'acessos', period: String(selectedWindow), result: 'ALLOWED' });
+              }}
+            />
+            <MetricTile
+              label="Alertas"
+              value={alertsLoading ? '...' : String(alertsInWindow)}
+              delta={formatDelta(alertsInWindow, previousAlertsInWindow)}
+              helper="Ocorrências registradas"
+              tone="amber"
+              highlight={highlightedKeys.includes('alertas')}
+              onClick={() => {
+                pushWithContext('/admin/alertas', { metric: 'alertas', period: String(selectedWindow), status: 'open' });
+              }}
+            />
+            <MetricTile
+              label="Encomendas"
+              value={deliveriesLoading ? '...' : String(deliveriesInWindow)}
+              delta={formatDelta(deliveriesInWindow, previousDeliveriesInWindow)}
+              helper="Recebimentos no período"
+              tone="neutral"
+              highlight={highlightedKeys.includes('encomendas')}
+              onClick={() => {
+                pushWithContext('/admin/encomendas', { metric: 'encomendas', period: String(selectedWindow), status: 'pending' });
+              }}
+            />
+          </div>
         </section>
 
-        {currentCondominium ? (
-          <section className="grid gap-4 md:grid-cols-3">
-            <StatCard
-              label="Módulos habilitados"
-              value={String(enabledModules.size)}
-              helper="Lidos diretamente do contrato canônico do condomínio"
-            />
-            <StatCard
-              label="Modo do cliente"
-              value={currentCondominium.slimMode ? 'Slim' : 'Completo'}
-              helper="Slim mode canônico vindo do backend"
-            />
-            <StatCard
-              label="Regras do morador"
-              value={String(residentManagementFlags)}
-              helper="Flags ativas em residentManagementSettings"
-            />
-          </section>
-        ) : null}
-
-        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
-          <StatCard
-            label="Moradores / Pessoas"
-            value={peopleLoading ? '...' : String(people.length)}
-            helper="Total carregado da API"
-          />
-          <StatCard
-            label="Ativos"
-            value={peopleLoading ? '...' : String(activePeople.length)}
-            helper="Com status ativo"
-          />
-          <StatCard
-            label="Alertas abertos"
-            value={alertsLoading ? '...' : String(openAlerts.length)}
-            helper="Pendências de monitoramento"
-          />
-          <StatCard
-            label="Câmeras online"
-            value={camerasLoading ? '...' : String(onlineCameras.length)}
-            helper="Disponíveis para operação"
-          />
-          <StatCard
-            label="Encomendas pendentes"
-            value={deliveriesLoading ? '...' : String(pendingDeliveries.length)}
-            helper="Aguardando retirada"
-          />
-          <StatCard
-            label="Veículos"
-            value={vehiclesLoading ? '...' : String(vehicles.length)}
-            helper={`${blockedVehicles.length} bloqueado(s)`}
-          />
-        </section>
-
-        <div className="grid gap-6 xl:grid-cols-[1.3fr_0.9fr]">
-          <main className="space-y-6">
+        <section className="grid gap-6 xl:grid-cols-[1.35fr_0.95fr]">
+          <div className="space-y-6">
             <section className="rounded-3xl border border-white/10 bg-white/5 p-5 backdrop-blur">
-              <div className="mb-4 flex items-center justify-between">
+              <div className="flex items-center justify-between gap-3">
                 <div>
-                  <h2 className="text-lg font-semibold text-white">
-                    Resumo operacional
-                  </h2>
+                  <h3 className="text-lg font-semibold text-white">Distribuição operacional</h3>
                   <p className="text-sm text-slate-400">
-                    Indicadores principais para decisão rápida.
+                    Onde está o maior volume do condomínio neste momento.
                   </p>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    router.push('/admin/unidades');
+                  }}
+                  className="rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-xs font-medium text-white transition hover:bg-white/15"
+                >
+                  Abrir unidades
+                </button>
               </div>
 
-              <div className="grid gap-4 md:grid-cols-4">
-                <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
-                  <p className="text-xs uppercase tracking-[0.18em] text-slate-500">
-                    Base
-                  </p>
-                  <p className="mt-2 text-center text-2xl font-semibold tabular-nums text-white">
-                    {peopleLoading ? 'Carregando...' : `${people.length} registros`}
-                  </p>
-                  <p className="mt-2 text-sm text-slate-400">
-                    Pessoas e vínculos sob gestão.
-                  </p>
-                </div>
-
-                <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
-                  <p className="text-xs uppercase tracking-[0.18em] text-slate-500">
-                    Ocorrências
-                  </p>
-                  <p className="mt-2 text-center text-2xl font-semibold tabular-nums text-white">
-                    {alertsLoading ? 'Carregando...' : `${alerts.length} eventos`}
-                  </p>
-                  <p className="mt-2 text-sm text-slate-400">
-                    Alertas e eventos recebidos.
-                  </p>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => { router.push('/admin/cameras'); }}
-                  className={`rounded-2xl border bg-slate-950/60 p-4 text-left transition hover:bg-white/10 ${brandClasses.softAccentPanel}`}
-                >
-                  <p className="text-xs uppercase tracking-[0.18em] text-slate-500">
-                    Monitoramento
-                  </p>
-                  <p className="mt-2 text-center text-2xl font-semibold tabular-nums text-white">
-                    {camerasLoading ? 'Carregando...' : `${cameras.length} câmeras`}
-                  </p>
-                  <p className="mt-2 text-sm text-slate-400 text-justify">
-                    Cobertura visual e status técnico.
-                  </p>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => { router.push('/admin/veiculos'); }}
-                  className={`rounded-2xl border bg-slate-950/60 p-4 text-left transition hover:bg-white/10 ${brandClasses.softAccentPanel}`}
-                >
-                  <p className="text-xs uppercase tracking-[0.18em] text-slate-500">
-                    Frota vinculada
-                  </p>
-                  <p className="mt-2 text-center text-2xl font-semibold tabular-nums text-white">
-                    {vehiclesLoading ? 'Carregando...' : `${vehicles.length} veículos`}
-                  </p>
-                  <p className="mt-2 text-sm text-slate-400 text-justify">
-                    Placas, tags e vínculos por unidade.
-                  </p>
-                </button>
+              <div className="mt-5 grid gap-4">
+                <ComparisonBar
+                  label="Base de moradores e cadastros"
+                  value={people.length}
+                  total={totalOperationalBase}
+                  helper={`${activePeople.length} ativos`}
+                  tone="cyan"
+                  highlight={highlightedKeys.includes('pessoas')}
+                  onClick={() => {
+                    pushWithContext('/admin/moradores', { metric: 'base' });
+                  }}
+                />
+                <ComparisonBar
+                  label="Alertas em acompanhamento"
+                  value={openAlerts.length}
+                  total={totalOperationalBase}
+                  helper={`${unreadAlerts} ainda não lidos`}
+                  tone="amber"
+                  highlight={highlightedKeys.includes('alertas_abertos')}
+                  onClick={() => {
+                    pushWithContext('/admin/alertas', { metric: 'alertas_abertos', status: 'open' });
+                  }}
+                />
+                <ComparisonBar
+                  label="Encomendas aguardando retirada"
+                  value={pendingDeliveries.length}
+                  total={totalOperationalBase}
+                  helper={`${deliveriesInWindow} lançadas no período`}
+                  tone="slate"
+                  highlight={highlightedKeys.includes('encomendas_pendentes')}
+                  onClick={() => {
+                    pushWithContext('/admin/encomendas', { metric: 'encomendas_pendentes', status: 'pending' });
+                  }}
+                />
+                <ComparisonBar
+                  label="Câmeras em operação"
+                  value={onlineCameras.length}
+                  total={Math.max(cameras.length, totalOperationalBase)}
+                  helper={`${offlineCameras} sem imagem`}
+                  tone="cyan"
+                  onClick={() => {
+                    pushWithContext('/admin/cameras', { metric: 'cameras', status: 'online' });
+                  }}
+                />
+                <ComparisonBar
+                  label="Dispositivos de acesso"
+                  value={accessDevices.length}
+                  total={Math.max(accessDevices.length, totalOperationalBase)}
+                  helper={`${onlineDevices} online`}
+                  tone="emerald"
+                  onClick={() => {
+                    pushWithContext('/admin/dispositivos', { metric: 'devices', status: 'online' });
+                  }}
+                />
+                <ComparisonBar
+                  label="Veículos vinculados"
+                  value={vehicles.length}
+                  total={totalOperationalBase}
+                  helper={`${blockedVehicles.length} bloqueados`}
+                  tone="emerald"
+                  onClick={() => {
+                    pushWithContext('/admin/veiculos', { metric: 'veiculos' });
+                  }}
+                />
               </div>
             </section>
 
             <section className="rounded-3xl border border-white/10 bg-white/5 p-5 backdrop-blur">
               <div className="mb-4">
-                <h2 className="text-lg font-semibold text-white">Pessoas por categoria</h2>
-                <p className="text-sm text-slate-400 text-justify">Distribuição real da base carregada da API.</p>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                {peopleCategories.length ? (
-                  peopleCategories.map((category) => (
-                    <button
-                      key={category}
-                      type="button"
-                      onClick={() => setPeopleCategoryFilter(category)}
-                      className={`rounded-2xl border bg-slate-950/60 p-4 text-left transition hover:bg-white/10 ${peopleCategoryFilter === category ? brandClasses.activeCard : 'border-white/10'}`}
-                    >
-                      <p className="text-sm text-slate-400">{getPersonCategoryLabel(category)}</p>
-                      <p className="mt-2 text-center text-2xl font-semibold tabular-nums text-white">{peopleByCategory[category] ?? 0}</p>
-                    </button>
-                  ))
-                ) : (
-                  <p className="rounded-2xl border border-dashed border-white/10 p-4 text-sm text-slate-400">
-                    Nenhuma categoria retornada pela API.
-                  </p>
-                )}
-              </div>
-            </section>
-
-            <section className="rounded-3xl border border-white/10 bg-white/5 p-5 backdrop-blur">
-              <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <div>
-                  <h2 className="text-lg font-semibold text-white">Pessoas</h2>
-                  <p className="text-sm text-slate-400">
-                    Lista consolidada da API por categoria.
-                  </p>
-                </div>
-                <select
-                  value={peopleCategoryFilter}
-                  onChange={(event) => setPeopleCategoryFilter(event.target.value)}
-                  className="rounded-2xl border border-white/10 bg-slate-950 px-4 py-2 text-sm text-white outline-none"
-                >
-                  <option value="all">Todas as categorias</option>
-                  {peopleCategories.map((category) => (
-                    <option key={category} value={category}>
-                      {getPersonCategoryLabel(category)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {peopleError ? (
-                <EmptyState
-                  title="Não foi possível carregar pessoas"
-                  description="Verifique a API, autenticação e formato da resposta."
-                />
-              ) : filteredPeople.length === 0 ? (
-                <EmptyState
-                  title="Nenhum registro encontrado"
-                  description="Altere o filtro ou aguarde a API retornar dados dessa categoria."
-                />
-              ) : (
-                <div className="overflow-hidden rounded-2xl border border-white/10">
-                  <div className="grid grid-cols-12 bg-white/5 px-4 py-3 text-xs uppercase tracking-[0.16em] text-slate-400">
-                    <div className="col-span-4">Nome</div>
-                    <div className="col-span-3">Categoria</div>
-                    <div className="col-span-3">Status</div>
-                    <div className="col-span-2">ID</div>
-                  </div>
-
-                  <div className="divide-y divide-white/10">
-                    {filteredPeople.slice(0, 12).map((person: Person) => (
-                      <div
-                        key={person.id}
-                        className="grid grid-cols-12 items-center px-4 py-4 text-sm"
-                      >
-                        <div className="col-span-4 font-medium text-white">
-                          {person.name || 'Sem nome'}
-                        </div>
-                        <div className="col-span-3 text-slate-300">
-                          {getPersonCategoryLabel(person.category, person.categoryLabel)}
-                        </div>
-                        <div className="col-span-3">
-                          <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium ${getPersonStatusBadgeClass(person.statusLabel || person.status)}`}>
-                            {person.statusLabel || person.status || 'ATIVO'}
-                          </span>
-                        </div>
-                        <div className="col-span-2 truncate text-xs text-slate-400">
-                          {person.id}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </section>
-          </main>
-
-          <aside className="space-y-6">
-            <section className="rounded-3xl border border-white/10 bg-white/5 p-5 backdrop-blur">
-              <div className="mb-4">
-                <h2 className="text-lg font-semibold text-white">Alertas recentes</h2>
+                <h3 className="text-lg font-semibold text-white">Ranking do dia</h3>
                 <p className="text-sm text-slate-400">
-                  Ocorrências e pendências mais recentes.
+                  Pontos com maior movimento em alertas, acessos e encomendas.
                 </p>
               </div>
 
-              {alertsError ? (
-                <EmptyState
-                  title="Não foi possível carregar alertas"
-                  description="Verifique o endpoint de alertas."
+              <div className="grid gap-4 xl:grid-cols-3">
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <p className="text-sm font-medium text-white">Mais alertas</p>
+                  <div className="mt-4 space-y-3">
+                    {rankingAlertsToday.length ? rankingAlertsToday.map((item, index) => (
+                      <ComparisonBar
+                        key={`alert-ranking-${item.label}-${index}`}
+                        label={item.label}
+                        value={item.value}
+                        total={rankingAlertsToday[0]?.value ?? item.value}
+                        helper="Ocorrências hoje"
+                        tone="amber"
+                        onClick={() => {
+                          pushWithContext('/admin/alertas', { location: item.label, period: '1' });
+                        }}
+                      />
+                    )) : (
+                      <p className="text-sm text-slate-400">Sem alertas hoje.</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <p className="text-sm font-medium text-white">Mais acessos</p>
+                  <div className="mt-4 space-y-3">
+                    {rankingAccessToday.length ? rankingAccessToday.map((item, index) => (
+                      <ComparisonBar
+                        key={`access-ranking-${item.label}-${index}`}
+                        label={item.label}
+                        value={item.value}
+                        total={rankingAccessToday[0]?.value ?? item.value}
+                        helper="Movimentações hoje"
+                        tone="emerald"
+                        onClick={() => {
+                          pushWithContext('/operacao', { location: item.label, period: '1' });
+                        }}
+                      />
+                    )) : (
+                      <p className="text-sm text-slate-400">Sem acessos hoje.</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <p className="text-sm font-medium text-white">Mais encomendas</p>
+                  <div className="mt-4 space-y-3">
+                    {rankingDeliveriesToday.length ? rankingDeliveriesToday.map((item, index) => (
+                      <ComparisonBar
+                        key={`delivery-ranking-${item.label}-${index}`}
+                        label={item.label}
+                        value={item.value}
+                        total={rankingDeliveriesToday[0]?.value ?? item.value}
+                        helper="Recebimentos hoje"
+                        tone="slate"
+                        onClick={() => {
+                          pushWithContext('/admin/encomendas', { unitLabel: item.label, period: '1' });
+                        }}
+                      />
+                    )) : (
+                      <p className="text-sm text-slate-400">Sem encomendas hoje.</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </section>
+
+          </div>
+
+          <div className="space-y-6">
+            <section className="rounded-3xl border border-white/10 bg-white/5 p-5 backdrop-blur">
+              <div className="mb-4">
+                <h3 className="text-lg font-semibold text-white">Prioridades imediatas</h3>
+                <p className="text-sm text-slate-400">
+                  Os quatro pontos que mais pedem ação agora.
+                </p>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                <ComparisonBar
+                  label="Alertas abertos"
+                  value={openAlerts.length}
+                  total={Math.max(openAlerts.length, 1)}
+                  helper="Acompanhar e tratar ocorrências"
+                  tone="amber"
+                  highlight={highlightedKeys.includes('alertas_abertos')}
+                  onClick={() => {
+                    pushWithContext('/admin/alertas', { metric: 'alertas_abertos', status: 'open' });
+                  }}
                 />
-              ) : alerts.length === 0 ? (
-                <EmptyState
-                  title="Sem alertas"
-                  description="A lista aparecerá aqui quando houver eventos."
+                <ComparisonBar
+                  label="Câmeras sem imagem"
+                  value={offlineCameras}
+                  total={Math.max(cameras.length, 1)}
+                  helper="Validar conexão e publicação"
+                  tone="cyan"
+                  highlight={highlightedKeys.includes('cameras_offline')}
+                  onClick={() => {
+                    pushWithContext('/admin/cameras', { metric: 'cameras_offline', status: 'offline' });
+                  }}
                 />
-              ) : (
-                <AlertsPanel
-                  alerts={alerts.slice(0, 6)}
-                  title="Alertas recentes"
-                  description="Ocorrências consolidadas para acompanhamento rápido."
-                  limit={6}
-                  showRealtimeStatus={false}
+                <ComparisonBar
+                  label="Encomendas pendentes"
+                  value={pendingDeliveries.length}
+                  total={Math.max(deliveries.length, 1)}
+                  helper="Aguardando retirada"
+                  tone="slate"
+                  highlight={highlightedKeys.includes('encomendas_pendentes')}
+                  onClick={() => {
+                    pushWithContext('/admin/encomendas', { metric: 'encomendas_pendentes', status: 'pending' });
+                  }}
                 />
-              )}
+                <ComparisonBar
+                  label="Dispositivos offline"
+                  value={Math.max(accessDevices.length - onlineDevices, 0)}
+                  total={Math.max(accessDevices.length, 1)}
+                  helper="Checar conexão e status"
+                  tone="emerald"
+                  highlight={highlightedKeys.includes('dispositivos_offline')}
+                  onClick={() => {
+                    pushWithContext('/admin/dispositivos', { metric: 'devices_offline', status: 'offline' });
+                  }}
+                />
+              </div>
             </section>
 
             <section className="rounded-3xl border border-white/10 bg-white/5 p-5 backdrop-blur">
               <div className="mb-4">
-                <h2 className="text-lg font-semibold text-white">Atividade recente</h2>
-                <p className="text-sm text-slate-400">Movimentações mais recentes vindas da API.</p>
+                <h3 className="text-lg font-semibold text-white">Composição dos cadastros</h3>
+                <p className="text-sm text-slate-400">
+                  Leitura por perfil para entender quem mais compõe a base atual.
+                </p>
               </div>
 
-              <div className="space-y-3">
-                {people.slice(0, 3).map((person: Person) => (
-                  <div key={`person-${person.id}`} className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-medium text-white">{person.name || 'Pessoa'}</p>
-                        <p className="mt-1 text-sm text-slate-400">
-                          {getPersonCategoryLabel(person.category, person.categoryLabel)}
-                        </p>
-                      </div>
-                      <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium ${getPersonStatusBadgeClass(person.statusLabel || person.status)}`}>
-                        {person.statusLabel || person.status || 'ATIVO'}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-                {alerts.slice(0, 2).map((alert: Alert) => (
-                  <div key={`alert-${alert.id}`} className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
-                    <p className="text-sm font-medium text-white">{alert.title || 'Alerta'}</p>
-                    <p className="mt-1 text-sm text-slate-400">{alert.description || 'Sem descrição disponível.'}</p>
-                  </div>
-                ))}
-                {people.length === 0 && alerts.length === 0 ? (
-                  <EmptyState title="Sem atividade" description="Quando a API retornar dados, a atividade aparecerá aqui." />
-                ) : null}
+              <div className="grid gap-4 md:grid-cols-2">
+                <MetricTile
+                  label="Moradores"
+                  value={peopleLoading ? '...' : String(residentsCount)}
+                  delta={`${people.length > 0 ? Math.round((residentsCount / people.length) * 100) : 0}% da base`}
+                  helper="Base principal do condomínio"
+                  tone="cyan"
+                  onClick={() => {
+                    router.push('/admin/moradores');
+                  }}
+                />
+                <MetricTile
+                  label="Visitantes"
+                  value={peopleLoading ? '...' : String(visitorsCount)}
+                  delta={`${people.length > 0 ? Math.round((visitorsCount / people.length) * 100) : 0}% da base`}
+                  helper="Cadastros de visita"
+                  tone="neutral"
+                  onClick={() => {
+                    router.push('/admin/moradores');
+                  }}
+                />
+                <MetricTile
+                  label="Prestadores"
+                  value={peopleLoading ? '...' : String(serviceProvidersCount)}
+                  delta={`${people.length > 0 ? Math.round((serviceProvidersCount / people.length) * 100) : 0}% da base`}
+                  helper="Serviços autorizados"
+                  tone="neutral"
+                  onClick={() => {
+                    router.push('/admin/moradores');
+                  }}
+                />
+                <MetricTile
+                  label="Locatários"
+                  value={peopleLoading ? '...' : String(rentersCount)}
+                  delta={`${people.length > 0 ? Math.round((rentersCount / people.length) * 100) : 0}% da base`}
+                  helper="Unidades em locação"
+                  tone="neutral"
+                  onClick={() => {
+                    router.push('/admin/moradores');
+                  }}
+                />
               </div>
             </section>
-
-            <section className="rounded-3xl border border-white/10 bg-white/5 p-5 backdrop-blur">
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-lg font-semibold text-white">Veículos vinculados</h2>
-                  <p className="text-sm text-slate-400">Placas recentes por unidade.</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => { router.push('/admin/veiculos'); }}
-                  className="rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-xs font-medium text-white transition hover:bg-white/15"
-                >
-                  Ver todos
-                </button>
-              </div>
-
-              {vehicles.length === 0 ? (
-                <EmptyState
-                  title="Sem veículos"
-                  description="Cadastre veículos para vincular placas, responsáveis e unidades."
-                />
-              ) : (
-                <div className="grid gap-3">
-                  {vehicles.slice(0, 6).map((vehicle: Vehicle) => (
-                    <div key={vehicle.id} className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-medium text-white">{vehicle.plate}</p>
-                          <p className="mt-1 text-sm text-slate-400">
-                            {[vehicle.brand, vehicle.model, vehicle.color].filter(Boolean).join(' / ') || 'Sem detalhes'}
-                          </p>
-                          <p className="mt-1 text-xs text-slate-500">
-                            {[vehicle.condominiumName, vehicle.structureLabel, vehicle.unitLabel].filter(Boolean).join(' / ') || 'Sem unidade vinculada'}
-                          </p>
-                        </div>
-                        <span className={`rounded-full border px-2.5 py-1 text-[11px] font-medium ${vehicle.status === 'bloqueado' ? 'border-red-500/30 bg-red-500/10 text-red-100' : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-100'}`}>
-                          {vehicle.status}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </section>
-
-            <section className="rounded-3xl border border-white/10 bg-white/5 p-5 backdrop-blur">
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-lg font-semibold text-white">Câmeras online</h2>
-                  <p className="text-sm text-slate-400">
-                    Estado atual do parque de câmeras.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => { router.push('/admin/cameras'); }}
-                  className="rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-xs font-medium text-white transition hover:bg-white/15"
-                >
-                  Ver gestão de câmeras
-                </button>
-              </div>
-
-              {camerasError ? (
-                <EmptyState
-                  title="Não foi possível carregar câmeras"
-                  description="Confira o endpoint e a resposta da API."
-                />
-              ) : cameras.length === 0 ? (
-                <EmptyState
-                  title="Sem câmeras"
-                  description="Os dispositivos aparecerão aqui quando a API responder."
-                />
-              ) : (
-                <div className="grid gap-3">
-                  {cameras.slice(0, 6).map((camera: Camera) => (
-                    <button
-                      key={camera.id}
-                      type="button"
-                      onClick={() => { router.push('/admin/cameras'); }}
-                      className="rounded-2xl border border-white/10 bg-slate-950/60 p-4 text-left transition hover:bg-white/10"
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <h3 className="text-sm font-medium text-white">
-                          {camera.name || 'Câmera'}
-                        </h3>
-                        <span className="rounded-full bg-emerald-400/10 px-2.5 py-1 text-[11px] font-medium text-emerald-300">
-                          {getCameraStatusLabel(camera.status)}
-                        </span>
-                      </div>
-                      <p className="mt-2 text-sm text-slate-400">
-                        {camera.location || 'Local não informado'}
-                      </p>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </section>
-          </aside>
-        </div>
+          </div>
+        </section>
 
         <footer className="pb-2 text-center text-xs text-slate-500">
-          Dashboard preparado para evolução por perfis: MASTER, ADMIN, OPERADOR e CENTRAL.
+          Painel analítico com foco em leitura rápida. Para detalhe completo, abra a área correspondente.
         </footer>
       </div>
     </div>

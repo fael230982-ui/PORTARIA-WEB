@@ -21,6 +21,7 @@ import { useProtectedRoute } from '@/hooks/use-protected-route';
 import { useCameras } from '@/hooks/use-cameras';
 import { useResidenceCatalog } from '@/hooks/use-residence-catalog';
 import { camerasService } from '@/services/cameras.service';
+import { jobsService } from '@/services/jobs.service';
 import { CrudModal } from '@/components/admin/CrudModal';
 import { CameraFeed } from '@/components/camera-feed';
 import { Button } from '@/components/ui/button';
@@ -35,6 +36,7 @@ import type {
   CameraDeviceUsageType,
   CameraStatus,
 } from '@/types/camera';
+import type { BackgroundJob } from '@/types/job';
 
 type Filters = {
   search: string;
@@ -83,6 +85,23 @@ const DEVICE_USAGE_OPTIONS: Array<{ value: CameraDeviceUsageType; label: string 
   { value: 'MONITORING', label: 'Monitoramento' },
   { value: 'PASSAGE', label: 'Passagem' },
 ];
+
+const CAMERA_RTSP_JOB_STORAGE_KEY = 'admin-cameras-last-rtsp-job';
+const CAMERAS_SNAPSHOT_STORAGE_KEY = 'admin-cameras-snapshot';
+
+function getJobStatusLabel(status: string) {
+  if (status === 'PENDING') return 'Processando fila';
+  if (status === 'RUNNING') return 'Em processamento';
+  if (status === 'SUCCEEDED') return 'Concluído';
+  if (status === 'FAILED') return 'Falhou';
+  return status;
+}
+
+function getJobStatusClass(status: string) {
+  if (status === 'SUCCEEDED') return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-100';
+  if (status === 'FAILED') return 'border-red-500/30 bg-red-500/10 text-red-100';
+  return 'border-sky-500/30 bg-sky-500/10 text-sky-100';
+}
 
 function supportsDeviceUsageType(deviceType: CameraDeviceType) {
   return deviceType === 'IA_FACES' || deviceType === 'CAMERA_IA' || deviceType === 'FACIAL_DEVICE';
@@ -202,6 +221,14 @@ function getCameraErrorMessage(error: unknown, fallback: string) {
 
   if (maybeApiError.response.status === 500) {
     return 'O backend retornou erro interno ao cadastrar a câmera. Se a URL for RTSP, solicite ao backend validar o cadastro e converter o RTSP para snapshot ou image stream.';
+  }
+
+  if (maybeApiError.response.status === 503) {
+    return 'O servidor de câmeras está indisponível no momento. Tente novamente em instantes.';
+  }
+
+  if (maybeApiError.response.status === 502) {
+    return 'O serviço de câmeras não respondeu corretamente agora. Tente novamente em instantes.';
   }
 
   if (maybeApiError.response.status === 400) {
@@ -462,7 +489,9 @@ function CameraForm({
           </select>
           <p className="text-xs text-slate-500">
             {requireUnit
-              ? 'Para admin de condomínio, a câmera deve ficar vinculada a uma unidade do próprio condomínio.'
+              ? units.length > 0
+                ? 'Para admin de condomínio, a câmera deve ficar vinculada a uma unidade do próprio condomínio.'
+                : 'As unidades do condomínio não carregaram pela API agora. A tela está usando as unidades liberadas na sua sessão.'
               : 'Use a unidade para amarrar a câmera ao escopo operacional correto.'}
           </p>
         </label>
@@ -515,8 +544,67 @@ export default function AdminCamerasPage() {
   const [saving, setSaving] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [pendingRtspJob, setPendingRtspJob] = useState<BackgroundJob | null>(null);
+  const [lastRtspJob, setLastRtspJob] = useState<BackgroundJob | null>(null);
+  const [snapshotCameras, setSnapshotCameras] = useState<CameraRecord[]>([]);
+  const [snapshotUpdatedAt, setSnapshotUpdatedAt] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    try {
+      const raw = window.localStorage.getItem(CAMERA_RTSP_JOB_STORAGE_KEY);
+      if (!raw) return;
+
+      const job = JSON.parse(raw) as BackgroundJob;
+      if (!job?.id) return;
+
+      setLastRtspJob(job);
+      if (job.status === 'PENDING' || job.status === 'RUNNING') {
+        setPendingRtspJob(job);
+      }
+    } catch {
+      // Ignore invalid local cache for RTSP jobs.
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    try {
+      const raw = window.localStorage.getItem(CAMERAS_SNAPSHOT_STORAGE_KEY);
+      if (!raw) return;
+
+      const parsed = JSON.parse(raw) as {
+        data?: CameraRecord[];
+        updatedAt?: string;
+      };
+
+      setSnapshotCameras(Array.isArray(parsed.data) ? parsed.data : []);
+      setSnapshotUpdatedAt(typeof parsed.updatedAt === 'string' ? parsed.updatedAt : null);
+    } catch {
+      setSnapshotCameras([]);
+      setSnapshotUpdatedAt(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    try {
+      if (lastRtspJob?.id) {
+        window.localStorage.setItem(CAMERA_RTSP_JOB_STORAGE_KEY, JSON.stringify(lastRtspJob));
+      } else {
+        window.localStorage.removeItem(CAMERA_RTSP_JOB_STORAGE_KEY);
+      }
+    } catch {
+      // Ignore storage failures and keep page flow.
+    }
+  }, [lastRtspJob]);
 
   const cameras = useMemo(() => camerasData?.data ?? [], [camerasData]);
+  const usingSnapshot = Boolean(error && snapshotCameras.length > 0);
+  const visibleCameras = usingSnapshot ? snapshotCameras : cameras;
   const isAdminScope = user.role === 'ADMIN';
   const accessibleUnits = useMemo(() => {
     if (!isAdminScope) {
@@ -529,15 +617,90 @@ export default function AdminCamerasPage() {
     () => new Set(accessibleUnits.map((unit) => unit.id)),
     [accessibleUnits]
   );
+  const fallbackUnitOptions = useMemo(() => {
+    const ids = user?.unitIds ?? [];
+    const names = user?.unitNames ?? [];
+
+    return ids
+      .map((id, index) => {
+        const label = names[index]?.trim() || `Unidade ${index + 1}`;
+        return {
+          id,
+          label,
+          location: label,
+        };
+      })
+      .filter((unit) => Boolean(unit.id));
+  }, [user?.unitIds, user?.unitNames]);
   const unitOptions = useMemo(
     () =>
-      accessibleUnits.map((unit) => ({
-        id: unit.id,
-        label: getUnitDisplayParts(unit).join(' / ') || unit.label || 'Unidade sem identificação',
-        location: getUnitDisplayParts(unit).join(' / ') || unit.label || 'Unidade sem identificação',
-      })),
-    [accessibleUnits]
+      accessibleUnits.length > 0
+        ? accessibleUnits.map((unit) => ({
+            id: unit.id,
+            label: getUnitDisplayParts(unit).join(' / ') || unit.label || 'Unidade sem identificação',
+            location: getUnitDisplayParts(unit).join(' / ') || unit.label || 'Unidade sem identificação',
+          }))
+        : fallbackUnitOptions,
+    [accessibleUnits, fallbackUnitOptions]
   );
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || cameras.length === 0) return;
+
+    const payload = {
+      data: cameras,
+      updatedAt: new Date().toISOString(),
+    };
+
+    window.localStorage.setItem(CAMERAS_SNAPSHOT_STORAGE_KEY, JSON.stringify(payload));
+    setSnapshotCameras(cameras);
+    setSnapshotUpdatedAt(payload.updatedAt);
+  }, [cameras]);
+
+  useEffect(() => {
+    if (!pendingRtspJob?.id) return;
+
+    let cancelled = false;
+
+    const pollJob = async () => {
+      try {
+        const nextJob = await jobsService.findById(pendingRtspJob.id);
+        if (cancelled) return;
+
+        setPendingRtspJob(nextJob);
+        setLastRtspJob(nextJob);
+
+        if (nextJob.status === 'SUCCEEDED') {
+          setActionMessage('Câmera RTSP processada com sucesso e lista atualizada.');
+          setPendingRtspJob(null);
+          await refetch();
+          return;
+        }
+
+        if (nextJob.status === 'FAILED') {
+          setSubmitError(nextJob.errorMessage || 'O processamento da câmera falhou no backend.');
+          setPendingRtspJob(null);
+          return;
+        }
+
+        window.setTimeout(() => {
+          void pollJob();
+        }, 4000);
+      } catch {
+        if (cancelled) return;
+
+        window.setTimeout(() => {
+          void pollJob();
+        }, 5000);
+      }
+    };
+
+    void pollJob();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [pendingRtspJob?.id, refetch]);
   const activeUnitLabel = activeUnitId ? unitOptions.find((unit) => unit.id === activeUnitId)?.label ?? 'Unidade filtrada' : '';
 
   useEffect(() => {
@@ -554,7 +717,7 @@ export default function AdminCamerasPage() {
     const search = normalizeString(filters.search);
     const status = normalizeString(filters.status);
 
-    return cameras.filter((camera) => {
+    return visibleCameras.filter((camera) => {
       const automaticStatus = getAutomaticCameraStatus(camera);
       const scopeOk = (!isAdminScope || (!!camera.unitId && accessibleUnitIds.has(camera.unitId))) && (!activeUnitId || camera.unitId === activeUnitId);
       const statusOk = status === 'all' || normalizeString(automaticStatus) === status;
@@ -573,7 +736,7 @@ export default function AdminCamerasPage() {
 
       return scopeOk && statusOk && mediaOk && searchOk;
     });
-  }, [accessibleUnitIds, activeUnitId, cameras, filters, isAdminScope]);
+  }, [accessibleUnitIds, activeUnitId, filters, isAdminScope, visibleCameras]);
 
   const stats = useMemo(() => {
     const total = filteredCameras.length;
@@ -607,10 +770,11 @@ export default function AdminCamerasPage() {
       if (isRtspCamera) {
         const job = await camerasService.createAsync(payload);
         setOpenCreate(false);
+        setPendingRtspJob(job);
+        setLastRtspJob(job);
         setActionMessage(
-          `Cadastro RTSP enviado para processamento em background. Job ${job.id} com status ${job.status}. A câmera pode demorar alguns instantes para aparecer na lista.`
+          `Cadastro RTSP enviado para processamento em background. Job ${job.id} com status ${job.status}. O sistema vai acompanhar automaticamente até a câmera aparecer na lista.`
         );
-        await refetch();
         return;
       }
 
@@ -839,9 +1003,41 @@ export default function AdminCamerasPage() {
         </div>
       ) : null}
 
-      {error ? (
+      {lastRtspJob ? (
+        <div className={`rounded-3xl border p-5 text-sm ${getJobStatusClass(lastRtspJob.status)}`}>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="font-semibold">Acompanhamento do cadastro RTSP</p>
+              <p className="mt-1 text-xs opacity-80">Job {lastRtspJob.id}</p>
+            </div>
+            <Badge className="border-white/10 bg-white/10 text-white">
+              {getJobStatusLabel(lastRtspJob.status)}
+            </Badge>
+          </div>
+          <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2">
+            <p>Tentativas: {lastRtspJob.attempts} de {lastRtspJob.maxAttempts}</p>
+            <p>Criado em: {new Date(lastRtspJob.createdAt).toLocaleString('pt-BR')}</p>
+            {lastRtspJob.updatedAt ? <p>Última atualização: {new Date(lastRtspJob.updatedAt).toLocaleString('pt-BR')}</p> : null}
+            {lastRtspJob.finishedAt ? <p>Finalizado em: {new Date(lastRtspJob.finishedAt).toLocaleString('pt-BR')}</p> : null}
+          </div>
+          {lastRtspJob.errorMessage ? (
+            <p className="mt-3 rounded-2xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-100">
+              {lastRtspJob.errorMessage}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
+      {usingSnapshot ? (
+        <div className="rounded-3xl border border-amber-400/30 bg-amber-500/10 p-5 text-sm text-amber-100">
+          Mostrando a última atualização disponível de câmeras. O servidor está indisponível agora e novas alterações podem demorar para refletir.
+          {snapshotUpdatedAt ? ` Última sincronização: ${new Date(snapshotUpdatedAt).toLocaleString('pt-BR')}.` : ''}
+        </div>
+      ) : null}
+
+      {!usingSnapshot && error ? (
         <div className="rounded-3xl border border-red-500/30 bg-red-500/10 p-5 text-sm text-red-100">
-          Não foi possível carregar as câmeras.
+          {getCameraErrorMessage(error, 'Não foi possível carregar as câmeras.')}
         </div>
       ) : null}
 

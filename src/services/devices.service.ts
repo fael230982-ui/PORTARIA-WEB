@@ -14,30 +14,81 @@ type DevicesFilters = {
   condominiumId?: string | null;
 };
 
+type DeviceListResponse =
+  | Device[]
+  | {
+      data?: Device[];
+      items?: Device[];
+    };
+
+type DeviceSingleResponse =
+  | Device
+  | {
+      data?: Device | null;
+      item?: Device | null;
+      device?: Device | null;
+    };
+
+function parseDeviceList(payload: DeviceListResponse): Device[] {
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.data)) return payload.data;
+  if (Array.isArray(payload?.items)) return payload.items;
+  return [];
+}
+
+function parseDevice(payload: DeviceSingleResponse): Device {
+  if (payload && typeof payload === 'object' && 'id' in payload) {
+    return payload as Device;
+  }
+
+  const nextDevice =
+    (payload as { data?: Device | null })?.data ??
+    (payload as { item?: Device | null })?.item ??
+    (payload as { device?: Device | null })?.device;
+
+  if (nextDevice && nextDevice.id) {
+    return nextDevice;
+  }
+
+  throw new Error('O servidor confirmou o cadastro, mas não devolveu os dados do dispositivo.');
+}
+
 export const devicesService = {
   async list(filters: DevicesFilters = {}): Promise<Device[]> {
-    const { data } = await api.get<Device[]>('/devices', {
-      params: {
-        unitId: filters.unitId || undefined,
-        condominiumId: filters.condominiumId || undefined,
-      },
-    });
-    return Array.isArray(data) ? data : [];
+    try {
+      const { data } = await api.get<DeviceListResponse>('/devices', {
+        params: {
+          unitId: filters.unitId || undefined,
+          condominiumId: filters.condominiumId || undefined,
+        },
+      });
+      return parseDeviceList(data);
+    } catch (error) {
+      const status = (error as { response?: { status?: number } }).response?.status;
+      const canRetryWithoutCondominium = status === 500 && Boolean(filters.condominiumId) && !filters.unitId;
+
+      if (!canRetryWithoutCondominium) {
+        throw error;
+      }
+
+      const { data } = await api.get<DeviceListResponse>('/devices');
+      return parseDeviceList(data);
+    }
   },
 
   async get(id: string): Promise<Device> {
-    const { data } = await api.get<Device>(`/devices/${id}`);
-    return data;
+    const { data } = await api.get<DeviceSingleResponse>(`/devices/${id}`);
+    return parseDevice(data);
   },
 
   async create(payload: DevicePayload): Promise<Device> {
-    const { data } = await api.post<Device>('/devices', payload);
-    return data;
+    const { data } = await api.post<DeviceSingleResponse>('/devices', payload);
+    return parseDevice(data);
   },
 
   async update(id: string, payload: Partial<DevicePayload>): Promise<Device> {
-    const { data } = await api.put<Device>(`/devices/${id}`, payload);
-    return data;
+    const { data } = await api.put<DeviceSingleResponse>(`/devices/${id}`, payload);
+    return parseDevice(data);
   },
 
   async testControlIdConnection(id: string): Promise<DeviceControlResponse> {

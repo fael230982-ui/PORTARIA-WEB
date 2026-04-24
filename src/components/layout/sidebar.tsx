@@ -22,10 +22,6 @@ import {
 } from 'lucide-react';
 import { brandConfig } from '@/config/brand';
 import { useAuth } from '@/hooks/use-auth';
-import {
-  getCondominiumEnabledModules,
-  getCurrentCondominium,
-} from '@/features/condominiums/condominium-contract';
 import { useResidenceCatalog } from '@/hooks/use-residence-catalog';
 
 type SidebarProps = {
@@ -69,9 +65,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const router = useRouter();
   const pathname = usePathname();
   const { user } = useAuth();
-  const { condominiums } = useResidenceCatalog(Boolean(user), user?.condominiumId ?? undefined);
-  const currentCondominium = getCurrentCondominium(condominiums, user?.condominiumId);
-  const enabledModules = getCondominiumEnabledModules(currentCondominium);
+  useResidenceCatalog(Boolean(user), user?.condominiumId ?? undefined);
   const baseNavigation = user?.role === 'MORADOR' ? residentNavigation : adminNavigation;
   const visibleNavigation = baseNavigation;
 
@@ -138,12 +132,6 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
           <Menu className="h-4 w-4" />
           {collapsed ? 'Expandir' : 'Recolher'}
         </button>
-
-        {!collapsed && (
-          <div className="mt-3 rounded-xl bg-white/5 p-3 text-xs text-slate-400">
-            Use o menu lateral para acessar as áreas da sua conta.
-          </div>
-        )}
 
         <BrandFooter collapsed={collapsed} />
       </div>

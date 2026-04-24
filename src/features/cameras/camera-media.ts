@@ -75,11 +75,16 @@ export function getPreferredVideoStreamUrl(
     resolvePlayableVideoUrl(camera?.liveUrl) ||
     resolvePlayableVideoUrl(streaming?.hlsUrl) ||
     resolvePlayableVideoUrl(camera?.hlsUrl) ||
-    resolvePlayableVideoUrl(streaming?.webRtcUrl) ||
-    resolvePlayableVideoUrl(camera?.webRtcUrl) ||
     resolvePlayableVideoUrl(camera?.streamUrl) ||
     null
   );
+}
+
+export function getPreferredWebRtcUrl(
+  camera?: Pick<Camera, 'webRtcUrl'> | null,
+  streaming?: Pick<CameraStreamingResponse, 'webRtcUrl'> | null
+) {
+  return resolveCameraMediaUrl(streaming?.webRtcUrl || camera?.webRtcUrl || null);
 }
 
 export function getPreferredImageStreamUrl(
@@ -110,6 +115,7 @@ export function getCameraMediaAvailabilityLabels(
 ) {
   const labels: string[] = [];
   if (getPreferredVideoStreamUrl(camera, streaming)) labels.push('ao vivo');
+  if (getPreferredWebRtcUrl(camera, streaming)) labels.push('webrtc');
   if (getPreferredImageStreamUrl(camera, streaming)) labels.push('preview');
   if (getPreferredSnapshotUrl(camera, streaming)) labels.push('snapshot');
   if (camera?.streamUrl) labels.push('stream');
@@ -149,6 +155,9 @@ export function getCameraPreviewMode(
   const videoStreamUrl = getPreferredVideoStreamUrl(camera, streaming);
   if (isBrowserPlayableVideoUrl(videoStreamUrl)) return 'video-stream';
 
+  const webRtcUrl = getPreferredWebRtcUrl(camera, streaming);
+  if (webRtcUrl) return 'none';
+
   const imageStreamUrl = getPreferredImageStreamUrl(camera, streaming);
   if (imageStreamUrl) return 'image-stream';
 
@@ -180,6 +189,7 @@ export function getCameraDiagnostics(
   > | null
 ): CameraDiagnostics {
   const videoStreamUrl = getPreferredVideoStreamUrl(camera, streaming);
+  const webRtcUrl = getPreferredWebRtcUrl(camera, streaming);
   const imageStreamUrl = getPreferredImageStreamUrl(camera, streaming);
   const snapshotUrl = getPreferredSnapshotUrl(camera, streaming);
   const rawRtspUrl = camera?.streamUrl;
@@ -211,6 +221,12 @@ export function getCameraDiagnostics(
     },
   ];
 
+  items.splice(1, 0, {
+    label: 'WebRTC',
+    ok: Boolean(webRtcUrl),
+    detail: webRtcUrl ? 'Disponivel no contrato, mas fora do player padrao.' : 'Nao informado.',
+  });
+
   if (previewReady) {
     return {
       previewReady,
@@ -224,7 +240,20 @@ export function getCameraDiagnostics(
             : 'Snapshot disponivel para visualizacao.',
       recommendation: 'A camera ja possui uma fonte utilizavel pelo front.',
       backendMessage:
-        'Para video real, manter liveUrl ou hlsUrl estavel no contrato da camera. imageStreamUrl deve ficar como fallback/preview.',
+        'Para video real, validar liveUrl e hlsUrl no contrato da camera. webRtcUrl pode existir, mas nao entra no mesmo fluxo do player padrao. imageStreamUrl deve ficar como fallback/preview.',
+      items,
+    };
+  }
+
+  if (webRtcUrl) {
+    return {
+      previewReady,
+      previewMode,
+      severity: 'warning',
+      summary: 'Camera com transporte WebRTC sem fonte compativel no player padrao.',
+      recommendation: 'Validar com o backend liveUrl, hlsUrl e webRtcUrl no contrato da camera.',
+      backendMessage:
+        'O backend informou apenas webRtcUrl. O player padrao do front nao reproduz esse transporte no mesmo fluxo de liveUrl/hlsUrl, entao mantenha liveUrl ou hlsUrl para a visualizacao principal.',
       items,
     };
   }
@@ -237,7 +266,7 @@ export function getCameraDiagnostics(
       summary: 'Camera cadastrada com RTSP, mas sem video no navegador.',
       recommendation: 'Solicite ao backend/VMS converter o RTSP para liveUrl ou hlsUrl.',
       backendMessage:
-        'A camera possui streamUrl RTSP, mas o front precisa receber liveUrl ou hlsUrl em GET /api/v1/cameras/{id}/streaming para video real. imageStreamUrl deve ser apenas fallback/preview.',
+        'A camera possui streamUrl RTSP, mas o front precisa receber liveUrl ou hlsUrl em GET /api/v1/cameras/{id}/streaming para video real. webRtcUrl pode ser complementar, mas nao substitui esse fluxo. imageStreamUrl deve ser apenas fallback/preview.',
       items,
     };
   }
@@ -249,7 +278,7 @@ export function getCameraDiagnostics(
     summary: 'Camera sem fonte de imagem utilizavel.',
     recommendation: 'Solicite ao backend retornar liveUrl/hlsUrl e manter snapshotUrl/imageStreamUrl como fallback.',
     backendMessage:
-      'A camera nao possui liveUrl, hlsUrl, snapshotUrl, imageStreamUrl nem streamUrl compativel. Validar contrato de GET /api/v1/cameras/{id}/streaming.',
+      'A camera nao possui liveUrl, hlsUrl, webRtcUrl, snapshotUrl, imageStreamUrl nem streamUrl compativel. Validar contrato de GET /api/v1/cameras/{id}/streaming.',
     items,
   };
 }

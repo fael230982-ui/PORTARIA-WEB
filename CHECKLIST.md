@@ -11,10 +11,11 @@
 ## Antes de publicar
 
 - [ ] Typecheck executado, quando aplicavel
-- [x] Build executado em 2026-04-23 com `npm run build`
+- [x] Build executado em 2026-04-24 com `npm run build`
 - [ ] Testes aplicaveis executados
-- [x] `CHANGELOG.md` atualizado em 2026-04-23
-- [x] `CHECKLIST.md` revisado em 2026-04-23
+- [x] Smoke test manual por perfil executado em 2026-04-24 via proxy local
+- [x] `CHANGELOG.md` atualizado em 2026-04-24
+- [x] `CHECKLIST.md` revisado em 2026-04-24
 
 ## Release
 

@@ -8,6 +8,7 @@ Todas as alteracoes relevantes deste projeto devem ser registradas aqui.
 
 - Importacao CSV de unidades e moradores com modelo de preenchimento e validacao previa.
 - Diagnostico documentado para o fluxo de cadastro de veiculos quando o backend recusa unidade fora do escopo do usuario.
+- Matriz documentada de smoke tests do backend por perfil: morador, operador, admin e master.
 
 ### Changed
 
@@ -15,12 +16,15 @@ Todas as alteracoes relevantes deste projeto devem ser registradas aqui.
 - Ajustes no painel administrativo, dashboard do morador, encomendas, alertas, cameras, pendencias, unidades e veiculos.
 - Cadastro de veiculos passa a enviar a unidade escolhida no corpo e no cabecalho de escopo esperado pela API.
 - Proxy deixa de reutilizar unidade antiga de morador quando a chamada ja possui autenticacao propria.
+- Catalogo de condominios e unidades passa a usar fallback da sessao quando a API oscila.
+- Telas de cameras e veiculos passam a manter a ultima atualizacao valida em modo degradado.
 
 ### Fixed
 
 - Corrigido travamento da pagina de veiculos quando os dados ainda nao tinham carregado.
 - Corrigidas mensagens quebradas por codificacao em telas administrativas e servicos.
 - Corrigida protecao contra acesso nulo em listas e filtros de veiculos.
+- Corrigida perda completa de lista em cameras e veiculos quando o backend fica indisponivel.
 
 ## [1.0.0] - 2026-04-17
 

@@ -105,15 +105,12 @@ export const useAuthStore = create<AuthState>()(
 
         const valid = !!state.token && !!state.user;
 
-        state.hydrated = true;
-        state.loading = false;
-        state.isAuthenticated = valid;
-
         if (!valid) {
-          state.token = null;
-          state.user = null;
-          state.isAuthenticated = false;
+          state.clearSession();
+          return;
         }
+
+        state.hydrateSession();
       },
     }
   )

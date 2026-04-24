@@ -60,6 +60,8 @@ const vehicleStatusLabels: Record<VehicleStatus, string> = {
   bloqueado: 'Bloqueado',
 };
 
+const VEHICLES_SNAPSHOT_STORAGE_KEY = 'admin-vehicles-snapshot';
+
 function normalizeSearch(value: unknown) {
   return String(value ?? '')
     .trim()
@@ -311,13 +313,51 @@ export default function AdminVeiculosPage() {
   const [deleteTarget, setDeleteTarget] = useState<Vehicle | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [handledInitialQuery, setHandledInitialQuery] = useState(false);
+  const [snapshotVehicles, setSnapshotVehicles] = useState<Vehicle[]>([]);
+  const [snapshotUpdatedAt, setSnapshotUpdatedAt] = useState<string | null>(null);
   const [activeUnitId, setActiveUnitId] = useState(() => {
     if (typeof window === 'undefined') return '';
     return new URLSearchParams(window.location.search).get('unitId') ?? '';
   });
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    try {
+      const raw = window.localStorage.getItem(VEHICLES_SNAPSHOT_STORAGE_KEY);
+      if (!raw) return;
+
+      const parsed = JSON.parse(raw) as {
+        data?: Vehicle[];
+        updatedAt?: string;
+      };
+
+      setSnapshotVehicles(Array.isArray(parsed.data) ? parsed.data : []);
+      setSnapshotUpdatedAt(typeof parsed.updatedAt === 'string' ? parsed.updatedAt : null);
+    } catch {
+      setSnapshotVehicles([]);
+      setSnapshotUpdatedAt(null);
+    }
+  }, []);
+
   const people = useMemo(() => peopleData?.data ?? [], [peopleData?.data]);
   const vehicles = useMemo(() => vehiclesData?.data ?? [], [vehiclesData?.data]);
+  const usingSnapshot = Boolean(error && snapshotVehicles.length > 0);
+  const visibleVehicles = usingSnapshot ? snapshotVehicles : vehicles;
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || vehicles.length === 0) return;
+
+    const payload = {
+      data: vehicles,
+      updatedAt: new Date().toISOString(),
+    };
+
+    window.localStorage.setItem(VEHICLES_SNAPSHOT_STORAGE_KEY, JSON.stringify(payload));
+    setSnapshotVehicles(vehicles);
+    setSnapshotUpdatedAt(payload.updatedAt);
+  }, [vehicles]);
+
   const allowedCondominiumIds = useMemo(() => {
     if (user?.role !== 'ADMIN') return [];
     return [user.condominiumId, ...(user.condominiumIds ?? [])].filter(Boolean) as string[];
@@ -339,17 +379,19 @@ export default function AdminVeiculosPage() {
   const peopleById = useMemo(() => new Map(people.map((person) => [person.id, person])), [people]);
   const duplicatePlateSet = useMemo(() => {
     const counts = new Map<string, number>();
-    vehicles.forEach((vehicle) => {
+    visibleVehicles.forEach((vehicle) => {
       const plate = normalizeVehiclePlate(vehicle.plate);
       if (!plate) return;
       counts.set(plate, (counts.get(plate) ?? 0) + 1);
     });
     return new Set(Array.from(counts.entries()).filter(([, count]) => count > 1).map(([plate]) => plate));
-  }, [vehicles]);
+  }, [visibleVehicles]);
 
   const filteredVehicles = useMemo(() => {
     const query = normalizeSearch(search);
-    const unitScoped = activeUnitId ? vehicles.filter((vehicle) => vehicle.unitId === activeUnitId || vehicle.unitLabel === activeUnitId) : vehicles;
+    const unitScoped = activeUnitId
+      ? visibleVehicles.filter((vehicle) => vehicle.unitId === activeUnitId || vehicle.unitLabel === activeUnitId)
+      : visibleVehicles;
 
     return unitScoped.filter((vehicle) => {
       const normalizedPlate = normalizeVehiclePlate(vehicle.plate);
@@ -377,16 +419,16 @@ export default function AdminVeiculosPage() {
 
       return statusOk && issueOk && searchOk;
     });
-  }, [activeUnitId, duplicatePlateSet, issueFilter, search, statusFilter, vehicles]);
+  }, [activeUnitId, duplicatePlateSet, issueFilter, search, statusFilter, visibleVehicles]);
 
   const stats = useMemo(() => ({
-    total: vehicles.length,
-    active: vehicles.filter((vehicle) => vehicle.status === 'ativo').length,
-    blocked: vehicles.filter((vehicle) => vehicle.status === 'bloqueado').length,
-    invalid: vehicles.filter((vehicle) => !isValidVehiclePlate(vehicle.plate)).length,
+    total: visibleVehicles.length,
+    active: visibleVehicles.filter((vehicle) => vehicle.status === 'ativo').length,
+    blocked: visibleVehicles.filter((vehicle) => vehicle.status === 'bloqueado').length,
+    invalid: visibleVehicles.filter((vehicle) => !isValidVehiclePlate(vehicle.plate)).length,
     duplicates: duplicatePlateSet.size,
-    withoutUnit: vehicles.filter((vehicle) => !vehicle.unitId).length,
-  }), [duplicatePlateSet.size, vehicles]);
+    withoutUnit: visibleVehicles.filter((vehicle) => !vehicle.unitId).length,
+  }), [duplicatePlateSet.size, visibleVehicles]);
 
   useEffect(() => {
     if (handledInitialQuery || scopedUnits.length === 0) return;
@@ -520,7 +562,7 @@ export default function AdminVeiculosPage() {
     }
 
     const normalizedPlate = normalizeVehiclePlate(form.plate);
-    const duplicated = vehicles.some((vehicle) => vehicle.id !== editingVehicle.id && normalizeVehiclePlate(vehicle.plate) === normalizedPlate);
+    const duplicated = visibleVehicles.some((vehicle) => vehicle.id !== editingVehicle?.id && normalizeVehiclePlate(vehicle.plate) === normalizedPlate);
     if (duplicated) {
       setFormError('Já existe outro veículo cadastrado com esta placa.');
       return;
@@ -626,6 +668,19 @@ export default function AdminVeiculosPage() {
           </div>
         </div>
       </section>
+
+      {usingSnapshot ? (
+        <div className="rounded-3xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+          Mostrando a última atualização disponível de veículos. O servidor está instável agora, então novos cadastros e exclusões podem demorar para aparecer.
+          {snapshotUpdatedAt ? ` Última sincronização: ${new Date(snapshotUpdatedAt).toLocaleString('pt-BR')}.` : ''}
+        </div>
+      ) : null}
+
+      {!usingSnapshot && error ? (
+        <div className="rounded-3xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-sm text-red-100">
+          {getVehicleErrorMessage(error, 'Não foi possível carregar os veículos agora.')}
+        </div>
+      ) : null}
 
       {activeUnitId ? (
         <div className="flex flex-col gap-3 rounded-3xl border border-cyan-500/25 bg-cyan-500/10 p-4 text-sm text-cyan-50 md:flex-row md:items-center md:justify-between">

@@ -31,7 +31,7 @@ import { CameraFeed } from '@/components/camera-feed';
 import { CameraStatusIndicator } from '@/components/operacao/camera-status-indicator';
 import { brandClasses } from '@/config/brand-classes';
 import { useCameraStreaming } from '@/hooks/use-camera-streaming';
-import { getPreferredImageStreamUrl, getPreferredSnapshotUrl, getPreferredVideoStreamUrl } from '@/features/cameras/camera-media';
+import { getPreferredImageStreamUrl, getPreferredSnapshotUrl, getPreferredVideoStreamUrl, getPreferredWebRtcUrl } from '@/features/cameras/camera-media';
 import type { Camera as CameraRecord } from '@/types/camera';
 
 export type CameraPlayerData = CameraRecord & {
@@ -69,6 +69,7 @@ export function CameraPlayer({
   const [nightVision, setNightVision] = useState(false);
   const { data: streamingData } = useCameraStreaming(cameraData?.id, Boolean(cameraData?.id));
   const preferredVideoStreamUrl = getPreferredVideoStreamUrl(cameraData, streamingData);
+  const preferredWebRtcUrl = getPreferredWebRtcUrl(cameraData, streamingData);
   const preferredImageStreamUrl = getPreferredImageStreamUrl(cameraData, streamingData);
   const preferredSnapshotUrl = getPreferredSnapshotUrl(cameraData, streamingData);
   const hasVideoStream = Boolean(cameraData?.streamUrl);
@@ -160,6 +161,10 @@ export function CameraPlayer({
                   <Badge className={brandClasses.softAccent}>liveUrl/hlsUrl</Badge>
                 ) : null}
 
+                {preferredWebRtcUrl ? (
+                  <Badge className="border-violet-500/30 bg-violet-500/10 text-violet-200">webRtcUrl</Badge>
+                ) : null}
+
                 {preferredImageStreamUrl ? (
                   <Badge className="border-sky-500/30 bg-sky-500/10 text-sky-200">preview</Badge>
                 ) : null}
@@ -200,7 +205,7 @@ export function CameraPlayer({
                 className={`h-full ${cameraData.status === 'OFFLINE' ? 'opacity-40' : ''}`}
                 imageClassName="h-full w-full object-cover"
                 emptyLabel="Nenhum preview disponível"
-                emptyHint="Configure liveUrl, hlsUrl, imageStreamUrl ou snapshotUrl na API."
+                emptyHint="Valide liveUrl, hlsUrl e webRtcUrl no contrato da cÃ¢mera. imageStreamUrl e snapshotUrl devem ficar como apoio."
                 controls={false}
               />
             )}
