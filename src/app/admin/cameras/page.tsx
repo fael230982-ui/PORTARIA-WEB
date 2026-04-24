@@ -224,6 +224,24 @@ function getDiagnosticBadgeClass(severity: 'ok' | 'warning' | 'error') {
   return 'border-red-500/30 bg-red-500/15 text-red-200';
 }
 
+function humanizeCameraBackendMessage(message: string) {
+  const normalized = message.toLowerCase();
+
+  if (
+    normalized.includes('createcamerausecase.__init__') ||
+    normalized.includes('device_repository') ||
+    normalized.includes('device_projection_service')
+  ) {
+    return 'O servidor de câmeras está com uma configuração interna incompleta e não conseguiu concluir este cadastro.';
+  }
+
+  if (normalized.includes('deviceusagetype')) {
+    return 'O uso do dispositivo só pode ser informado para IA Faces, Câmera IA e Dispositivo Facial.';
+  }
+
+  return message;
+}
+
 function getCameraErrorMessage(error: unknown, fallback: string) {
   const maybeApiError = error as {
     response: {
@@ -267,8 +285,8 @@ function getCameraErrorMessage(error: unknown, fallback: string) {
     }
   }
 
-  if (typeof detail === 'string' && detail.trim()) return detail;
-  if (typeof message === 'string' && message.trim()) return message;
+  if (typeof detail === 'string' && detail.trim()) return humanizeCameraBackendMessage(detail);
+  if (typeof message === 'string' && message.trim()) return humanizeCameraBackendMessage(message);
 
   const normalizedFallbackMessage = `${String(detail ?? '')} ${String(message ?? '')}`.toLowerCase();
   if (normalizedFallbackMessage.includes('deviceusagetype')) {
@@ -292,7 +310,7 @@ function getCameraErrorMessage(error: unknown, fallback: string) {
   }
 
   return maybeApiError.message && !maybeApiError.message.includes('Request failed with status code')
-    ? maybeApiError.message
+    ? humanizeCameraBackendMessage(maybeApiError.message)
     : fallback;
 }
 
@@ -697,14 +715,14 @@ export default function AdminCamerasPage() {
 
     return [...unmatchedDrafts, ...baseCameras];
   }, [cameras, localDraftCameras, snapshotCameras, usingSnapshot]);
-  const isAdminScope = user.role === 'ADMIN';
+  const isAdminScope = user?.role === 'ADMIN';
   const accessibleUnits = useMemo(() => {
     if (!isAdminScope) {
       return units;
     }
 
-    return units.filter((unit) => unit.condominiumId === user.condominiumId);
-  }, [isAdminScope, units, user.condominiumId]);
+    return units.filter((unit) => unit.condominiumId === user?.condominiumId);
+  }, [isAdminScope, units, user?.condominiumId]);
   const accessibleUnitIds = useMemo(
     () => new Set(accessibleUnits.map((unit) => unit.id)),
     [accessibleUnits]
@@ -780,7 +798,11 @@ export default function AdminCamerasPage() {
         }
 
         if (nextJob.status === 'FAILED') {
-          setSubmitError(nextJob.errorMessage || 'O processamento da câmera não foi concluído.');
+          setSubmitError(
+            nextJob.errorMessage
+              ? humanizeCameraBackendMessage(nextJob.errorMessage)
+              : 'O processamento da câmera não foi concluído.'
+          );
           setPendingRtspJob(null);
           return;
         }

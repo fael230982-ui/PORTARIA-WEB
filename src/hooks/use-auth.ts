@@ -19,10 +19,20 @@ export const useAuth = () => {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
+
     if (!hydrated) {
       hydrateSession();
     }
-  }, [hydrated, hydrateSession]);
+
+    const fallbackTimer = window.setTimeout(() => {
+      const state = useAuthStore.getState();
+      if (!state.hydrated || state.loading) {
+        state.hydrateSession();
+      }
+    }, 1200);
+
+    return () => window.clearTimeout(fallbackTimer);
+  }, [hydrated, hydrateSession, loading]);
 
   return {
     token,

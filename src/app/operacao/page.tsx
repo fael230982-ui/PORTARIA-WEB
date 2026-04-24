@@ -1472,6 +1472,15 @@ export default function OperacaoPage() {
     Boolean(selectedResidentUnitId)
   );
   const {
+    data: inboxMessagesData,
+    isLoading: inboxMessagesLoading,
+    error: inboxMessagesError,
+    refetch: refetchInboxMessages,
+  } = useOperationMessages(
+    { limit: 50 },
+    Boolean(user)
+  );
+  const {
     data: residentWhatsAppConnection,
     isLoading: residentWhatsAppLoading,
     error: residentWhatsAppError,
@@ -1486,7 +1495,16 @@ export default function OperacaoPage() {
     normalizeText(peopleSearch).length >= 2
   );
   const residentMessages = residentMessagesData?.data ?? [];
+  const inboxMessages = inboxMessagesData?.data ?? [];
+  const recentInboxMessages = useMemo(
+    () =>
+      [...inboxMessages]
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        .slice(0, 6),
+    [inboxMessages]
+  );
   const unreadResidentMessagesCount = residentMessages.filter((message) => !message.readAt).length;
+  const unreadInboxMessagesCount = inboxMessages.filter((message) => message.direction === 'INBOUND' && !message.readAt).length;
   const residentPhone = selectedResidentPerson?.phone?.trim() || null;
   const residentWhatsAppState = residentWhatsAppConnection?.state?.trim().toLowerCase() ?? null;
   const residentWhatsAppReady = residentWhatsAppState === 'open';
@@ -2314,8 +2332,8 @@ export default function OperacaoPage() {
 
   const residentMessagesDuringShift = useMemo(() => {
     if (!activeShift?.startedAt) return [];
-    return residentMessages.filter((message) => isWithinShiftPeriod(message.createdAt, activeShift.startedAt));
-  }, [activeShift?.startedAt, residentMessages]);
+    return inboxMessages.filter((message) => isWithinShiftPeriod(message.createdAt, activeShift.startedAt));
+  }, [activeShift?.startedAt, inboxMessages]);
 
   const activeShiftSummary = useMemo<ShiftHandoverReportMetadata['summary'] | null>(() => {
     if (!activeShift?.startedAt) return null;
@@ -3330,6 +3348,7 @@ export default function OperacaoPage() {
       setResidentMessageText('');
       setPageMessage((current) => current ?? { tone: 'success', text: 'Mensagem enviada para a unidade.' });
       await refetchResidentMessages();
+      await refetchInboxMessages();
     } catch (error) {
       setPageMessage({ tone: 'error', text: getErrorMessage(error, 'Não foi possível enviar a mensagem.') });
     } finally {
@@ -3349,6 +3368,23 @@ export default function OperacaoPage() {
       setPageMessage({ tone: 'error', text: getErrorMessage(error, 'Não foi possível carregar as mensagens da unidade.') });
     } finally {
       setResidentMessageUpdatingId(null);
+    }
+  }
+
+  function openResidentConversationFromMessage(message: OperationMessage) {
+    const residentFromMessage =
+      (message.personId ? residentPeople.find((person) => person.id === message.personId) ?? null : null) ||
+      (message.recipientPersonId ? residentPeople.find((person) => person.id === message.recipientPersonId) ?? null : null) ||
+      (message.unitId ? residentPeople.find((person) => person.unitId === message.unitId) ?? null : null);
+
+    if (residentFromMessage) {
+      setSelectedResidentPerson(residentFromMessage);
+      return;
+    }
+
+    if (message.unitId) {
+      setResidentSearch(message.unitLabel ?? '');
+      openResidentsConsultation();
     }
   }
 
@@ -3404,6 +3440,7 @@ export default function OperacaoPage() {
         text: residentMessageChannel === 'WHATSAPP' ? 'Mensagem enviada pelo WhatsApp.' : 'Mensagem enviada para a unidade.',
       });
       await refetchResidentMessages();
+      await refetchInboxMessages();
     } catch (error) {
       setPageMessage({ tone: 'error', text: getErrorMessage(error, 'Não foi possível enviar a mensagem.') });
     } finally {
@@ -4112,6 +4149,80 @@ export default function OperacaoPage() {
                         />
                       </button>
                     )) : null}
+                  </div>
+                </div>
+
+                <div className="rounded-[22px] border border-white/10 bg-slate-950/25 p-3 backdrop-blur">
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Mensagens dos moradores</p>
+                      <p className="mt-1 text-sm text-slate-300">Últimas conversas recebidas pelo painel da portaria.</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {unreadInboxMessagesCount > 0 ? (
+                        <span className="rounded-full border border-amber-400/25 bg-amber-400/12 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-100">
+                          {unreadInboxMessagesCount} nova{unreadInboxMessagesCount > 1 ? 's' : ''}
+                        </span>
+                      ) : null}
+                      <button
+                        type="button"
+                        onClick={() => void refetchInboxMessages()}
+                        disabled={inboxMessagesLoading}
+                        className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white transition hover:bg-white/10 disabled:opacity-60"
+                      >
+                        Atualizar
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    {inboxMessagesError ? (
+                      <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-3 text-sm text-amber-100">
+                        Não foi possível carregar a caixa de entrada agora.
+                      </div>
+                    ) : inboxMessagesLoading && recentInboxMessages.length === 0 ? (
+                      <div className="rounded-2xl border border-white/10 bg-white/5 p-3 text-sm text-slate-300">Carregando mensagens...</div>
+                    ) : recentInboxMessages.length === 0 ? (
+                      <div className="rounded-2xl border border-dashed border-white/10 bg-white/5 p-3 text-sm text-slate-300">
+                        Nenhuma mensagem encontrada até agora.
+                      </div>
+                    ) : (
+                      recentInboxMessages.map((message) => {
+                        const messageUnitLabel =
+                          message.unitLabel ??
+                          (message.unitId ? accessibleUnitsMap.get(message.unitId)?.label ?? null : null) ??
+                          'Unidade não identificada';
+                        const incoming = message.direction === 'INBOUND' || message.direction === 'RESIDENT_TO_PORTARIA';
+
+                        return (
+                          <button
+                            key={message.id}
+                            type="button"
+                            onClick={() => openResidentConversationFromMessage(message)}
+                            className="w-full rounded-2xl border border-white/10 bg-white/5 p-3 text-left transition hover:bg-white/10"
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] uppercase tracking-[0.14em] text-slate-400">
+                                  {incoming ? message.senderName || 'Morador' : 'Portaria'}
+                                </span>
+                                <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-300">
+                                  {getOperationMessageChannelLabel(message.channel)}
+                                </span>
+                                {incoming && !message.readAt ? (
+                                  <span className="rounded-full border border-amber-400/25 bg-amber-400/12 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-amber-100">
+                                    Nova
+                                  </span>
+                                ) : null}
+                              </div>
+                              <span className="text-[10px] text-slate-500">{new Date(message.createdAt).toLocaleString('pt-BR')}</span>
+                            </div>
+                            <p className="mt-2 line-clamp-2 text-sm text-white">{message.text}</p>
+                            <p className="mt-2 text-xs text-slate-400">{messageUnitLabel}</p>
+                          </button>
+                        );
+                      })
+                    )}
                   </div>
                 </div>
               </div>

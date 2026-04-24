@@ -47,9 +47,10 @@ export function useOperationMessages(params?: OperationMessagesParams, enabled =
   return useQuery({
     queryKey: ['operation-messages', params],
     queryFn: () => operationService.listMessages(params),
-    enabled: enabled && Boolean(params?.unitId),
+    enabled,
     staleTime: 30 * 1000,
     retry: 1,
+    refetchInterval: enabled ? 15 * 1000 : false,
   });
 }
 

@@ -24,6 +24,8 @@ Todas as alteracoes relevantes deste projeto devem ser registradas aqui.
 - Telas de Usuarios e Operacao tiveram nova limpeza de termos tecnicos visiveis ao usuario final.
 - Câmeras, Moradores, Encomendas, Alertas, Unidades, Relatórios e formulários administrativos receberam nova revisão para remover linguagem técnica da interface.
 
+ - Painel Operacao ganhou uma caixa de entrada visivel para mensagens dos moradores e a sessao recebeu fallback para evitar carregamento infinito no painel administrativo.
+
 ### Fixed
 
 - Corrigido travamento da pagina de veiculos quando os dados ainda nao tinham carregado.
