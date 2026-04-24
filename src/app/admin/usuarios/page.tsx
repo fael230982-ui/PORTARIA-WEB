@@ -923,7 +923,7 @@ export default function AdminUsuariosPage() {
         {error ? (
           <EmptyState
             title="Não foi possível carregar os usuários"
-            description="Verifique o endpoint /users, autenticação e permissões do perfil atual."
+            description="Confira seu acesso e tente novamente em instantes."
           />
         ) : filteredUsers.length === 0 ? (
           <EmptyState
@@ -1015,7 +1015,7 @@ export default function AdminUsuariosPage() {
       <CrudModal
         open={openCreate}
         title={createInitialData.role === 'MORADOR' ? 'Criar acesso de morador' : 'Novo usuário'}
-        description={createInitialData.role === 'MORADOR' ? 'Importe um morador já cadastrado e crie apenas o login do app.' : 'Crie uma conta autenticável via endpoint /users.'}
+        description={createInitialData.role === 'MORADOR' ? 'Importe um morador já cadastrado e crie apenas o login do app.' : 'Crie uma nova conta de acesso ao sistema.'}
         onClose={() => {
           setOpenCreate(false);
           setCreateInitialData({});
@@ -1058,7 +1058,7 @@ export default function AdminUsuariosPage() {
       <CrudModal
         open={openView}
         title="Detalhes do usuário"
-        description="Resumo do usuário real retornado pela API."
+        description="Resumo completo do usuário selecionado."
         onClose={() => setOpenView(false)}
         maxWidth="lg"
       >
@@ -1160,7 +1160,7 @@ export default function AdminUsuariosPage() {
       <CrudModal
         open={openPasswordHelp}
         title="Senha do app do morador"
-        description="Defina uma nova senha pelo endpoint PATCH /users/{id}."
+        description="Defina uma nova senha para este usuário."
         onClose={() => {
           setOpenPasswordHelp(false);
           setPasswordValue('');
@@ -1207,18 +1207,18 @@ export default function AdminUsuariosPage() {
       <CrudModal
         open={false}
         title="Senha do app do morador"
-        description="Reset/reenvio de senha ainda depende de endpoint do backend."
+        description="Reenvio e recuperação assistida de senha ainda não estão disponíveis nesta tela."
         onClose={() => setOpenPasswordHelp(false)}
         maxWidth="lg"
       >
         <div className="space-y-4 text-sm text-slate-300">
           <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4 text-amber-100">
-            A API atual já cobre criação e troca administrativa de senha, mas reset assistido e reenvio por e-mail ainda dependem de fechamento adicional do backend.
+            A criação e a troca administrativa de senha já estão disponíveis. O reenvio por e-mail e a recuperação assistida ainda serão liberados em uma próxima etapa.
           </div>
           <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-            <p className="font-medium text-white">Contrato solicitado ao backend</p>
-            <p className="mt-2">POST /api/v1/users/{'{id}'}/password-reset para enviar e-mail de redefinição.</p>
-            <p className="mt-1">PATCH /api/v1/users/{'{id}'}/password para admin definir senha temporária.</p>
+            <p className="font-medium text-white">Recursos aguardando liberação</p>
+            <p className="mt-2">Reenvio de e-mail para redefinição de senha.</p>
+            <p className="mt-1">Definição de senha temporária com envio assistido ao usuário.</p>
           </div>
           <div className="flex flex-wrap justify-end gap-3">
             <button type="button" disabled className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-400 opacity-70">
@@ -1234,7 +1234,7 @@ export default function AdminUsuariosPage() {
       <CrudModal
         open={openEditHelp && Boolean(editingUser)}
         title="Editar usuário"
-        description="Atualize os dados reais pelo endpoint PATCH /users/{id}."
+        description="Atualize os dados do usuário selecionado."
         onClose={() => {
           setOpenEditHelp(false);
           setEditingUser(null);
@@ -1284,18 +1284,18 @@ export default function AdminUsuariosPage() {
       <CrudModal
         open={openEditHelp && !editingUser}
         title="Editar usuário"
-        description="A tela já está preparada visualmente, mas a API ainda precisa publicar o endpoint de edição."
+        description="A edição completa deste usuário ainda não está disponível neste ambiente."
         onClose={() => setOpenEditHelp(false)}
         maxWidth="lg"
       >
         <div className="space-y-4 text-sm text-slate-300">
           <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4 text-amber-100">
-            Este ambiente ainda não retornou um contrato de edição utilizável para o usuário selecionado. Quando isso acontecer, o front já está preparado para salvar as alterações.
+            Este ambiente ainda não liberou a edição completa para o usuário selecionado. Assim que esse recurso estiver disponível, esta tela poderá salvar as alterações normalmente.
           </div>
           <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-            <p className="font-medium text-white">Contrato necessário</p>
-            <p className="mt-2">PATCH /api/v1/users/{'{id}'} para editar nome, e-mail, perfil, condomínio, unidade, `unitIds` e `personId`.</p>
-            <p className="mt-1">Opcional: PATCH /api/v1/users/{'{id}'}/status para ativar, bloquear ou inativar usuário.</p>
+            <p className="font-medium text-white">Recursos aguardando liberação</p>
+            <p className="mt-2">Edição completa de nome, e-mail, perfil, condomínio, unidade e vínculo com pessoa.</p>
+            <p className="mt-1">Alteração rápida de status para ativar, bloquear ou inativar usuário.</p>
           </div>
           {selectedUser ? (
             <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">

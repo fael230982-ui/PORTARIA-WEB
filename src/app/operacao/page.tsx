@@ -557,7 +557,7 @@ function QuickPersonForm({
               {units.length === 0 ? (
                 <div className="px-4 py-3 text-sm text-slate-400">Nenhuma unidade carregada.</div>
               ) : loadingSearchedUnits ? (
-                <div className="px-4 py-3 text-sm text-slate-400">Consultando unidades na API...</div>
+                <div className="px-4 py-3 text-sm text-slate-400">Consultando unidades...</div>
               ) : visibleUnits.length === 0 ? (
                 <div className="px-4 py-3 text-sm text-slate-400">Nenhuma unidade encontrada para essa busca.</div>
               ) : (
@@ -683,7 +683,7 @@ function QuickDeliveryForm({
               {units.length === 0 ? (
                 <div className="px-4 py-3 text-sm text-slate-400">Nenhuma unidade carregada.</div>
               ) : loadingSearchedUnits ? (
-                <div className="px-4 py-3 text-sm text-slate-400">Consultando unidades na API...</div>
+                <div className="px-4 py-3 text-sm text-slate-400">Consultando unidades...</div>
               ) : visibleUnits.length === 0 ? (
                 <div className="px-4 py-3 text-sm text-slate-400">Nenhuma unidade encontrada para essa busca.</div>
               ) : (
@@ -2835,7 +2835,7 @@ export default function OperacaoPage() {
       });
 
       if (!response.valid) {
-        setPageMessage({ tone: 'error', text: response.message || 'A retirada manual não foi confirmada pela API.' });
+        setPageMessage({ tone: 'error', text: response.message || 'A retirada manual não foi confirmada.' });
         return;
       }
 
@@ -3700,7 +3700,7 @@ export default function OperacaoPage() {
                   {!isOnline
                     ? `A operação continua localmente. ${offlinePendingCount} item(ns) aguardam sincronização.${snapshotCache.cachedAt ? ` A tela usa o último snapshot salvo em ${formatOptionalDateTime(snapshotCache.cachedAt)}.` : ''}`
                     : offlinePendingCount
-                      ? `${offlinePendingCount} item(ns) aguardam envio automático ao backend.${lastFlushSummary?.succeeded ? ` ${lastFlushSummary.succeeded} item(ns) já foram sincronizados nesta rodada.` : ''}`
+                      ? `${offlinePendingCount} item(ns) aguardam envio automático.${lastFlushSummary?.succeeded ? ` ${lastFlushSummary.succeeded} item(ns) já foram sincronizados nesta rodada.` : ''}`
                       : `${offlineFailedCount} item(ns) ficaram com falha definitiva e precisam de revisão manual.`}
                 </p>
               </div>
@@ -3763,7 +3763,7 @@ export default function OperacaoPage() {
                   {camerasError ? (
                     <p className="mt-1 text-sm font-medium text-red-100">Erro ao carregar câmeras.</p>
                   ) : cameras.length === 0 ? (
-                    <h2 className="mt-1 text-base font-medium">A API retornou 0 câmeras</h2>
+                    <h2 className="mt-1 text-base font-medium">Nenhuma câmera disponível no momento</h2>
                   ) : (
                     <select
                       value={selectedCamera?.id ?? ''}
@@ -3990,7 +3990,7 @@ export default function OperacaoPage() {
                       </div>
                     ) : (
                       <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-300">
-                        A API processou a imagem, mas não retornou correspondências.
+                        A imagem foi processada, mas não retornou correspondências.
                       </div>
                     )
                   ) : (
@@ -4392,7 +4392,7 @@ export default function OperacaoPage() {
                     </div>
                   ))
                 ) : (
-                  <p className="text-sm text-slate-400">Nenhum historico retornado pela API neste ambiente.</p>
+                  <p className="text-sm text-slate-400">Nenhum histórico disponível neste ambiente.</p>
                 )}
               </div>
             </div>
@@ -4615,7 +4615,7 @@ export default function OperacaoPage() {
           />
         </CrudModal>
 
-        <CrudModal open={openDeliveryModal} title="Registrar encomenda" description="Cadastre a encomenda recebida na portaria pelo contrato vigente da API." onClose={() => { setOpenDeliveryModal(false); setDeliveryError(null); setDeliveryForm(initialDeliveryForm); }} maxWidth="xl">
+        <CrudModal open={openDeliveryModal} title="Registrar encomenda" description="Cadastre a encomenda recebida na portaria." onClose={() => { setOpenDeliveryModal(false); setDeliveryError(null); setDeliveryForm(initialDeliveryForm); }} maxWidth="xl">
           <QuickDeliveryForm
             value={deliveryForm}
             onChange={(field, nextValue) => setDeliveryForm((current) => ({ ...current, [field]: nextValue }))}
@@ -4736,7 +4736,7 @@ export default function OperacaoPage() {
                           <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Validação de retirada</p>
                           <p className="mt-1 text-sm text-white">{isWithdrawn ? 'Retirada já concluída e registrada.' : hasSecureWithdrawal ? 'Solicite ao morador o código ou QR Code no app.' : 'Validar identidade manualmente.'}</p>
                           <p className={`mt-1 text-[10px] font-semibold uppercase tracking-[0.12em] ${isWithdrawn ? 'text-slate-300' : hasSecureWithdrawal ? 'text-emerald-300' : 'text-amber-200'}`}>
-                            {isWithdrawn ? 'Somente consulta' : hasSecureWithdrawal ? 'Segredo não exibido para a portaria' : 'Sem código disponível na API'}
+                            {isWithdrawn ? 'Somente consulta' : hasSecureWithdrawal ? 'Código protegido para a portaria' : 'Sem código disponível'}
                           </p>
                         </div>
                         <div className="grid gap-2 lg:min-w-[360px]">
@@ -4916,7 +4916,7 @@ export default function OperacaoPage() {
           <div className="space-y-4">
             {operationActionsError ? (
               <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4 text-sm text-amber-100">
-                Não foi possível carregar os acionamentos da API. Confira se `GET /api/v1/actions` está publicado no ambiente.
+                Não foi possível carregar os acionamentos agora. Tente novamente em instantes.
               </div>
             ) : null}
             <div className="grid gap-2 sm:grid-cols-3">
@@ -5780,7 +5780,7 @@ export default function OperacaoPage() {
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <p className={`text-xs uppercase tracking-[0.18em] ${brandClasses.accentTextSoft}`}>Mensagens</p>
-                    <p className="mt-1 text-sm text-slate-300">Histórico da unidade pelo contrato v4.0.</p>
+                    <p className="mt-1 text-sm text-slate-300">Histórico recente da unidade.</p>
                   </div>
                   <div className="flex items-center gap-2">
                     {unreadResidentMessagesCount > 0 ? (
@@ -6031,7 +6031,7 @@ export default function OperacaoPage() {
               {selectedAlertReplayUrl ? (
                 <div className={`rounded-2xl border p-4 ${brandClasses.softAccentPanel}`}>
                   <p className={`text-xs uppercase tracking-[0.18em] ${brandClasses.accentTextSoft}`}>Pré-alarme</p>
-                  <p className="mt-2 text-sm text-slate-100">A API publicou um replay curto para confirmar o que gerou o disparo.</p>
+                  <p className="mt-2 text-sm text-slate-100">Foi gerado um replay curto para confirmar o que originou o alerta.</p>
                   <div className="mt-3 flex flex-wrap gap-3">
                     <a
                       href={selectedAlertReplayUrl}

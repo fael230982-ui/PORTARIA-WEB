@@ -21,6 +21,7 @@ Todas as alteracoes relevantes deste projeto devem ser registradas aqui.
 - Tela de dispositivos passa a manter cache com data da ultima sincronizacao e feedback mais claro quando a listagem do servidor oscila.
 - Cadastro RTSP de cameras passa a entrar em fila visual local, aparecendo na lista enquanto o servidor conclui a sincronizacao.
 - Dispositivos recem-cadastrados passam a ficar marcados como sincronizacao pendente ate a confirmacao da listagem oficial.
+- Telas de Usuarios e Operacao tiveram nova limpeza de termos tecnicos visiveis ao usuario final.
 
 ### Fixed
 
