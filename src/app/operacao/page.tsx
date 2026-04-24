@@ -4361,8 +4361,8 @@ export default function OperacaoPage() {
             <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">Histórico oficial da API</p>
-                  <p className="mt-1 text-sm text-slate-300">Últimas passagens registradas em `GET /api/v1/operation/shift-changes`.</p>
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">Histórico de turno</p>
+                  <p className="mt-1 text-sm text-slate-300">Últimas passagens registradas para acompanhar a troca de turno.</p>
                 </div>
               </div>
               <div className="mt-3 space-y-2">
