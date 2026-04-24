@@ -550,7 +550,7 @@ export default function RelatoriosPage() {
             Visão operacional consolidada
           </h1>
           <p className="mt-2 text-sm text-slate-400 text-justify">
-            Indicadores em tempo real, integração CRUD e base pronta para API real.
+            Indicadores em tempo real para acompanhar a operação e apoiar decisões.
           </p>
         </div>
 
@@ -890,12 +890,12 @@ export default function RelatoriosPage() {
         {reportsFetching ? (
           <EmptyState
             title="Atualizando relatórios"
-            description="Aguarde a resposta atual da API para evitar exibir dados antigos em cache."
+            description="Aguarde a atualização mais recente para evitar dados antigos em tela."
           />
         ) : error ? (
           <EmptyState
             title="Não foi possível carregar os dados"
-            description="Verifique os endpoints e a autenticação."
+            description="Confira seu acesso e tente novamente em instantes."
           />
         ) : filteredRows.length === 0 ? (
           <EmptyState
@@ -1172,7 +1172,7 @@ export default function RelatoriosPage() {
       <CrudModal
         open={openCreate}
         title="Novo relatório"
-        description="Preencha os campos para salvar na API."
+        description="Preencha os campos para salvar o relatório."
         onClose={() => setOpenCreate(false)}
         footer={null}
       >
@@ -1187,7 +1187,7 @@ export default function RelatoriosPage() {
       <CrudModal
         open={openEdit}
         title="Editar relatório"
-        description="Atualize os dados e salve na API."
+        description="Atualize os dados e salve as alterações."
         onClose={() => setOpenEdit(false)}
         footer={null}
       >

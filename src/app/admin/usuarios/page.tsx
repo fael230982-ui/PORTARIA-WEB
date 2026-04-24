@@ -126,7 +126,7 @@ function humanizeUserApiMessage(message: string) {
   const normalized = message.toLowerCase();
 
   if (normalized.includes('request failed with status code 500')) {
-    return 'O backend retornou erro interno ao salvar o usuário. Tente novamente ou acione o suporte técnico.';
+    return 'Não foi possível salvar o usuário agora. Tente novamente em instantes.';
   }
   if (normalized.includes('request failed with status code 403')) {
     return 'Você não tem permissão para criar usuário com esse perfil ou escopo.';
@@ -168,7 +168,7 @@ function getUserErrorMessage(error: unknown, fallback: string) {
     if (rawMessage) return humanizeUserApiMessage(rawMessage);
     if (response.status === 400) return 'Confira os dados obrigatórios antes de salvar o usuário.';
     if (response.status === 403) return 'Você não tem permissão para criar usuário com esse perfil ou escopo.';
-    if (response.status === 500) return 'O backend retornou erro interno ao salvar o usuário. Tente novamente ou acione o suporte técnico.';
+    if (response.status === 500) return 'Não foi possível salvar o usuário agora. Tente novamente em instantes.';
   }
 
   if (error instanceof Error && error.message && !error.message.includes('Request failed with status code')) {
@@ -471,7 +471,7 @@ function UserForm({
       </div>
 
       <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-xs text-slate-400">
-        {passwordRequired ? 'A senha inicial é enviada somente na criação do usuário.' : 'Na edição, a senha em branco não é enviada para a API. Use "Senha do app" para trocar a senha.'}
+        {passwordRequired ? 'A senha inicial é enviada somente na criação do usuário.' : 'Na edição, deixe a senha em branco para manter a atual. Use "Senha do app" para trocar a senha.'}
       </div>
 
       <div className="flex flex-wrap justify-end gap-3 pt-2">
@@ -1284,13 +1284,13 @@ export default function AdminUsuariosPage() {
       <CrudModal
         open={openEditHelp && !editingUser}
         title="Editar usuário"
-        description="A edição completa deste usuário ainda não está disponível neste ambiente."
+        description="A edição completa deste usuário ainda não está disponível nesta tela."
         onClose={() => setOpenEditHelp(false)}
         maxWidth="lg"
       >
         <div className="space-y-4 text-sm text-slate-300">
           <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4 text-amber-100">
-            Este ambiente ainda não liberou a edição completa para o usuário selecionado. Assim que esse recurso estiver disponível, esta tela poderá salvar as alterações normalmente.
+            A edição completa deste usuário ainda está em preparação. Assim que for liberada, esta tela permitirá salvar as alterações normalmente.
           </div>
           <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
             <p className="font-medium text-white">Recursos aguardando liberação</p>

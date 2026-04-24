@@ -74,7 +74,7 @@ export default function QuickWithdrawalPage() {
             <p className="text-xs uppercase tracking-[0.22em] text-slate-400">Portaria</p>
             <h1 className="mt-2 text-2xl font-semibold">Retirada rápida</h1>
             <p className="mt-2 max-w-2xl text-sm text-slate-400 text-justify">
-              Digite o código apresentado pelo morador. Se o código for válido, a API confirma a retirada automaticamente.
+              Digite o código apresentado pelo morador. Se estiver correto, a retirada será confirmada automaticamente.
             </p>
           </div>
         </div>

@@ -637,9 +637,7 @@ export default function MoradorForm({
             onChange={(e) => handleChange('birthDate', e.target.value)}
             className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none"
           />
-          <p className="text-xs text-slate-500">
-            Campo preparado no front. A persistência oficial ainda depende do backend.
-          </p>
+          <p className="text-xs text-slate-500">Campo disponível nesta tela. Se a alteração não aparecer logo depois, atualize a página e tente novamente.</p>
         </label>
 
         <label className="space-y-2">
@@ -809,7 +807,7 @@ export default function MoradorForm({
                     'Prefira fundo limpo',
                     'Revise antes de salvar',
                   ]}
-                  footer="Upload e webcam passam pelo endpoint oficial de upload antes de salvar o morador. Câmera do condomínio usa a captura oficial do backend para gerar o mesmo formato final de foto."
+                  footer="Upload, webcam e câmera do condomínio seguem o mesmo padrão de foto para manter o cadastro consistente."
                 />
               </div>
             </div>
@@ -823,7 +821,7 @@ export default function MoradorForm({
                 <div>
                   <p className="text-sm font-medium text-white">Captura do documento</p>
                   <p className="mt-1 text-sm text-slate-400">
-                    Esta área deixa o cadastro pronto para OCR documental por webcam ou câmera. O autopreenchimento entra assim que o backend publicar o endpoint oficial.
+                    Esta área prepara o cadastro para leitura documental por webcam ou câmera. O preenchimento automático será liberado em uma próxima etapa.
                   </p>
                 </div>
                 <span className="rounded-full border border-amber-500/25 bg-amber-500/10 px-3 py-1 text-[11px] uppercase tracking-[0.16em] text-amber-100">
@@ -1041,7 +1039,7 @@ export default function MoradorForm({
                     'Mantenha os dados legíveis e centralizados',
                     'Revise nome e documento antes de salvar',
                   ]}
-                  footer="Hoje a captura fica pronta no front. O OCR para preencher nome, documento e dados adicionais entra assim que o backend publicar o endpoint documental."
+                  footer="A captura já pode ser feita por aqui. O preenchimento automático do documento será liberado em uma próxima etapa."
                 />
               </div>
             </div>
@@ -1246,7 +1244,7 @@ export default function MoradorForm({
           disabled={loading}
           className="rounded-xl bg-white px-4 py-3 text-sm font-medium text-slate-950 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {loading ? 'Salvando...' : 'Salvar na API'}
+          {loading ? 'Salvando...' : 'Salvar morador'}
         </button>
       </div>
     </form>

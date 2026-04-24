@@ -272,11 +272,11 @@ function getCameraErrorMessage(error: unknown, fallback: string) {
 
   const normalizedFallbackMessage = `${String(detail ?? '')} ${String(message ?? '')}`.toLowerCase();
   if (normalizedFallbackMessage.includes('deviceusagetype')) {
-    return 'O backend passou a aceitar `deviceUsageType` apenas para IA Faces, Câmera IA e Dispositivo Facial. O cadastro de câmera comum precisa ser enviado sem esse campo.';
+    return 'O uso do dispositivo só pode ser informado para IA Faces, Câmera IA e Dispositivo Facial.';
   }
 
   if (maybeApiError.response.status === 500) {
-    return 'O backend retornou erro interno ao cadastrar a câmera. Se a URL for RTSP, solicite ao backend validar o cadastro e converter o RTSP para snapshot ou image stream.';
+    return 'Ocorreu um erro interno ao cadastrar a câmera. Se a URL for RTSP, confirme se a visualização foi preparada para uso no navegador.';
   }
 
   if (maybeApiError.response.status === 503) {
@@ -471,7 +471,7 @@ function CameraForm({
             ))}
           </select>
           <p className="text-xs text-slate-500">
-            O backend só aceita `deviceUsageType` para IA Faces, Câmera IA e Dispositivo Facial.
+            Esse campo só se aplica a IA Faces, Câmera IA e Dispositivo Facial.
           </p>
         </label>
 
@@ -484,7 +484,7 @@ function CameraForm({
             placeholder="rtsp://usuario:senha@ip:554/..."
           />
           <p className="text-xs text-slate-500">
-            RTSP pode ser salvo aqui, mas o navegador não reproduz RTSP direto. Para preview na Operação, o backend precisa converter para snapshot, MJPEG, HLS ou WebRTC.
+            RTSP pode ser salvo aqui, mas o navegador não reproduz RTSP diretamente. Para visualização na tela de operação, use uma fonte compatível com navegador.
           </p>
         </label>
 
@@ -547,7 +547,7 @@ function CameraForm({
             {requireUnit
               ? units.length > 0
                 ? 'Para admin de condomínio, a câmera deve ficar vinculada a uma unidade do próprio condomínio.'
-                : 'As unidades do condomínio não carregaram pela API agora. A tela está usando as unidades liberadas na sua sessão.'
+                : 'As unidades do condomínio não carregaram agora. A tela está usando as unidades liberadas na sua sessão.'
               : 'Use a unidade para amarrar a câmera ao escopo operacional correto.'}
           </p>
         </label>
@@ -566,7 +566,7 @@ function CameraForm({
           disabled={loading}
           className="rounded-xl bg-white px-4 py-3 text-sm font-medium text-slate-950 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {loading ? 'Salvando...' : 'Salvar na API'}
+          {loading ? 'Salvando...' : 'Salvar câmera'}
         </button>
       </div>
     </form>
@@ -780,7 +780,7 @@ export default function AdminCamerasPage() {
         }
 
         if (nextJob.status === 'FAILED') {
-          setSubmitError(nextJob.errorMessage || 'O processamento da câmera falhou no backend.');
+          setSubmitError(nextJob.errorMessage || 'O processamento da câmera não foi concluído.');
           setPendingRtspJob(null);
           return;
         }
@@ -893,7 +893,7 @@ export default function AdminCamerasPage() {
       const createdCamera = await camerasService.create(payload);
       if (!createdCamera.id) {
         throw new Error(
-          'O backend respondeu ao cadastro, mas não retornou um identificador de câmera. O registro não foi confirmado.'
+          'O cadastro foi aceito, mas a confirmação final da câmera não voltou para a tela.'
         );
       }
 
@@ -935,7 +935,7 @@ export default function AdminCamerasPage() {
       setSubmitError(
         getCameraErrorMessage(
           updateError,
-          'Não foi possível editar a câmera. Confirme se o backend expõe PUT /api/v1/cameras/{id}.'
+          'Não foi possível editar a câmera agora. Tente novamente em instantes.'
         )
       );
     } finally {
@@ -999,7 +999,7 @@ export default function AdminCamerasPage() {
             <p className="text-xs uppercase tracking-[0.22em] text-slate-400">Administração</p>
             <h1 className="mt-2 text-2xl font-semibold">Câmeras</h1>
             <p className="mt-2 max-w-2xl text-sm text-slate-400">
-              Cadastro e operação básica do parque de câmeras com integração direta à API real.
+              Cadastro e operação básica do parque de câmeras.
             </p>
             {isAdminScope ? (
               <p className="mt-2 text-sm text-slate-500">
@@ -1154,7 +1154,7 @@ export default function AdminCamerasPage() {
       ) : null}
 
       <div className="rounded-3xl border border-amber-500/20 bg-amber-500/10 p-5 text-sm text-amber-100">
-        RTSP é aceito como dado de cadastro, mas navegadores não reproduzem RTSP diretamente. Para visualizar na tela Operação, solicite ao backend/VMS a publicação de `snapshotUrl` ou `imageStreamUrl` a partir da URL RTSP.
+        RTSP é aceito no cadastro, mas navegadores não reproduzem RTSP diretamente. Para visualizar na operação, use uma fonte compatível com navegador.
       </div>
 
       <section className="overflow-hidden rounded-3xl border border-white/10 bg-white/5 backdrop-blur">
@@ -1287,7 +1287,7 @@ export default function AdminCamerasPage() {
       <CrudModal
         open={openCreate}
         title="Nova câmera"
-        description="Cadastre uma câmera na API externa. Se usar RTSP, o backend ainda precisa expor snapshot ou image stream para visualização no navegador."
+        description="Cadastre uma câmera e informe a fonte de visualização adequada para uso no navegador."
         onClose={() => setOpenCreate(false)}
         maxWidth="xl"
       >

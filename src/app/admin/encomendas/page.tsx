@@ -439,7 +439,7 @@ function DeliveryForm({
 
       <CaptureGuidanceCard
         title="OCR e foto da encomenda"
-        description="A API v4.4 aceita leitura da etiqueta e upload da foto para persistir a imagem final no backend."
+        description="Leia a etiqueta e envie a foto para concluir o cadastro da encomenda."
         tips={[
           'Enquadre a etiqueta inteira',
           'Evite sombra e reflexo',
@@ -611,7 +611,7 @@ function StatusForm({
           <p className="mt-2">
             {withdrawalToken
               ? 'Solicite ao morador o código ou QR Code no app e valide abaixo.'
-              : 'A API ainda não enviou código ou QR Code de retirada para esta encomenda.'}
+              : 'O código ou QR Code de retirada ainda não está disponível para esta encomenda.'}
           </p>
           {needsTokenWarning ? (
             <label className="mt-3 flex items-start gap-3 rounded-xl border border-amber-300/20 bg-slate-950/30 p-3 text-sm text-amber-50">
@@ -656,7 +656,7 @@ function StatusForm({
           ) : null}
           {needsTokenWarning ? (
             <p className="mt-2 text-amber-50">
-              Antes de usar baixa segura, solicite ao backend um campo de código/QRCode e um endpoint de validação.
+              Antes de usar baixa segura, confirme a liberação do código ou QR Code de validação.
             </p>
           ) : null}
         </div>
@@ -966,7 +966,7 @@ export default function EncomendasPage() {
       return;
     }
     if (!isOnline) {
-      setFormError('OCR da etiqueta exige conexão com a API. A foto pode ser salva e a encomenda sincronizada depois.');
+      setFormError('A leitura da etiqueta exige conexão no momento. A foto pode ser salva e a encomenda concluída depois.');
       return;
     }
 
@@ -1034,7 +1034,7 @@ export default function EncomendasPage() {
       );
     } catch (error) {
       setOcrReview(null);
-      setFormError(getErrorMessage(error, 'Não foi possível ler a etiqueta pela API.'));
+      setFormError(getErrorMessage(error, 'Não foi possível ler a etiqueta agora.'));
     } finally {
       setRunningOcr(false);
     }
@@ -1064,7 +1064,7 @@ export default function EncomendasPage() {
 
       if (selectedPhotoFile && photoUrl?.startsWith('data:')) {
         if (!isOnline) {
-          throw new Error('Upload da foto exige conexão com a API. Salve a encomenda sem upload ou aguarde a reconexão.');
+          throw new Error('O envio da foto exige conexão no momento. Salve a encomenda sem foto ou aguarde a reconexão.');
         }
         const uploaded = await uploadDeliveryPhoto(photoUrl, selectedPhotoFile.name);
         photoUrl = uploaded.photoUrl;
@@ -1137,7 +1137,7 @@ export default function EncomendasPage() {
   async function handleValidateWithdrawal(code: string) {
     if (!selected) return false;
     if (!isOnline) {
-      setStatusError('A validação por código exige conexão com a API. Aguarde reconectar ou use a retirada manual excepcional.');
+      setStatusError('A validação por código exige conexão no momento. Aguarde reconectar ou use a retirada manual excepcional.');
       return false;
     }
     const response = await validateDeliveryWithdrawal(selected.id, { code });
@@ -1195,7 +1195,7 @@ export default function EncomendasPage() {
       }
       await handleRefresh();
     } catch (error) {
-      setPageMessage(getErrorMessage(error, 'Não foi possível reenviar o aviso. Peça ao backend um endpoint de reenvio de notificação da encomenda.'));
+      setPageMessage(getErrorMessage(error, 'Não foi possível reenviar o aviso agora.'));
     } finally {
       setNotifyingId(null);
     }
@@ -1222,7 +1222,7 @@ export default function EncomendasPage() {
           <div>
             <p className="text-xs uppercase tracking-[0.22em] text-slate-400">Administração</p>
             <h1 className="mt-2 text-2xl font-semibold">Encomendas</h1>
-            <p className="mt-2 max-w-2xl text-sm text-slate-400">Fluxo adaptado ao contrato V4.5 com unidade, destinatario opcional, OCR de etiqueta, upload de foto e renotificacao oficial.</p>
+            <p className="mt-2 max-w-2xl text-sm text-slate-400">Registre, acompanhe e atualize encomendas com foto, etiqueta e aviso ao destinatário.</p>
           </div>
           <div className="flex flex-wrap gap-3">
             <Link href="/admin/encomendas/retirada-rapida" className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm font-medium text-emerald-100 transition hover:bg-emerald-500/20">
@@ -1571,7 +1571,7 @@ export default function EncomendasPage() {
         )}
       </section>
 
-      <CrudModal open={openCreate} title="Nova encomenda" description="Cadastre a encomenda com o contrato V4.5 do backend." onClose={closeCreate} maxWidth="xl">
+      <CrudModal open={openCreate} title="Nova encomenda" description="Cadastre a encomenda recebida na portaria." onClose={closeCreate} maxWidth="xl">
         <DeliveryForm
           value={createForm}
           onChange={(field, nextValue) => setCreateForm((current) => ({ ...current, [field]: nextValue }))}
@@ -1653,7 +1653,7 @@ export default function EncomendasPage() {
         ) : null}
       </CrudModal>
 
-      <CrudModal open={openStatus} title="Atualizar status da encomenda" description="Use os status reais do backend: aguardando retirada, aviso enviado e retirada." onClose={() => { setOpenStatus(false); setSelected(null); setStatusError(null); }} maxWidth="lg">
+      <CrudModal open={openStatus} title="Atualizar status da encomenda" description="Use os status disponíveis para acompanhar a entrega e a retirada." onClose={() => { setOpenStatus(false); setSelected(null); setStatusError(null); }} maxWidth="lg">
         {selected ? (
           <StatusForm
             currentStatus={normalizeDeliveryStatus(selected.status)}

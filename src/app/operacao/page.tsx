@@ -4392,7 +4392,7 @@ export default function OperacaoPage() {
                     </div>
                   ))
                 ) : (
-                  <p className="text-sm text-slate-400">Nenhum histórico disponível neste ambiente.</p>
+                  <p className="text-sm text-slate-400">Nenhum histórico disponível no momento.</p>
                 )}
               </div>
             </div>
@@ -5832,7 +5832,7 @@ export default function OperacaoPage() {
 
                   {residentWhatsAppError ? (
                     <div className="mt-3 rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-sm text-amber-100">
-                      Não foi possível consultar a conexão do WhatsApp neste ambiente.
+                      Não foi possível consultar a conexão do WhatsApp agora.
                     </div>
                   ) : null}
 
@@ -5881,7 +5881,7 @@ export default function OperacaoPage() {
                   ) : residentMessagesLoading ? (
                     <div className="rounded-xl border border-white/10 bg-white/5 p-3 text-sm text-slate-300">Carregando mensagens...</div>
                   ) : residentMessagesError ? (
-                    <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-sm text-amber-100">Mensagens ainda indisponíveis neste ambiente.</div>
+                    <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-sm text-amber-100">As mensagens ainda não estão disponíveis no momento.</div>
                   ) : residentMessages.length === 0 ? (
                     <div className="rounded-xl border border-white/10 bg-white/5 p-3 text-sm text-slate-300">Nenhuma mensagem para esta unidade.</div>
                   ) : (

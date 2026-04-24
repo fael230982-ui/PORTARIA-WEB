@@ -910,7 +910,7 @@ export default function MoradoresPage() {
     }
 
     if (!allowFaceSync) {
-      return 'Cadastro salvo sem envio para a integração facial. A autorização do responsável ainda precisa ser persistida oficialmente no backend.';
+      return 'Cadastro salvo sem envio para a sincronização facial. A autorização do responsável ainda precisa ser concluída.';
     }
 
     try {
@@ -1188,7 +1188,7 @@ export default function MoradoresPage() {
             <p className="text-xs uppercase tracking-[0.22em] text-slate-400">Administração</p>
             <h1 className="mt-2 text-2xl font-semibold">Pessoas</h1>
             <p className="mt-2 max-w-2xl text-sm text-slate-400">
-              Cadastro, edição e gerenciamento de moradores com integração direta à API real.
+              Cadastro, edição e gerenciamento de moradores.
             </p>
             <p className="mt-2 max-w-2xl text-xs text-cyan-100">
               Para o morador entrar no app, cadastre também uma conta em Admin &gt; Usuários com perfil Morador e vínculo com este cadastro.
@@ -1220,7 +1220,7 @@ export default function MoradoresPage() {
         <section className="rounded-3xl border border-amber-500/25 bg-amber-500/10 p-4 text-sm text-amber-100">
           <p className="font-medium">Modo offline em moradores</p>
           <p className="mt-1 text-xs opacity-90">
-            A tela está usando o último snapshot salvo{snapshotCache.cachedAt ? ` em ${formatAccessDateTime(snapshotCache.cachedAt)}` : ''}. Consultas continuam disponíveis, mas gravações dependem da API.
+            A tela está usando a última atualização salva{snapshotCache.cachedAt ? ` em ${formatAccessDateTime(snapshotCache.cachedAt)}` : ''}. As consultas continuam disponíveis, mas novas gravações podem demorar para refletir.
           </p>
         </section>
       ) : null}
@@ -1555,7 +1555,7 @@ export default function MoradoresPage() {
       <CrudModal
         open={openCreate}
         title="Novo morador"
-        description="Cadastre um novo morador na API externa."
+        description="Cadastre um novo morador."
         onClose={closeModals}
         maxWidth="xl"
       >
@@ -1635,8 +1635,8 @@ export default function MoradoresPage() {
               {!selectedMorador.avatarUrl
                 ? 'Este morador ainda não possui foto vinculada para sincronização facial.'
                 : isPublicFaceSyncCandidate(selectedMorador.avatarUrl)
-                  ? 'A foto atual já está em formato aceito pelo backend para sincronização facial.'
-                  : 'A foto atual não está no formato esperado pelo backend. Salve novamente o morador para processar a imagem via upload oficial ou captura da câmera.'}
+                  ? 'A foto atual já está pronta para sincronização facial.'
+                  : 'A foto atual precisa ser processada novamente para uso na sincronização facial.'}
             </div>
 
             <div className={`rounded-2xl border px-4 py-3 text-sm ${selectedMoradorAppAccess ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-100' : 'border-cyan-500/30 bg-cyan-500/10 text-cyan-100'}`}>

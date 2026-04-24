@@ -661,7 +661,7 @@ export default function AdminUnidadesPage() {
         <section className="rounded-3xl border border-amber-500/25 bg-amber-500/10 p-4 text-sm text-amber-100">
           <p className="font-medium">Modo offline em unidades</p>
           <p className="mt-1 text-xs opacity-90">
-            A navegação consultiva está usando o último snapshot salvo{snapshotCache.cachedAt ? ` em ${new Date(snapshotCache.cachedAt).toLocaleString('pt-BR')}` : ''}. Cadastros e edições continuam dependentes da API.
+            A navegação consultiva está usando a última atualização salva{snapshotCache.cachedAt ? ` em ${new Date(snapshotCache.cachedAt).toLocaleString('pt-BR')}` : ''}. Novos cadastros e alterações podem demorar para refletir.
           </p>
         </section>
       ) : null}

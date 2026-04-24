@@ -32,7 +32,7 @@ export function CameraFeed({
   camera,
   className = '',
   imageClassName = 'h-full w-full object-cover',
-  emptyLabel = 'Nenhum preview dispon\u00edvel',
+  emptyLabel = 'Nenhuma visualização disponível',
   emptyHint = 'A câmera precisa ter uma imagem disponível para visualização.',
   refreshMs = 15000,
   preferStreaming = true,
@@ -119,7 +119,12 @@ export function CameraFeed({
     }
 
     let disposed = false;
-    let hlsInstance: { destroy: () => void; loadSource: (source: string) => void; attachMedia: (media: HTMLMediaElement) => void; on: (event: string, callback: () => void) => void } | null = null;
+    let hlsInstance: {
+      destroy: () => void;
+      loadSource: (source: string) => void;
+      attachMedia: (media: HTMLMediaElement) => void;
+      on: (event: string, callback: () => void) => void;
+    } | null = null;
 
     import('hls.js')
       .then(({ default: Hls }) => {
@@ -242,7 +247,7 @@ export function CameraFeed({
           fallbackSrc={snapshotUrl}
           className={imageClassName}
           refreshMs={refreshMs}
-          errorLabel={compactErrors ? 'Imagem indispon\u00edvel agora.' : undefined}
+          errorLabel={compactErrors ? 'Imagem indisponível agora.' : undefined}
         />
       </div>
     );
@@ -252,18 +257,16 @@ export function CameraFeed({
     <div className={`flex items-center justify-center text-slate-600 ${className}`}>
       <div className="text-center">
         <Camera className="mx-auto mb-4 h-14 w-14 opacity-30" />
-        <p className="text-sm text-slate-400">
-          {hasOnlyRtsp ? 'Câmera cadastrada, mas sem imagem no navegador' : emptyLabel}
-        </p>
+        <p className="text-sm text-slate-400">{hasOnlyRtsp ? 'Câmera cadastrada, mas sem imagem no navegador' : emptyLabel}</p>
         <p className="mt-1 text-xs text-slate-500">{emptyHint}</p>
         {hasOnlyRtsp ? (
           <p className="mx-auto mt-3 max-w-md text-xs text-amber-200">
-            {'A câmera foi cadastrada com RTSP. Para aparecer imagem aqui, o sistema precisa converter essa câmera para visualização no navegador.'}
+            {'A câmera foi cadastrada com RTSP. Para aparecer imagem aqui, o sistema precisa preparar essa câmera para visualização no navegador.'}
           </p>
         ) : null}
         {hasOnlyWebRtc ? (
           <p className="mx-auto mt-3 max-w-md text-xs text-sky-200">
-            {'Esta cÃ¢mera informou webRtcUrl. O player padrÃ£o usa liveUrl ou hlsUrl para reproduÃ§Ã£o principal, entÃ£o valide esse contrato com o backend.'}
+            {'Esta câmera informou conexão WebRTC. Para exibir imagem principal aqui, mantenha também uma fonte de vídeo compatível com o navegador.'}
           </p>
         ) : null}
         {streamingError && !compactErrors ? (

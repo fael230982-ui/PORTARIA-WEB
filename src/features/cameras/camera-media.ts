@@ -224,7 +224,7 @@ export function getCameraDiagnostics(
   items.splice(1, 0, {
     label: 'WebRTC',
     ok: Boolean(webRtcUrl),
-    detail: webRtcUrl ? 'Disponivel no contrato, mas fora do player padrao.' : 'Nao informado.',
+    detail: webRtcUrl ? 'Disponível, mas fora do player principal.' : 'Não informado.',
   });
 
   if (previewReady) {
@@ -234,13 +234,13 @@ export function getCameraDiagnostics(
       severity: 'ok',
       summary:
         previewMode === 'video-stream'
-          ? 'Video ao vivo disponivel.'
+          ? 'Vídeo ao vivo disponível.'
           : previewMode === 'image-stream'
-            ? 'Preview por MJPEG/frame disponivel.'
-            : 'Snapshot disponivel para visualizacao.',
-      recommendation: 'A camera ja possui uma fonte utilizavel pelo front.',
+            ? 'Visualização alternativa disponível.'
+            : 'Imagem atual disponível para consulta.',
+      recommendation: 'A câmera já possui uma fonte de imagem utilizável.',
       backendMessage:
-        'Para video real, validar liveUrl e hlsUrl no contrato da camera. webRtcUrl pode existir, mas nao entra no mesmo fluxo do player padrao. imageStreamUrl deve ficar como fallback/preview.',
+        'Para o vídeo principal, mantenha uma fonte compatível com o navegador. Conexões auxiliares podem continuar como apoio.',
       items,
     };
   }
@@ -250,10 +250,10 @@ export function getCameraDiagnostics(
       previewReady,
       previewMode,
       severity: 'warning',
-      summary: 'Camera com transporte WebRTC sem fonte compativel no player padrao.',
-      recommendation: 'Validar com o backend liveUrl, hlsUrl e webRtcUrl no contrato da camera.',
+      summary: 'Câmera com conexão WebRTC, mas sem fonte principal compatível com o navegador.',
+      recommendation: 'Adicione também uma fonte de vídeo compatível para a visualização principal.',
       backendMessage:
-        'O backend informou apenas webRtcUrl. O player padrao do front nao reproduz esse transporte no mesmo fluxo de liveUrl/hlsUrl, entao mantenha liveUrl ou hlsUrl para a visualizacao principal.',
+        'A câmera informou apenas WebRTC. Para reprodução principal nesta tela, mantenha também uma fonte compatível com o navegador.',
       items,
     };
   }
@@ -263,10 +263,10 @@ export function getCameraDiagnostics(
       previewReady,
       previewMode,
       severity: 'warning',
-      summary: 'Camera cadastrada com RTSP, mas sem video no navegador.',
-      recommendation: 'Solicite ao backend/VMS converter o RTSP para liveUrl ou hlsUrl.',
+      summary: 'Câmera cadastrada com RTSP, mas sem vídeo no navegador.',
+      recommendation: 'Prepare uma fonte de vídeo compatível com o navegador para exibir a câmera ao vivo.',
       backendMessage:
-        'A camera possui streamUrl RTSP, mas o front precisa receber liveUrl ou hlsUrl em GET /api/v1/cameras/{id}/streaming para video real. webRtcUrl pode ser complementar, mas nao substitui esse fluxo. imageStreamUrl deve ser apenas fallback/preview.',
+        'A câmera possui RTSP, mas esta tela precisa de uma fonte compatível com o navegador para reproduzir vídeo ao vivo.',
       items,
     };
   }
@@ -275,10 +275,10 @@ export function getCameraDiagnostics(
     previewReady,
     previewMode,
     severity: 'error',
-    summary: 'Camera sem fonte de imagem utilizavel.',
-    recommendation: 'Solicite ao backend retornar liveUrl/hlsUrl e manter snapshotUrl/imageStreamUrl como fallback.',
+    summary: 'Câmera sem fonte de imagem disponível.',
+    recommendation: 'Configure uma fonte de vídeo ou imagem compatível com o navegador.',
     backendMessage:
-      'A camera nao possui liveUrl, hlsUrl, webRtcUrl, snapshotUrl, imageStreamUrl nem streamUrl compativel. Validar contrato de GET /api/v1/cameras/{id}/streaming.',
+      'A câmera ainda não possui uma fonte compatível para vídeo ou imagem nesta tela.',
     items,
   };
 }

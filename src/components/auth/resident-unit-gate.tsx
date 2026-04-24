@@ -15,7 +15,7 @@ export function ResidentUnitGate() {
       <p className="text-xs uppercase tracking-[0.18em] text-amber-200">Seleção obrigatória</p>
       <h2 className="mt-2 text-lg font-semibold">Escolha a unidade ativa para continuar</h2>
       <p className="mt-2 text-sm text-amber-100/90">
-        O backend exige uma unidade ativa para operações de cadastro e consulta vinculadas ao morador.
+        Selecione uma unidade ativa para continuar com os cadastros e consultas desta área.
       </p>
       <ActiveUnitSelector forceSelection className="mt-4 bg-black/10" />
     </div>

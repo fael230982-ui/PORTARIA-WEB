@@ -22,6 +22,7 @@ Todas as alteracoes relevantes deste projeto devem ser registradas aqui.
 - Cadastro RTSP de cameras passa a entrar em fila visual local, aparecendo na lista enquanto o servidor conclui a sincronizacao.
 - Dispositivos recem-cadastrados passam a ficar marcados como sincronizacao pendente ate a confirmacao da listagem oficial.
 - Telas de Usuarios e Operacao tiveram nova limpeza de termos tecnicos visiveis ao usuario final.
+- Câmeras, Moradores, Encomendas, Alertas, Unidades, Relatórios e formulários administrativos receberam nova revisão para remover linguagem técnica da interface.
 
 ### Fixed
 

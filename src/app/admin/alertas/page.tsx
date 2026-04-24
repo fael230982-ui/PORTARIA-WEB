@@ -24,13 +24,13 @@ export default function AdminAlertasPage() {
         <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Monitoramento</p>
         <h1 className="mt-2 text-2xl font-semibold text-white">Alertas</h1>
         <p className="mt-2 text-sm text-slate-400">
-          Acompanhe ocorrências, eventos e notificações operacionais. Se o backend ainda não expuser `/alerts`, a tela fica vazia sem quebrar a navegação.
+          Acompanhe ocorrências, eventos e notificações operacionais em um só lugar.
         </p>
       </section>
 
       <AlertsPanel
         title="Painel de alertas"
-        description="Eventos consolidados da API e do canal em tempo real."
+        description="Eventos consolidados para acompanhamento da operação."
         limit={30}
       />
     </div>
