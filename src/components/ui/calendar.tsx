@@ -40,7 +40,7 @@ export function Calendar({
       </PopoverTrigger>
       <PopoverContent className="w-auto p-0">
         <div className="p-4 text-center text-sm text-slate-400">
-          Calendario disponivel em breve - use input date para filtros
+          Calendário disponível em breve - use input date para filtros
         </div>
       </PopoverContent>
     </Popover>

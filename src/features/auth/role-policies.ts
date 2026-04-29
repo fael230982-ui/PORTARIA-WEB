@@ -69,6 +69,20 @@ export const ROLE_POLICIES: Record<UserRole, RolePolicy> = {
       'handle_events',
     ],
   },
+  GERENTE: {
+    role: 'GERENTE',
+    label: 'Gerente',
+    scope: 'single_condominium',
+    capabilities: [
+      'manage_people',
+      'manage_deliveries',
+      'manage_alerts',
+      'manage_logs',
+      'manage_secondary_users',
+      'manage_structures',
+      'handle_events',
+    ],
+  },
   OPERADOR: {
     role: 'OPERADOR',
     label: 'Operacional',

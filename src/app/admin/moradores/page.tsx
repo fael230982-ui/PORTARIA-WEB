@@ -47,6 +47,7 @@ import { api } from '@/lib/axios';
 import { getPersonById, uploadPersonPhoto, syncPersonFace } from '@/services/people.service';
 import { camerasService } from '@/services/cameras.service';
 import { ensureResidenceUnit } from '@/services/residence.service';
+import { accessGroupsService } from '@/services/access-groups.service';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -54,6 +55,7 @@ import { Badge } from '@/components/ui/badge';
 import type { Person, PersonCategory } from '@/types/person';
 import type { Unit } from '@/types/condominium';
 import type { Report } from '@/types/report';
+import type { AccessGroup } from '@/types/access-group';
 
 type Filters = {
   search: string;
@@ -214,11 +216,39 @@ function getFaceListSyncLabel(value?: string | null) {
 function getFaceStatusLabel(value?: string | null) {
   const normalized = String(value ?? '').trim().toUpperCase();
   if (!normalized || normalized === 'NO_PHOTO') return '';
-  if (normalized === 'PHOTO_ONLY') return 'Foto cadastrada';
+  if (normalized === 'PHOTO_ONLY') return '';
   if (normalized === 'FACE_PENDING_SYNC') return 'Reconhecimento facial pendente';
   if (normalized === 'FACE_SYNCED') return 'Reconhecimento facial ativo';
   if (normalized === 'FACE_ERROR') return 'Falha no reconhecimento facial';
   return '';
+}
+
+function getPhysicalAccessStatus(row: MoradorRow) {
+  const hasGroup = Boolean(row.accessGroupIds?.length || row.accessGroupNames?.length);
+  const hasFaceList = Boolean(row.faceListId || row.faceListItemId);
+  const hasCredential = Boolean(row.hasFacialCredential);
+
+  if (hasGroup && hasCredential && hasFaceList) {
+    return {
+      tone: 'success' as const,
+      title: 'Permissão física liberada',
+      description: 'O morador possui grupo de acesso, credencial facial e vínculo com lista facial.',
+    };
+  }
+
+  if (hasGroup) {
+    return {
+      tone: 'warning' as const,
+      title: 'Permissão física pendente',
+      description: 'Há grupo de acesso vinculado, mas a credencial ou a lista facial ainda não foi confirmada.',
+    };
+  }
+
+  return {
+    tone: 'error' as const,
+    title: 'Sem permissão física confirmada',
+    description: 'Nenhum grupo de acesso físico está vinculado a este cadastro.',
+  };
 }
 
 function getCategoryLabel(value?: string | null) {
@@ -252,6 +282,33 @@ function getFriendlyLocation(row: MoradorRow) {
   });
 
   return friendly || 'Unidade não identificada';
+}
+
+function getMoradorUnitIds(row: MoradorRow) {
+  if (row.unitIds?.length) return row.unitIds;
+  if (row.unit?.id) return [row.unit.id];
+  return [];
+}
+
+function getMoradorUnitLabels(row: MoradorRow, unitsCatalog: Unit[]) {
+  const catalogLabels = getMoradorUnitIds(row)
+    .map((unitId) => unitsCatalog.find((unit) => unit.id === unitId))
+    .filter((unit): unit is Unit => Boolean(unit))
+    .map((unit) => [unit.structure?.label, unit.label].filter(Boolean).join(' / ') || unit.label);
+
+  if (catalogLabels.length) {
+    return Array.from(new Set(catalogLabels));
+  }
+
+  if (row.unitNames?.length) {
+    return Array.from(new Set(row.unitNames.map((value) => value.trim()).filter(Boolean)));
+  }
+
+  if (row.unidade?.trim()) {
+    return [row.unidade.trim()];
+  }
+
+  return [];
 }
 
 function normalizeCsvHeader(value: string) {
@@ -557,6 +614,7 @@ export default function MoradoresPage() {
   const [brokenMoradorImageUrls, setBrokenMoradorImageUrls] = useState<Record<string, boolean>>({});
   const [peopleImportRows, setPeopleImportRows] = useState<PersonImportRow[]>([]);
   const [peopleImportMessage, setPeopleImportMessage] = useState<string | null>(null);
+  const [accessGroups, setAccessGroups] = useState<AccessGroup[]>([]);
   const [snapshotCache, setSnapshotCache] = useState<MoradoresSnapshotCache>(() => readMoradoresSnapshot(null));
   const snapshotSignatureRef = useRef(
     getMoradoresSnapshotSignature({ moradores: [], appAccessEntries: [], accessSummaryEntries: [], cachedAt: null })
@@ -575,7 +633,7 @@ export default function MoradoresPage() {
       return;
     }
 
-    if (String(user.role) !== 'ADMIN') {
+    if (!['ADMIN', 'GERENTE', 'MASTER'].includes(String(user.role))) {
       router.replace('/admin');
     }
   }, [mounted, authLoading, isAuthenticated, user, router]);
@@ -634,6 +692,11 @@ export default function MoradoresPage() {
     return units.filter((unit) => unit.condominiumId === user.condominiumId);
   }, [units, user?.condominiumId]);
   const cameras = useMemo(() => camerasData?.data ?? [], [camerasData]);
+  const scopedAccessGroups = useMemo(() => {
+    if (!user?.condominiumId) return accessGroups;
+    return accessGroups.filter((group) => !group.condominiumId || group.condominiumId === user.condominiumId);
+  }, [accessGroups, user?.condominiumId]);
+  const accessGroupNameById = useMemo(() => new Map(scopedAccessGroups.map((group) => [group.id, group.name])), [scopedAccessGroups]);
   const accessSummaryByPerson = useMemo(() => {
     const summaries = new Map<string, PersonAccessSummary>();
 
@@ -708,8 +771,21 @@ export default function MoradoresPage() {
   }
 
   const handleRefresh = async () => {
-    await Promise.all([refetchPeople(), refetchResidenceCatalog()]);
+    const [, , nextAccessGroups] = await Promise.all([
+      refetchPeople(),
+      refetchResidenceCatalog(),
+      accessGroupsService.list().catch(() => []),
+    ]);
+    setAccessGroups(nextAccessGroups);
   };
+
+  useEffect(() => {
+    if (!user) return;
+    void accessGroupsService
+      .list()
+      .then((groups) => setAccessGroups(groups))
+      .catch(() => setAccessGroups([]));
+  }, [user]);
 
   const downloadPeopleTemplate = () => {
     const blob = new Blob([peopleCsvTemplate], { type: 'text/csv;charset=utf-8' });
@@ -967,20 +1043,22 @@ export default function MoradoresPage() {
     setSubmitError(null);
     setPageNotice(null);
     const targetCondominiumName = currentCondominium?.name ?? data.condominio;
-    const selectedUnit = availableUnits.find((unit) => unit.id === data.unitId) ?? null;
+    const selectedUnitIds = Array.from(new Set(data.unitIds.map((value) => value.trim()).filter(Boolean)));
+    const selectedUnits = availableUnits.filter((unit) => selectedUnitIds.includes(unit.id));
+    const primaryUnit = selectedUnits[0] ?? null;
     let resolvedResidence: { condominium?: unknown; street?: unknown; unit?: Unit } | null = null;
     let apiPayload: Record<string, unknown> | null = null;
     let resolvedPhotoUrl = data.photoUrl;
     try {
-      if (!selectedUnit) {
-        throw new Error('Selecione uma unidade existente para vincular o morador.');
+      if (!selectedUnitIds.length || selectedUnits.length !== selectedUnitIds.length) {
+        throw new Error('Selecione pelo menos uma unidade existente para vincular o morador.');
       }
 
       resolvedPhotoUrl = await resolvePersistedPhotoUrl(data);
 
       resolvedResidence = {
-        condominium: selectedUnit.condominium ?? currentCondominium ?? null,
-        unit: selectedUnit,
+        condominium: primaryUnit?.condominium ?? currentCondominium ?? null,
+        unit: primaryUnit ?? undefined,
       };
         const payload = {
           ...buildPersonUpsertPayload({
@@ -1003,7 +1081,9 @@ export default function MoradoresPage() {
                   }
                 : null,
             source: 'PORTARIA_WEB',
-            unitId: selectedUnit.id,
+            unitId: primaryUnit?.id ?? null,
+            unitIds: selectedUnitIds,
+            accessGroupIds: data.accessGroupIds,
           }),
         };
       apiPayload = payload;
@@ -1020,7 +1100,12 @@ export default function MoradoresPage() {
       if (syncWarning) {
         setPageNotice({ tone: 'warning', message: syncWarning });
       } else if (resolvedPhotoUrl?.trim()) {
-        setPageNotice({ tone: 'success', message: 'Morador salvo e sincronizado com a integração facial.' });
+        setPageNotice({
+          tone: data.accessGroupIds.length ? 'success' : 'warning',
+          message: data.accessGroupIds.length
+            ? 'Morador salvo. A face foi enviada para sincronização e há grupo de acesso físico vinculado.'
+            : 'Morador salvo e foto enviada para sincronização. Nenhum grupo de acesso físico foi vinculado.',
+        });
       }
     } catch (error) {
       const message = getErrorMessage(error, getFriendlyPhotoUploadMessage());
@@ -1045,6 +1130,7 @@ export default function MoradoresPage() {
           condominio: targetCondominiumName,
           estrutura: data.estrutura,
           unitId: data.unitId,
+          unitIds: selectedUnitIds,
           photoSource: data.photoSource,
           cameraId: data.cameraId,
         }),
@@ -1076,10 +1162,12 @@ export default function MoradoresPage() {
     setPageNotice(null);
     let resolvedPhotoUrl = data.photoUrl;
     try {
-      const selectedUnit = availableUnits.find((unit) => unit.id === data.unitId) ?? null;
+      const selectedUnitIds = Array.from(new Set(data.unitIds.map((value) => value.trim()).filter(Boolean)));
+      const selectedUnits = availableUnits.filter((unit) => selectedUnitIds.includes(unit.id));
+      const primaryUnit = selectedUnits[0] ?? null;
 
-      if (!selectedUnit) {
-        throw new Error('Selecione uma unidade existente para vincular o morador.');
+      if (!selectedUnitIds.length || selectedUnits.length !== selectedUnitIds.length) {
+        throw new Error('Selecione pelo menos uma unidade existente para vincular o morador.');
       }
 
       resolvedPhotoUrl = await resolvePersistedPhotoUrl(data);
@@ -1105,7 +1193,9 @@ export default function MoradoresPage() {
                   }
                 : null,
             source: 'PORTARIA_WEB',
-            unitId: selectedUnit.id,
+            unitId: primaryUnit?.id ?? null,
+            unitIds: selectedUnitIds,
+            accessGroupIds: data.accessGroupIds,
           }),
         });
 
@@ -1118,7 +1208,12 @@ export default function MoradoresPage() {
       if (syncWarning) {
         setPageNotice({ tone: 'warning', message: syncWarning });
       } else if (resolvedPhotoUrl?.trim()) {
-        setPageNotice({ tone: 'success', message: 'Morador atualizado e sincronizado com a integração facial.' });
+        setPageNotice({
+          tone: data.accessGroupIds.length ? 'success' : 'warning',
+          message: data.accessGroupIds.length
+            ? 'Morador atualizado. A face foi enviada para sincronização e há grupo de acesso físico vinculado.'
+            : 'Morador atualizado e foto enviada para sincronização. Nenhum grupo de acesso físico foi vinculado.',
+        });
       }
     } catch (error) {
       setSubmitError(getErrorMessage(error, getFriendlyPhotoUploadMessage()));
@@ -1182,15 +1277,15 @@ export default function MoradoresPage() {
 
   return (
     <div className="space-y-6 text-white">
-      <section className="rounded-3xl border border-white/10 bg-white/5 p-5 backdrop-blur">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+      <section className="rounded-3xl border border-white/10 bg-white/5 p-4 backdrop-blur">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="text-xs uppercase tracking-[0.22em] text-slate-400">Administração</p>
-            <h1 className="mt-2 text-2xl font-semibold">Pessoas</h1>
-            <p className="mt-2 max-w-2xl text-sm text-slate-400">
+            <h1 className="mt-1 text-xl font-semibold">Pessoas</h1>
+            <p className="mt-1 max-w-2xl text-sm text-slate-400">
               Cadastro, edição e gerenciamento de moradores.
             </p>
-            <p className="mt-2 max-w-2xl text-xs text-cyan-100">
+            <p className="mt-1 max-w-2xl text-xs text-cyan-100">
               Para o morador entrar no app, cadastre também uma conta em Admin &gt; Usuários com perfil Morador e vínculo com este cadastro.
             </p>
           </div>
@@ -1212,6 +1307,13 @@ export default function MoradoresPage() {
               <RefreshCw className="h-4 w-4" />
               Atualizar
             </Button>
+            <Button type="button" variant="outline" onClick={downloadPeopleTemplate} className="border-white/10 bg-white/5 text-white hover:bg-white/10">
+              Baixar modelo
+            </Button>
+            <label className="cursor-pointer rounded-xl bg-white px-4 py-3 text-sm font-medium text-slate-950 transition hover:bg-slate-200">
+              Selecionar CSV
+              <input type="file" accept=".csv,text/csv" onChange={handlePeopleCsvSelected} className="hidden" />
+            </label>
           </div>
         </div>
       </section>
@@ -1428,7 +1530,7 @@ export default function MoradoresPage() {
               return (
               <div
                 key={morador.id}
-                className="grid gap-4 px-5 py-4 lg:grid-cols-[auto_1.2fr_0.7fr_0.7fr_0.6fr_auto] lg:items-center"
+                className="grid gap-3 px-4 py-3 lg:grid-cols-[auto_1.7fr_0.7fr_0.7fr_0.55fr_auto] lg:items-center"
               >
                 <button
                   type="button"
@@ -1449,7 +1551,13 @@ export default function MoradoresPage() {
                   )}
                 </button>
                 <div>
-                  <p className="font-medium text-white">{morador.nome}</p>
+                  <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+                    <p className="font-medium text-white">{morador.nome}</p>
+                    <div className="space-y-1 text-xs text-slate-500 lg:text-right">
+                      <p>Última entrada: {formatAccessDateTime(accessSummary?.entryAt)}</p>
+                      <p>Última saída: {formatAccessDateTime(accessSummary?.exitAt)}</p>
+                    </div>
+                  </div>
                   <p className="text-sm text-slate-400">
                     {safeText(morador.localizacao, [safeText(morador.condominio), safeText(morador.estruturaLabel), safeText(morador.unidade)].filter(Boolean).join(' / ') || 'Localização não informada')}
                   </p>
@@ -1479,10 +1587,6 @@ export default function MoradoresPage() {
                       ) : null}
                     </div>
                   ) : null}
-                  <div className="mt-2 space-y-1 text-xs text-slate-500">
-                    <p>Última entrada: {formatAccessDateTime(accessSummary?.entryAt)}</p>
-                    <p>Última saída: {formatAccessDateTime(accessSummary?.exitAt)}</p>
-                  </div>
                 </div>
 
                 <div className="text-sm text-slate-300">
@@ -1575,9 +1679,10 @@ export default function MoradoresPage() {
                   documentType: '',
                     birthDate: '',
                     allowMinorFaceSync: false,
-                    guardianName: '',
-                    guardianDocument: '',
-                    guardianRelationship: '',
+                  guardianName: '',
+                  guardianDocument: '',
+                  guardianRelationship: '',
+                  accessGroupIds: [],
                   }
                 : undefined
             }
@@ -1589,6 +1694,7 @@ export default function MoradoresPage() {
           catalogLoading={catalogLoading}
           emailReadOnly={false}
           cameras={cameras}
+          accessGroups={scopedAccessGroups}
           existingResidents={moradores}
         />
       </CrudModal>
@@ -1675,12 +1781,43 @@ export default function MoradoresPage() {
                       : 'border-cyan-500/30 bg-cyan-500/10 text-cyan-100'
                 }`}
               >
-                <p className="font-medium">Sincronizacao da lista facial: {getFaceListSyncLabel(selectedMorador.faceListSyncStatus)}</p>
+                <p className="font-medium">Sincronização da lista facial: {getFaceListSyncLabel(selectedMorador.faceListSyncStatus)}</p>
                 {selectedMorador.faceListSyncError ? (
                   <p className="mt-1 text-xs opacity-90">{selectedMorador.faceListSyncError}</p>
                 ) : null}
               </div>
             ) : null}
+
+            {(() => {
+              const physicalAccess = getPhysicalAccessStatus(selectedMorador);
+              const validAccessGroupNames = (selectedMorador.accessGroupIds ?? [])
+                .map((groupId) => accessGroupNameById.get(groupId))
+                .filter((name): name is string => Boolean(name));
+              const orphanAccessGroupCount = Math.max((selectedMorador.accessGroupIds?.length ?? 0) - validAccessGroupNames.length, 0);
+              return (
+                <div
+                  className={`rounded-2xl border px-4 py-3 text-sm ${
+                    physicalAccess.tone === 'success'
+                      ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-100'
+                      : physicalAccess.tone === 'warning'
+                        ? 'border-amber-500/30 bg-amber-500/10 text-amber-100'
+                        : 'border-red-500/30 bg-red-500/10 text-red-100'
+                  }`}
+                >
+                  <p className="font-medium">{physicalAccess.title}</p>
+                  <p className="mt-1 text-xs opacity-90">{physicalAccess.description}</p>
+                  <div className="mt-3 grid gap-2 text-xs md:grid-cols-2">
+                    <span>Grupos: {validAccessGroupNames.length ? validAccessGroupNames.join(', ') : 'nenhum'}</span>
+                    {orphanAccessGroupCount > 0 ? (
+                      <span>Vínculos inconsistentes ocultados: {orphanAccessGroupCount}</span>
+                    ) : null}
+                    <span>Credencial facial: {selectedMorador.hasFacialCredential ? 'sim' : 'não'}</span>
+                    <span>Lista facial: {selectedMorador.faceListId ?? 'não vinculada'}</span>
+                    <span>Item na lista: {selectedMorador.faceListItemId ?? 'não vinculado'}</span>
+                  </div>
+                </div>
+              );
+            })()}
 
             <div className="grid gap-4 md:grid-cols-2">
             <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
@@ -1729,9 +1866,22 @@ export default function MoradoresPage() {
             <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
               <div className="flex items-center gap-2 text-slate-400">
                 <MapPin className="h-4 w-4" />
-                <span className="text-xs uppercase tracking-[0.18em]">Localização</span>
+                <span className="text-xs uppercase tracking-[0.18em]">Unidades vinculadas</span>
               </div>
-              <p className="mt-2 text-base font-medium text-white">{getFriendlyLocation(selectedMorador)}</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {getMoradorUnitLabels(selectedMorador, units).length ? (
+                  getMoradorUnitLabels(selectedMorador, units).map((unitLabel) => (
+                    <span
+                      key={unitLabel}
+                      className="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-3 py-1 text-xs text-cyan-50"
+                    >
+                      {unitLabel}
+                    </span>
+                  ))
+                ) : (
+                  <p className="text-base font-medium text-white">{getFriendlyLocation(selectedMorador)}</p>
+                )}
+              </div>
             </div>
              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                <div className="flex items-center gap-2 text-slate-400">
@@ -1810,7 +1960,9 @@ export default function MoradoresPage() {
                     guardianRelationship: '',
                     condominio: currentCondominium?.name ?? selectedMorador.condominio ?? '',
                   estrutura: `${selectedMorador.unit?.structureType ?? selectedMorador.unit?.structure?.type ?? 'STREET'}::${selectedMorador.estruturaLabel ?? selectedMorador.bloco ?? ''}`,
-                  unitId: selectedMorador.unit?.id ?? '',
+                  unitId: getMoradorUnitIds(selectedMorador)[0] ?? '',
+                  unitIds: getMoradorUnitIds(selectedMorador),
+                  accessGroupIds: selectedMorador.accessGroupIds ?? [],
                   tipo: normalizeMoradorCategory(selectedMorador.categoria),
                   status: normalizeMoradorStatus(selectedMorador.status),
                   photoUrl: selectedMorador.avatarUrl ?? '',
@@ -1827,6 +1979,7 @@ export default function MoradoresPage() {
           availableUnits={availableUnits}
           catalogLoading={catalogLoading}
           cameras={cameras}
+          accessGroups={scopedAccessGroups}
           existingResidents={moradores}
         />
       </CrudModal>

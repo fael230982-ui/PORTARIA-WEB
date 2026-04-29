@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { ActiveUnitSelector } from '@/components/auth/active-unit-selector';
 import { PageContainer } from '@/components/layout/page-container';
 import { useAuth } from '@/hooks/use-auth';
@@ -16,6 +17,8 @@ import {
   useUpdateResidentNotificationPreferences,
 } from '@/hooks/use-resident';
 import { getResidentDeviceId, RESIDENT_DEVICE_ID_PLACEHOLDER } from '@/features/resident/resident-device-id';
+import { getPersonById } from '@/services/people.service';
+import type { FaceStatus, Person } from '@/types/person';
 import type { UserScopeType, UserResponse } from '@/types/user';
 
 function resolveLinkedUnitLabel(
@@ -116,6 +119,23 @@ function formatVisitStatus(status?: string | null) {
   }
 }
 
+function getResidentFaceStatusLabel(status?: FaceStatus | string | null) {
+  switch (status) {
+    case 'FACE_SYNCED':
+      return 'Foto pronta para reconhecimento';
+    case 'FACE_PENDING_SYNC':
+      return 'Foto aguardando processamento';
+    case 'FACE_ERROR':
+      return 'Foto precisa de nova conferencia';
+    case 'PHOTO_ONLY':
+      return 'Foto cadastrada, mas ainda sem processamento';
+    case 'NO_PHOTO':
+      return 'Sem foto cadastrada';
+    default:
+      return 'Status da foto nao informado';
+  }
+}
+
 export default function ProfilePage() {
   const { user } = useAuth();
   const residentEnabled = Boolean(user?.role === 'MORADOR' && user?.selectedUnitId);
@@ -125,6 +145,17 @@ export default function ProfilePage() {
   const [selectedPriority, setSelectedPriority] = useState('IMPORTANT');
 
   const residentProfileQuery = useResidentProfile(user?.selectedUnitId, residentEnabled);
+  const residentPersonQuery = useQuery<Person | null>({
+    queryKey: ['resident', 'profile-person', residentProfileQuery.data?.personId ?? user?.personId ?? null],
+    queryFn: async () => {
+      const personId = residentProfileQuery.data?.personId ?? user?.personId;
+      if (!personId) return null;
+      return getPersonById(personId);
+    },
+    enabled: residentEnabled && Boolean(residentProfileQuery.data?.personId ?? user?.personId),
+    staleTime: 60 * 1000,
+    retry: 1,
+  });
   const preferencesQuery = useResidentNotificationPreferences(residentEnabled);
   const lgpdPolicyQuery = useResidentLgpdPolicy(residentEnabled);
   const consentQuery = useResidentLgpdConsent(deviceId, residentEnabled);
@@ -138,10 +169,18 @@ export default function ProfilePage() {
   const updateConsent = useUpdateResidentLgpdConsent();
 
   const effectiveProfile = residentProfileQuery.data ?? user;
+  const profilePerson = residentPersonQuery.data;
   const linkedUnitLabel = resolveLinkedUnitLabel(effectiveProfile?.unitId, units);
   const selectedUnitLabel = resolveSelectedUnitLabel(effectiveProfile, units);
   const selectedUnitsCount = effectiveProfile?.unitIds?.length ?? 0;
   const consentHistoryCount = consentHistoryQuery.data?.length ?? 0;
+  const resolvedPhone = effectiveProfile?.phone?.trim() || profilePerson?.phone?.trim() || null;
+  const resolvedPhotoUrl =
+    effectiveProfile?.photoUrl?.trim() ||
+    effectiveProfile?.photoUri?.trim() ||
+    profilePerson?.photoUrl?.trim() ||
+    null;
+  const resolvedFaceStatus = effectiveProfile?.faceStatus || profilePerson?.faceStatus || null;
 
   useEffect(() => {
     setDeviceId(getResidentDeviceId());
@@ -162,6 +201,32 @@ export default function ProfilePage() {
             {effectiveProfile?.personName || effectiveProfile?.name || 'Morador'}
           </h2>
           <p className="mt-2 text-sm text-slate-400">{formatProfileSource(effectiveProfile?.profileSource)}</p>
+
+          <div className="mt-5 grid gap-4 md:grid-cols-[120px_1fr]">
+            <div className="flex h-28 w-28 items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-slate-950/60 text-xs text-slate-500">
+              {resolvedPhotoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={resolvedPhotoUrl} alt="Foto do morador" className="h-full w-full object-cover" />
+              ) : (
+                <span>Sem foto</span>
+              )}
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="rounded-xl border border-white/10 bg-slate-950/60 p-4">
+                <p className="text-slate-500">Telefone</p>
+                <p className="mt-1 text-white">{resolvedPhone || 'Nao informado'}</p>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-slate-950/60 p-4">
+                <p className="text-slate-500">Foto e reconhecimento</p>
+                <p className="mt-1 text-white">{getResidentFaceStatusLabel(resolvedFaceStatus)}</p>
+                <p className="mt-2 text-xs text-slate-500">
+                  {resolvedPhotoUrl
+                    ? 'A foto mais recente da conta ja esta vinculada ao seu perfil.'
+                    : 'Sua conta ainda nao recebeu foto vinculada.'}
+                </p>
+              </div>
+            </div>
+          </div>
 
           <div className="mt-4 grid gap-3 text-sm md:grid-cols-2">
             <div className="rounded-xl border border-white/10 bg-slate-950/60 p-4">
@@ -198,6 +263,11 @@ export default function ProfilePage() {
           {residentProfileQuery.isError ? (
             <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
               Não foi possível atualizar seus dados agora. Estamos exibindo as informações mais recentes disponíveis.
+            </div>
+          ) : null}
+          {residentPersonQuery.isError ? (
+            <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+              Alguns dados complementares, como foto e status de reconhecimento, nao puderam ser atualizados agora.
             </div>
           ) : null}
         </div>

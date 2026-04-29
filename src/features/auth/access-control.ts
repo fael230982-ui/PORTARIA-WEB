@@ -16,6 +16,7 @@ export function getRouteForRole(role?: UserRole | null) {
     case 'CENTRAL':
       return '/operacao';
     case 'ADMIN':
+    case 'GERENTE':
       return '/admin';
     case 'MASTER':
       return '/master';

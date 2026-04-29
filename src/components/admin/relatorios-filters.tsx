@@ -56,7 +56,7 @@ export function RelatoriosFilters({ onChange }: Props) {
             setSearch(value);
             emit({ search: value, category, dateFrom, dateTo });
           }}
-          placeholder="Buscar por titulo, descricao ou ID..."
+          placeholder="Buscar por título, descrição ou ID..."
           className="border-white/10 bg-slate-950/60 pl-10 text-white placeholder:text-slate-500"
         />
       </div>

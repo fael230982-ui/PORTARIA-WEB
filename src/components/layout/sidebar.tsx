@@ -17,6 +17,8 @@ import {
   Car,
   AlertTriangle,
   Cpu,
+  ScanFace,
+  Server,
   Menu,
   UserCircle,
 } from 'lucide-react';
@@ -48,6 +50,8 @@ const adminNavigation: NavigationItem[] = [
   { label: 'Alertas', href: '/admin/alertas', icon: Bell, moduleKey: 'alerts' },
   { label: 'Câmeras', href: '/admin/cameras', icon: Cctv, moduleKey: 'cameras' },
   { label: 'Dispositivos', href: '/admin/dispositivos', icon: Cpu, moduleKey: 'devices' },
+  { label: 'Servidores VMS', href: '/admin/servidores-vms', icon: Server, moduleKey: 'cameras' },
+  { label: 'Servidores faciais', href: '/admin/servidores-faciais', icon: ScanFace, moduleKey: 'cameras' },
   { label: 'Grupos de acesso', href: '/admin/grupos-acesso', icon: Shield, moduleKey: 'access-groups' },
 ];
 
@@ -67,7 +71,19 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const { user } = useAuth();
   useResidenceCatalog(Boolean(user), user?.condominiumId ?? undefined);
   const baseNavigation = user?.role === 'MORADOR' ? residentNavigation : adminNavigation;
-  const visibleNavigation = baseNavigation;
+  const visibleNavigation =
+    user?.role === 'GERENTE'
+      ? baseNavigation.filter(
+          (item) =>
+            ![
+              '/admin/cameras',
+              '/admin/dispositivos',
+              '/admin/servidores-vms',
+              '/admin/servidores-faciais',
+              '/admin/grupos-acesso',
+            ].includes(item.href)
+        )
+      : baseNavigation;
 
   const navigateTo = (href: string) => {
     if (pathname === href) return;
@@ -76,14 +92,14 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
   return (
     <aside
-      className={`fixed left-0 top-0 z-[80] flex h-screen flex-col border-r border-white/10 bg-slate-950/95 text-white shadow-2xl backdrop-blur pointer-events-auto transition-all duration-300 ${
+      className={`app-sidebar fixed left-0 top-0 z-[80] flex h-screen flex-col border-r pointer-events-auto transition-all duration-300 ${
         collapsed ? 'w-20' : 'w-72'
       }`}
     >
-      <div className="flex h-16 items-center justify-between border-b border-white/10 px-4">
+      <div className="flex h-16 items-center justify-between border-b border-[color:var(--surface-border)] px-4">
         <BrandMark
           collapsed={collapsed}
-          title={user?.role === 'MORADOR' ? 'Portal do Morador' : 'Painel Admin'}
+          title={user?.role === 'MORADOR' ? 'Portal do Morador' : user?.role === 'GERENTE' ? 'Painel Gerencial' : 'Painel Admin'}
           subtitle={user?.role === 'MORADOR' ? 'Acesso pessoal da unidade' : 'Gestão completa do condomínio'}
           imageClassName={collapsed ? 'h-10 w-10 rounded-xl object-contain' : 'h-11 w-auto object-contain'}
         />
@@ -92,7 +108,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
           type="button"
           onClick={onToggle}
           disabled={!onToggle}
-          className="hidden rounded-lg bg-white/10 p-2 transition hover:bg-white/15 md:flex"
+          className="hidden rounded-lg border border-[color:var(--surface-border)] bg-[var(--surface-muted)] p-2 text-[color:var(--text-main)] transition hover:brightness-105 md:flex"
           aria-label="Alternar sidebar"
         >
           {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
@@ -127,7 +143,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
           type="button"
           onClick={onToggle}
           disabled={!onToggle}
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-white/10 px-3 py-3 text-sm text-white transition hover:bg-white/15 md:hidden"
+          className="flex w-full items-center justify-center gap-2 rounded-xl border border-[color:var(--surface-border)] bg-[var(--surface-muted)] px-3 py-3 text-sm text-[color:var(--text-main)] transition hover:brightness-105 md:hidden"
         >
           <Menu className="h-4 w-4" />
           {collapsed ? 'Expandir' : 'Recolher'}

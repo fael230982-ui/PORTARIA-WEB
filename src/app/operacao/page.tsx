@@ -1,9 +1,10 @@
 'use client';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import {
   Bell,
+  DoorClosed,
   Building2,
   Camera as CameraIcon,
   Delete,
@@ -33,15 +34,18 @@ import { useResidenceCatalog } from '@/hooks/use-residence-catalog';
 import { useOfflineOperationQueue } from '@/hooks/use-offline-operation-queue';
 import { CrudModal } from '@/components/admin/CrudModal';
 import { CameraFeed } from '@/components/camera-feed';
+import { CameraPlayer } from '@/components/operacao/camera-player';
 import { Button } from '@/components/ui/button';
 import { logout } from '@/services/auth.service';
 import { camerasService } from '@/services/cameras.service';
+import { devicesService } from '@/services/devices.service';
 import { createPerson, updatePerson, updatePersonStatus, uploadPersonPhoto } from '@/services/people.service';
 import { updateAlertStatus, updateAlertWorkflow } from '@/services/alerts.service';
 import { createReport } from '@/services/reports.service';
 import { useReports } from '@/hooks/use-reports';
 import { useDeliveries } from '@/hooks/use-deliveries';
 import { useAccessLogs } from '@/hooks/use-access-logs';
+import { useVehicles } from '@/hooks/use-vehicles';
 import { useOperationActions, useOperationMessages, useOperationSearch, useOperationUnitSearch, useOperationWhatsAppConnection } from '@/hooks/use-operation-integrations';
 import { operationService } from '@/services/operation.service';
 import { writeLocalOperationPresence } from '@/features/operation/local-operation-presence';
@@ -78,6 +82,11 @@ import { getPersonStatusBadgeClass } from '@/features/people/status-badges';
 import { useVisitorDocumentRequirement } from '@/features/people/visitor-document-policy';
 import { getAlertEvidenceUrl, getAlertReplayUrl, getAlertTypeLabel } from '@/features/alerts/alert-normalizers';
 import {
+  getPreferredImageStreamUrl,
+  getPreferredSnapshotUrl,
+  getPreferredVideoStreamUrl,
+} from '@/features/cameras/camera-media';
+import {
   alertResolutionPresets,
   getAlertWorkflowClass,
   getAlertWorkflowLabel,
@@ -99,11 +108,13 @@ import type { AccessLog } from '@/types/access-log';
 import type { Camera } from '@/types/camera';
 import type { Unit } from '@/types/condominium';
 import type { Delivery, DeliveryPayload } from '@/types/delivery';
+import type { Device } from '@/types/device';
 import type { OperationAction, OperationMessage, OperationPhotoSearchResponse, OperationShiftChange } from '@/types/operation';
 import type { Person, PersonCategory } from '@/types/person';
 import type { Report, ShiftHandoverReportMetadata } from '@/types/report';
+import type { Vehicle } from '@/types/vehicle';
 
-const allowedRoles = ['OPERADOR', 'MASTER', 'CENTRAL'] as const;
+const allowedRoles = ['OPERADOR', 'GERENTE', 'ADMIN', 'MASTER', 'CENTRAL'] as const;
 
 const operationalModules: Array<{
   label: string;
@@ -130,6 +141,76 @@ const contactButtons = [
 
 const fallbackOperationActionLabels = ['Portao principal', 'Garagem', 'Portao pedestre', 'Sirene'];
 
+function getRemoteOpenButtons(device: Device | null) {
+  if (!device) return [] as Array<{ doorNumber: 1 | 2; label: string }>;
+
+  const config = device.remoteAccessConfig;
+  const items: Array<{ doorNumber: 1 | 2; label: string; enabled: boolean }> = [
+    {
+      doorNumber: 1,
+      label: config?.actionOneLabel?.trim() || 'Acionamento 1',
+      enabled: config?.actionOneEnabled ?? true,
+    },
+    {
+      doorNumber: 2,
+      label: config?.actionTwoLabel?.trim() || 'Acionamento 2',
+      enabled: config?.actionTwoEnabled ?? true,
+    },
+  ];
+
+  return items.filter((item) => item.enabled).map(({ enabled: _enabled, ...item }) => item);
+}
+
+function getRemoteOpenFeedbackClass(feedback: 'idle' | 'success' | 'pending' | 'error' | undefined, fallbackClass: string) {
+  if (feedback === 'success') {
+    return 'border-emerald-400/45 bg-emerald-500/20 text-emerald-50 hover:bg-emerald-500/30';
+  }
+  if (feedback === 'pending') {
+    return 'border-amber-400/45 bg-amber-500/20 text-amber-50 hover:bg-amber-500/30';
+  }
+  if (feedback === 'error') {
+    return 'border-red-400/45 bg-red-500/20 text-red-50 hover:bg-red-500/30';
+  }
+  return fallbackClass;
+}
+
+function getRemoteOpenDoorStateLabel(feedback: 'idle' | 'success' | 'pending' | 'error' | undefined) {
+  if (feedback === 'success') return 'Comando confirmado';
+  if (feedback === 'pending') return 'Aguardando confirmação';
+  if (feedback === 'error') return 'Falha no comando';
+  return 'Sensor não monitorado';
+}
+
+function getRemoteOpenDoorIconClass(feedback: 'idle' | 'success' | 'pending' | 'error' | undefined) {
+  if (feedback === 'success') return 'border-emerald-300/40 bg-emerald-300/20 text-emerald-50';
+  if (feedback === 'pending') return 'border-amber-300/40 bg-amber-300/20 text-amber-50';
+  if (feedback === 'error') return 'border-red-300/40 bg-red-300/20 text-red-50';
+  return 'border-white/15 bg-white/10 text-slate-100';
+}
+
+function isQueuedControlResult(result: unknown) {
+  const deviceResult = (result as { result?: { deviceResult?: { queued?: boolean } } } | undefined)?.result?.deviceResult;
+  const controlResult = (result as { result?: { queued?: boolean } } | undefined)?.result;
+  return deviceResult?.queued === true || controlResult?.queued === true;
+}
+
+function getControlJobId(result: unknown) {
+  const controlResult = (result as { result?: { jobId?: unknown; deviceResult?: { jobId?: unknown } } } | undefined)?.result;
+  const jobId = controlResult?.jobId ?? controlResult?.deviceResult?.jobId;
+  return typeof jobId === 'string' && jobId.trim() ? jobId.trim() : null;
+}
+
+function getControlJobStatus(result: unknown) {
+  const responseStatus = (result as { status?: unknown } | undefined)?.status;
+  const controlResult = (result as { result?: { status?: unknown; finalStatus?: unknown; job?: { status?: unknown } } } | undefined)?.result;
+  const status = responseStatus ?? controlResult?.status ?? controlResult?.finalStatus ?? controlResult?.job?.status;
+  return typeof status === 'string' ? status.toUpperCase() : null;
+}
+
+function wait(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
 function getOperationMessageChannelLabel(channel: string | null | undefined) {
   if (channel === 'WHATSAPP') return 'WhatsApp';
   if (channel === 'PORTARIA' || channel === 'APP') return 'Aplicativo';
@@ -147,6 +228,17 @@ function getWhatsAppConnectionLabel(state: string | null | undefined, enabled: b
   if (normalized === 'pairing') return 'Aguardando pareamento';
   if (state?.trim()) return state;
   return 'Não conectado';
+}
+
+function mergeOperationMessagesById(messages: OperationMessage[]) {
+  const itemsById = new Map<string, OperationMessage>();
+
+  messages.forEach((message) => {
+    if (!message?.id) return;
+    itemsById.set(message.id, message);
+  });
+
+  return [...itemsById.values()].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 }
 
 type OperationSnapshotCache = {
@@ -190,6 +282,8 @@ type OccurrenceFormData = {
   title: string;
   description: string;
   priority: 'low' | 'medium' | 'high';
+  scopeType: 'CONDOMINIUM' | 'UNIT';
+  unitId: string;
 };
 
 type EntryFormState = {
@@ -224,6 +318,8 @@ const initialOccurrenceForm: OccurrenceFormData = {
   title: '',
   description: '',
   priority: 'medium',
+  scopeType: 'CONDOMINIUM',
+  unitId: '',
 };
 
 const initialEntryForm: EntryFormState = {
@@ -710,7 +806,7 @@ function QuickDeliveryForm({
         </label>
 
         <label className="space-y-2">
-          <span className="text-sm text-slate-300">Destinatario</span>
+          <span className="text-sm text-slate-300">Destinatário</span>
           <select
             value={value.recipientPersonId}
             onChange={(event) => onChange('recipientPersonId', event.target.value)}
@@ -792,6 +888,7 @@ function OperationalPersonSummaryCard({
   latestAccessAction,
   accessSummary,
   highlighted = false,
+  revealSensitive = false,
 }: {
   person: Person;
   now: Date;
@@ -801,6 +898,7 @@ function OperationalPersonSummaryCard({
     exitAt?: string | null;
   } | null;
   highlighted?: boolean;
+  revealSensitive?: boolean;
 }) {
   const scheduleState = getScheduleState(person, now);
   const faceReadiness = getFaceReadiness(person);
@@ -852,7 +950,7 @@ function OperationalPersonSummaryCard({
 
       <div className="mt-3 grid gap-2 text-xs text-slate-400 md:grid-cols-2">
         <span>Documento: {person.document?.trim() ? maskDocument(person.document) : 'Não informado'}</span>
-        <span>Telefone: {person.phone?.trim() ? maskPhone(person.phone) : 'Não informado'}</span>
+        <span>Telefone: {person.phone?.trim() ? (revealSensitive ? person.phone : maskPhone(person.phone)) : 'Não informado'}</span>
         <span>E-mail: {person.email?.trim() ? maskEmail(person.email) : 'Não informado'}</span>
         <span>Cadastro: {formatOptionalDateTime(person.createdAt)}</span>
         <span>Inicio previsto: {formatOptionalDateTime(person.startDate)}</span>
@@ -874,7 +972,7 @@ function getCameraBadgeTone(status: Camera['status']) {
 }
 
 function getScopeLabel(camera: Camera, unitLabels: Map<string, string>) {
-  if (!camera.unitId) return 'Sem unidade vinculada';
+  if (!camera.unitId) return 'Área comum do condomínio';
   return unitLabels.get(camera.unitId) ?? unitLabels.get(getUnitReference(camera.unitId)) ?? 'Unidade não identificada';
 }
 
@@ -1359,6 +1457,7 @@ export default function OperacaoPage() {
   const { data: reportsData, refetch: refetchReports } = useReports(Boolean(user));
   const { data: deliveriesData, isLoading: deliveriesLoading, error: deliveriesError, refetch: refetchDeliveries } = useDeliveries({ limit: 50, enabled: Boolean(user) });
   const { data: accessLogsData, refetch: refetchAccessLogs } = useAccessLogs({ limit: 100, result: 'ALLOWED', enabled: Boolean(user) });
+  const { data: vehiclesData } = useVehicles(Boolean(user));
   const { data: operationActionsData, isLoading: operationActionsLoading, error: operationActionsError, refetch: refetchOperationActions } = useOperationActions(Boolean(user));
   const scopedCondominiumId =
     user && user.role !== 'MASTER' && user.role !== 'CENTRAL'
@@ -1367,6 +1466,7 @@ export default function OperacaoPage() {
   const { units, condominiums } = useResidenceCatalog(Boolean(user), scopedCondominiumId);
 
   const [selectedCameraId, setSelectedCameraId] = useState('');
+  const [selectedCameraVisualStatus, setSelectedCameraVisualStatus] = useState<Camera['status'] | null>(null);
   const [photoSearchCameraId, setPhotoSearchCameraId] = useState('');
   const [cameraFocusPulse, setCameraFocusPulse] = useState(false);
   const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
@@ -1384,7 +1484,7 @@ export default function OperacaoPage() {
   const [openAlertsModal, setOpenAlertsModal] = useState(false);
   const [alertsStatusFilter, setAlertsStatusFilter] = useState<'ALL' | 'NEW' | 'ON_HOLD' | 'RESOLVED'>('NEW');
   const [openActionsModal, setOpenActionsModal] = useState(false);
-  const [deliveriesHistoryFilter, setDeliveriesHistoryFilter] = useState<'PENDING' | 'RECEIVED' | 'WITHDRAWN'>('PENDING');
+  const [deliveriesHistoryFilter, setDeliveriesHistoryFilter] = useState<'ALL' | 'PENDING' | 'WITHDRAWN'>('PENDING');
   const [openBatchExitConfirm, setOpenBatchExitConfirm] = useState(false);
   const [editingPerson, setEditingPerson] = useState<Person | null>(null);
   const [selectedResidentPerson, setSelectedResidentPerson] = useState<Person | null>(null);
@@ -1420,6 +1520,8 @@ export default function OperacaoPage() {
   const [operationalConsultationCategory, setOperationalConsultationCategory] = useState<PersonCategory | 'ALL'>('ALL');
   const [operationalPeopleModalCategory, setOperationalPeopleModalCategory] = useState<PersonCategory | 'ALL'>('ALL');
   const [operationalPeopleModalSearch, setOperationalPeopleModalSearch] = useState('');
+  const [operationUnitSearch, setOperationUnitSearch] = useState('');
+  const [selectedOperationUnitId, setSelectedOperationUnitId] = useState('');
   const [residentSearch, setResidentSearch] = useState('');
   const [deliverySearch, setDeliverySearch] = useState('');
   const [residentMessageText, setResidentMessageText] = useState('');
@@ -1431,7 +1533,16 @@ export default function OperacaoPage() {
   const [exitForm, setExitForm] = useState<ExitFormState>(initialExitForm);
   const [deliveryForm, setDeliveryForm] = useState<DeliveryFormState>(initialDeliveryForm);
   const [alertUpdating, setAlertUpdating] = useState(false);
-  const [pageMessage, setPageMessage] = useState<{ tone: 'success' | 'error'; text: string } | null>(null);
+  const [pageMessage, setPageMessage] = useState<{ tone: 'success' | 'warning' | 'error'; text: string } | null>(null);
+  const [remoteOpenDevices, setRemoteOpenDevices] = useState<Device[]>([]);
+  const [selectedRemoteOpenDeviceId, setSelectedRemoteOpenDeviceId] = useState('');
+  const [remoteOpenLoading, setRemoteOpenLoading] = useState(false);
+  const [remoteOpenExecutingKey, setRemoteOpenExecutingKey] = useState<string | null>(null);
+  const [remoteOpenFeedback, setRemoteOpenFeedback] = useState<Record<string, 'idle' | 'success' | 'pending' | 'error'>>({});
+  const [inboxMessages, setInboxMessages] = useState<OperationMessage[]>([]);
+  const [inboxMessagesLoading, setInboxMessagesLoading] = useState(false);
+  const [inboxMessagesError, setInboxMessagesError] = useState<string | null>(null);
+  const [inboxMessagesMode, setInboxMessagesMode] = useState<'unit' | 'empty'>('empty');
   const [brokenAlertImageUrls, setBrokenAlertImageUrls] = useState<Record<string, boolean>>({});
   const [photoSearchPanel, setPhotoSearchPanel] = useState<PhotoSearchPanelState>(initialPhotoSearchPanelState);
   const [activeShift, setActiveShift] = useState<ActiveShiftDraft | null>(null);
@@ -1472,15 +1583,6 @@ export default function OperacaoPage() {
     Boolean(selectedResidentUnitId)
   );
   const {
-    data: inboxMessagesData,
-    isLoading: inboxMessagesLoading,
-    error: inboxMessagesError,
-    refetch: refetchInboxMessages,
-  } = useOperationMessages(
-    { limit: 50 },
-    Boolean(user)
-  );
-  const {
     data: residentWhatsAppConnection,
     isLoading: residentWhatsAppLoading,
     error: residentWhatsAppError,
@@ -1495,7 +1597,6 @@ export default function OperacaoPage() {
     normalizeText(peopleSearch).length >= 2
   );
   const residentMessages = residentMessagesData?.data ?? [];
-  const inboxMessages = inboxMessagesData?.data ?? [];
   const recentInboxMessages = useMemo(
     () =>
       [...inboxMessages]
@@ -1504,7 +1605,9 @@ export default function OperacaoPage() {
     [inboxMessages]
   );
   const unreadResidentMessagesCount = residentMessages.filter((message) => !message.readAt).length;
-  const unreadInboxMessagesCount = inboxMessages.filter((message) => message.direction === 'INBOUND' && !message.readAt).length;
+  const unreadInboxMessagesCount = inboxMessages.filter(
+    (message) => (message.direction === 'INBOUND' || message.direction === 'RESIDENT_TO_PORTARIA') && !message.readAt
+  ).length;
   const residentPhone = selectedResidentPerson?.phone?.trim() || null;
   const residentWhatsAppState = residentWhatsAppConnection?.state?.trim().toLowerCase() ?? null;
   const residentWhatsAppReady = residentWhatsAppState === 'open';
@@ -1524,6 +1627,23 @@ export default function OperacaoPage() {
       }
     };
   }, [photoSearchPanel.fallbackPreviewUrl]);
+
+  useEffect(() => {
+    if (photoSearchPanel.loading) return;
+    if (!photoSearchPanel.error && !photoSearchPanel.result) return;
+
+    const timer = window.setTimeout(() => {
+      setPhotoSearchPanel((current) => {
+        if (current.loading) return current;
+        if (current.fallbackPreviewUrl?.startsWith('blob:')) {
+          URL.revokeObjectURL(current.fallbackPreviewUrl);
+        }
+        return initialPhotoSearchPanelState;
+      });
+    }, 12000);
+
+    return () => window.clearTimeout(timer);
+  }, [photoSearchPanel.error, photoSearchPanel.loading, photoSearchPanel.result]);
 
   useEffect(() => {
     if (!user || typeof window === 'undefined') return;
@@ -1712,6 +1832,25 @@ export default function OperacaoPage() {
     if (user.condominiumId) return effectiveUnits.filter((unit) => unit.condominiumId === user.condominiumId);
     return effectiveUnits;
   }, [effectiveUnits, user]);
+  const inboxUnitIds = useMemo(() => {
+    const identifiers = new Set<string>();
+
+    [user?.selectedUnitId, user?.unitId, ...(user?.unitIds ?? [])]
+      .map((value) => value?.trim())
+      .filter((value): value is string => Boolean(value))
+      .forEach((value) => identifiers.add(value));
+
+    catalogScopedUnits.forEach((unit) => {
+      if (unit.id) identifiers.add(unit.id);
+      if (unit.legacyUnitId) identifiers.add(unit.legacyUnitId);
+    });
+
+    if (selectedResidentUnitId) {
+      identifiers.add(selectedResidentUnitId);
+    }
+
+    return [...identifiers];
+  }, [catalogScopedUnits, selectedResidentUnitId, user]);
   const unitLabels = useMemo(
     () =>
       new Map(
@@ -1800,15 +1939,105 @@ export default function OperacaoPage() {
 
     return '';
   }, [quickDeliveryUnitOptions, user?.selectedUnitId, user?.unitId]);
-  const deliveryStats = useMemo(() => ({
-    total: deliveries.length,
-    received: deliveries.filter((item) => normalizeDeliveryStatus(item.status) === 'RECEIVED').length,
-    notified: deliveries.filter((item) => normalizeDeliveryStatus(item.status) === 'NOTIFIED').length,
-    withdrawn: deliveries.filter((item) => normalizeDeliveryStatus(item.status) === 'WITHDRAWN').length,
-    pendingWithdrawal: deliveries.filter((item) => normalizeDeliveryStatus(item.status) !== 'WITHDRAWN').length,
-    pendingWithoutSecureCode: deliveries.filter((item) => normalizeDeliveryStatus(item.status) !== 'WITHDRAWN' && !hasDeliverySecureWithdrawal(item))
-      .length,
-  }), [deliveries]);
+  useEffect(() => {
+    if (!selectedOperationUnitId && defaultQuickPersonUnitId) {
+      setSelectedOperationUnitId(defaultQuickPersonUnitId);
+    }
+  }, [defaultQuickPersonUnitId, selectedOperationUnitId]);
+  useEffect(() => {
+    if (selectedResidentUnitId) {
+      setSelectedOperationUnitId(selectedResidentUnitId);
+    }
+  }, [selectedResidentUnitId]);
+  useEffect(() => {
+    if (!user) return;
+
+    const scopedCondominiumId = user.condominiumId ?? user.condominiumIds?.[0] ?? null;
+    if (!scopedCondominiumId) {
+      setRemoteOpenDevices([]);
+      return;
+    }
+
+    let active = true;
+
+    async function loadRemoteOpenDevices() {
+      setRemoteOpenLoading(true);
+      try {
+        const devices = await devicesService.list({ condominiumId: scopedCondominiumId });
+        if (!active) return;
+
+        const candidates = devices.filter(
+          (device) =>
+            device.type === 'FACIAL_DEVICE' &&
+            Boolean(device.host?.trim()) &&
+            Boolean(
+              device.remoteAccessConfig?.targetType ||
+              device.remoteAccessConfig?.secboxId ||
+              device.remoteAccessConfig?.portalId ||
+              device.remoteAccessConfig?.doorNumber ||
+              device.remoteAccessConfig?.actionOneEnabled ||
+              device.remoteAccessConfig?.actionTwoEnabled
+            )
+        );
+
+        const testedDevices: Device[] = [];
+        for (const device of candidates) {
+          try {
+            const response = await devicesService.testControlIdConnection(device.id);
+            if (response?.ok) {
+              testedDevices.push({ ...device, status: 'ONLINE' });
+            }
+          } catch {
+            // Ignore devices that fail the connectivity probe here.
+          }
+        }
+
+        const nextDevices = testedDevices.length > 0 ? testedDevices : candidates;
+        setRemoteOpenDevices(nextDevices);
+        setSelectedRemoteOpenDeviceId((current) =>
+          current && nextDevices.some((device) => device.id === current) ? current : nextDevices[0]?.id ?? ''
+        );
+      } catch {
+        if (!active) return;
+        setRemoteOpenDevices([]);
+        setSelectedRemoteOpenDeviceId('');
+      } finally {
+        if (active) {
+          setRemoteOpenLoading(false);
+        }
+      }
+    }
+
+    void loadRemoteOpenDevices();
+    const refreshTimer = window.setInterval(() => {
+      void loadRemoteOpenDevices();
+    }, 20000);
+
+    return () => {
+      active = false;
+      window.clearInterval(refreshTimer);
+    };
+  }, [user]);
+  const deliveryStats = useMemo(() => {
+    const startOfToday = new Date(now);
+    startOfToday.setHours(0, 0, 0, 0);
+    const isToday = (value?: string | null) => {
+      if (!value) return false;
+      const parsed = new Date(value);
+      if (Number.isNaN(parsed.getTime())) return false;
+      return parsed >= startOfToday;
+    };
+
+    return {
+      total: deliveries.length,
+      totalToday: deliveries.filter((item) => isToday(item.receivedAt)).length,
+      withdrawn: deliveries.filter((item) => normalizeDeliveryStatus(item.status) === 'WITHDRAWN').length,
+      withdrawnToday: deliveries.filter((item) => normalizeDeliveryStatus(item.status) === 'WITHDRAWN' && isToday(item.withdrawnAt)).length,
+      pendingWithdrawal: deliveries.filter((item) => normalizeDeliveryStatus(item.status) !== 'WITHDRAWN').length,
+      pendingToday: deliveries.filter((item) => normalizeDeliveryStatus(item.status) !== 'WITHDRAWN' && isToday(item.receivedAt)).length,
+      pendingWithoutSecureCode: deliveries.filter((item) => normalizeDeliveryStatus(item.status) !== 'WITHDRAWN' && !hasDeliverySecureWithdrawal(item)).length,
+    };
+  }, [deliveries, now]);
   const pendingDeliveries = useMemo(
     () => deliveries.filter((item) => normalizeDeliveryStatus(item.status) !== 'WITHDRAWN'),
     [deliveries]
@@ -1827,12 +2056,13 @@ export default function OperacaoPage() {
       }),
     [deliverySearch, pendingDeliveries, people, quickDeliveryUnitOptions]
   );
+  const vehicles = useMemo(() => vehiclesData?.data ?? [], [vehiclesData?.data]);
   const deliveriesHistoryItems = useMemo(() => {
     const base =
       deliveriesHistoryFilter === 'WITHDRAWN'
         ? deliveries.filter((item) => normalizeDeliveryStatus(item.status) === 'WITHDRAWN')
-        : deliveriesHistoryFilter === 'RECEIVED'
-          ? deliveries.filter((item) => normalizeDeliveryStatus(item.status) === 'RECEIVED')
+        : deliveriesHistoryFilter === 'ALL'
+          ? deliveries
           : pendingDeliveries;
 
     return base.filter((delivery) => {
@@ -1854,11 +2084,11 @@ export default function OperacaoPage() {
         empty: 'Nenhuma encomenda retirada encontrada.',
       };
     }
-    if (deliveriesHistoryFilter === 'RECEIVED') {
+    if (deliveriesHistoryFilter === 'ALL') {
       return {
-        title: 'Encomendas aguardando aviso',
+        title: 'Todas as encomendas',
         description: 'Consulta operacional das encomendas recebidas e ainda não notificadas.',
-        empty: 'Nenhuma encomenda aguardando aviso encontrada.',
+        empty: 'Nenhuma encomenda encontrada.',
       };
     }
     return {
@@ -1882,6 +2112,52 @@ export default function OperacaoPage() {
     },
     [effectiveUnits]
   );
+  const refetchInboxMessages = useCallback(async () => {
+    if (!user) {
+      setInboxMessages([]);
+      setInboxMessagesError(null);
+      setInboxMessagesMode('empty');
+      return;
+    }
+
+    if (!inboxUnitIds.length) {
+      setInboxMessages([]);
+      setInboxMessagesError(null);
+      setInboxMessagesMode('empty');
+      return;
+    }
+
+    setInboxMessagesLoading(true);
+    setInboxMessagesError(null);
+    setInboxMessagesMode('unit');
+
+    try {
+      const responses = await Promise.all(
+        inboxUnitIds.map((unitId) => operationService.listMessages({ unitId, limit: 20 }))
+      );
+      const mergedMessages = mergeOperationMessagesById(
+        responses.flatMap((response) => response.data ?? []).slice(0, 200)
+      ).slice(0, 50);
+      setInboxMessages(mergedMessages);
+    } catch (error) {
+      setInboxMessagesError(
+        error instanceof Error ? error.message : 'Nao foi possivel atualizar as mensagens agora.'
+      );
+    } finally {
+      setInboxMessagesLoading(false);
+    }
+  }, [inboxUnitIds, user]);
+  useEffect(() => {
+    void refetchInboxMessages();
+
+    if (!user || !inboxUnitIds.length) return;
+
+    const timer = window.setInterval(() => {
+      void refetchInboxMessages();
+    }, 15000);
+
+    return () => window.clearInterval(timer);
+  }, [inboxUnitIds.length, refetchInboxMessages, user]);
   const cameras = useMemo(
     () => (camerasData?.data?.length ? camerasData.data : !isOnline ? snapshotCache.cameras : camerasData?.data ?? []),
     [camerasData, isOnline, snapshotCache.cameras]
@@ -1891,10 +2167,73 @@ export default function OperacaoPage() {
     [isOnline, operationActionsData, snapshotCache.operationActions]
   );
   const visibleOperationActions = operationActions.slice(0, 4);
+  const primaryRemoteOpenDevice = useMemo(() => {
+    if (!remoteOpenDevices.length) return null;
+    if (!selectedRemoteOpenDeviceId) return remoteOpenDevices[0] ?? null;
+    return remoteOpenDevices.find((device) => device.id === selectedRemoteOpenDeviceId) ?? remoteOpenDevices[0] ?? null;
+  }, [remoteOpenDevices, selectedRemoteOpenDeviceId]);
+  const remoteOpenButtons = useMemo(() => getRemoteOpenButtons(primaryRemoteOpenDevice), [primaryRemoteOpenDevice]);
 
   const alerts = useMemo(
     () => (alertsData?.data?.length ? alertsData.data : !isOnline ? snapshotCache.alerts : alertsData?.data ?? []),
     [alertsData?.data, isOnline, snapshotCache.alerts]
+  );
+  const selectedOperationUnit = useMemo(
+    () => (selectedOperationUnitId ? accessibleUnitsMap.get(selectedOperationUnitId) ?? null : null),
+    [accessibleUnitsMap, selectedOperationUnitId]
+  );
+  const selectedOperationUnitLabel = useMemo(() => {
+    if (!selectedOperationUnit) return '';
+    return [selectedOperationUnit.condominium?.name, selectedOperationUnit.structure?.label, selectedOperationUnit.label]
+      .filter(Boolean)
+      .join(' / ');
+  }, [selectedOperationUnit]);
+  const filteredOperationUnitOptions = useMemo(() => {
+    const search = normalizeText(operationUnitSearch);
+    if (!search) return quickPersonUnitOptions.slice(0, 8);
+    return quickPersonUnitOptions
+      .filter((unit) => normalizeText(unit.label).includes(search))
+      .slice(0, 8);
+  }, [operationUnitSearch, quickPersonUnitOptions]);
+  const selectedOperationUnitResidents = useMemo(
+    () =>
+      selectedOperationUnitId
+        ? people.filter(
+            (person) =>
+              person.category === 'RESIDENT' &&
+              (person.unitId === selectedOperationUnitId || person.unit?.id === selectedOperationUnitId)
+          )
+        : [],
+    [people, selectedOperationUnitId]
+  );
+  const selectedOperationUnitVehicles = useMemo(
+    () => (selectedOperationUnitId ? vehicles.filter((vehicle) => vehicle.unitId === selectedOperationUnitId) : []),
+    [selectedOperationUnitId, vehicles]
+  );
+  const selectedOperationUnitDeliveries = useMemo(
+    () => (selectedOperationUnitId ? pendingDeliveries.filter((delivery) => delivery.recipientUnitId === selectedOperationUnitId) : []),
+    [pendingDeliveries, selectedOperationUnitId]
+  );
+  const selectedOperationUnitCameras = useMemo(
+    () =>
+      selectedOperationUnitId
+        ? cameras.filter((camera) => camera.unitId === selectedOperationUnitId || !camera.unitId)
+        : cameras.filter((camera) => !camera.unitId),
+    [cameras, selectedOperationUnitId]
+  );
+  const selectedOperationUnitAlerts = useMemo(() => {
+    if (!selectedOperationUnitId) return [];
+    const residentIds = new Set(selectedOperationUnitResidents.map((person) => person.id));
+    const cameraIds = new Set(selectedOperationUnitCameras.map((camera) => camera.id));
+    return alerts.filter(
+      (alert) =>
+        (alert.personId && residentIds.has(alert.personId)) ||
+        (alert.cameraId && cameraIds.has(alert.cameraId))
+    );
+  }, [alerts, selectedOperationUnitCameras, selectedOperationUnitId, selectedOperationUnitResidents]);
+  const selectedOperationUnitMessages = useMemo(
+    () => (selectedOperationUnitId ? inboxMessages.filter((message) => message.unitId === selectedOperationUnitId).slice(0, 4) : []),
+    [inboxMessages, selectedOperationUnitId]
   );
   const { store: alertWorkflowStore, markOpened: markAlertOpened, resolve: resolveAlertWorkflow, hold: holdAlertWorkflow, saveDraft: saveAlertDraftWorkflow } = useAlertWorkflow(alerts);
   const reports = useMemo(
@@ -2047,6 +2386,7 @@ export default function OperacaoPage() {
   );
   const hasPeopleSearch = normalizeText(peopleSearch).length > 0;
   const hasOperationalConsultation = hasPeopleSearch || operationalConsultationCategory !== 'ALL';
+  const showOperationalPeopleError = Boolean(peopleError && !peopleLoading && scopedPeople.length === 0);
   const filteredOperationalPeople = useMemo(() => {
     const search = normalizeText(peopleSearch);
     const base =
@@ -2148,13 +2488,61 @@ export default function OperacaoPage() {
       }),
     [accessibleUnitsMap, effectiveAccessEvents, scopedPeople]
   );
-  const selectedCamera = cameras.find((camera) => camera.id === selectedCameraId) ?? cameras[0] ?? null;
+  const preferredCamera = useMemo(
+    () =>
+      cameras.find(
+        (camera) =>
+          Boolean(getPreferredVideoStreamUrl(camera)) ||
+          Boolean(getPreferredImageStreamUrl(camera)) ||
+          Boolean(getPreferredSnapshotUrl(camera))
+      ) ?? cameras[0] ?? null,
+    [cameras]
+  );
+  const selectedCamera =
+    cameras.find((camera) => camera.id === selectedCameraId) ??
+    preferredCamera;
+  const selectedCameraStatus = selectedCameraVisualStatus ?? selectedCamera?.status ?? 'OFFLINE';
+
+  useEffect(() => {
+    if (!selectedCamera) {
+      setSelectedCameraVisualStatus(null);
+      return;
+    }
+
+    const hasAvailableMedia =
+      Boolean(getPreferredVideoStreamUrl(selectedCamera)) ||
+      Boolean(getPreferredImageStreamUrl(selectedCamera)) ||
+      Boolean(getPreferredSnapshotUrl(selectedCamera));
+
+    setSelectedCameraVisualStatus(hasAvailableMedia ? 'ONLINE' : selectedCamera.status ?? 'OFFLINE');
+  }, [selectedCamera]);
+
+  useEffect(() => {
+    setSelectedCameraVisualStatus(null);
+  }, [selectedCamera?.id]);
+
+  useEffect(() => {
+    if (!cameras.length) return;
+    const currentExists = selectedCameraId && cameras.some((camera) => camera.id === selectedCameraId);
+    if (currentExists) return;
+    if (preferredCamera?.id) {
+      setSelectedCameraId(preferredCamera.id);
+    }
+  }, [cameras, preferredCamera?.id, selectedCameraId]);
   const selectedPhotoSearchCamera = cameras.find((camera) => camera.id === photoSearchCameraId) ?? selectedCamera;
   const photoSearchPreviewUrl =
     photoSearchPanel.result?.capturedPhotoUrl ??
     photoSearchPanel.fallbackPreviewUrl ??
-    selectedPhotoSearchCamera?.snapshotUrl ??
     null;
+  const isPhotoSearchCameraSource = photoSearchPanel.sourceLabel?.startsWith('Câmera') ?? false;
+  const shouldShowPhotoSearchPreview = Boolean(photoSearchPreviewUrl) && !isPhotoSearchCameraSource;
+  const hasPhotoSearchContent = Boolean(
+    photoSearchPanel.loading ||
+    photoSearchPanel.error ||
+    photoSearchPanel.result ||
+    photoSearchPanel.lastFileName ||
+    shouldShowPhotoSearchPreview
+  );
   const selectedAlertPerson = useMemo(
     () => (selectedAlert?.personId ? scopedPeople.find((person) => person.id === selectedAlert.personId) ?? null : null),
     [scopedPeople, selectedAlert]
@@ -3123,6 +3511,11 @@ export default function OperacaoPage() {
   }
 
   async function handleCreateOccurrence() {
+    if (occurrenceForm.scopeType === 'UNIT' && !occurrenceForm.unitId) {
+      setPageMessage({ tone: 'error', text: 'Selecione a unidade da ocorrência antes de salvar.' });
+      return;
+    }
+
     setSavingOccurrence(true);
     setPageMessage(null);
     try {
@@ -3133,7 +3526,10 @@ export default function OperacaoPage() {
         context: 'operacao',
         cameraId: selectedCameraId || null,
         personId: selectedAlert?.personId ?? null,
-        unitId: selectedAlertPerson?.unitId ?? null,
+        unitId:
+          occurrenceForm.scopeType === 'UNIT'
+            ? occurrenceForm.unitId || null
+            : null,
       });
 
       try {
@@ -3180,6 +3576,16 @@ export default function OperacaoPage() {
     try {
       const result = await operationService.searchPeopleByPhoto({
         cameraId: selectedPhotoSearchCamera.id,
+        unitId:
+          selectedPhotoSearchCamera.unitId ??
+          selectedOperationUnitId ??
+          selectedSearchPerson?.unitId ??
+          selectedAlertPerson?.unitId ??
+          selectedResidentUnitId ??
+          user?.selectedUnitId ??
+          user?.unitId ??
+          user?.unitIds?.[0] ??
+          null,
         fileName: `${selectedPhotoSearchCamera.name || 'camera'}-${Date.now()}.jpg`,
         maxMatches: 5,
       });
@@ -3190,7 +3596,7 @@ export default function OperacaoPage() {
         error: null,
         sourceLabel: `Câmera: ${selectedPhotoSearchCamera.name}`,
         lastFileName: null,
-        fallbackPreviewUrl: selectedPhotoSearchCamera.snapshotUrl ?? selectedPhotoSearchCamera.thumbnailUrl ?? null,
+        fallbackPreviewUrl: null,
       });
       setPageMessage({
         tone: 'success',
@@ -3223,6 +3629,16 @@ export default function OperacaoPage() {
       const photoBase64 = await fileToBase64(file);
       const result = await operationService.searchPeopleByPhoto({
         photoBase64,
+        unitId:
+          selectedPhotoSearchCamera?.unitId ??
+          selectedOperationUnitId ??
+          selectedSearchPerson?.unitId ??
+          selectedAlertPerson?.unitId ??
+          selectedResidentUnitId ??
+          user?.selectedUnitId ??
+          user?.unitId ??
+          user?.unitIds?.[0] ??
+          null,
         fileName: file.name,
         maxMatches: 5,
       });
@@ -3264,6 +3680,15 @@ export default function OperacaoPage() {
     setSelectedSearchPerson(person);
     setPeopleSearch(person.name);
     consultationSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function clearPhotoSearchPanel() {
+    setPhotoSearchPanel((current) => {
+      if (current.fallbackPreviewUrl?.startsWith('blob:')) {
+        URL.revokeObjectURL(current.fallbackPreviewUrl);
+      }
+      return initialPhotoSearchPanelState;
+    });
   }
 
   async function executeOperationAction(action: OperationAction, reason?: string | null) {
@@ -3315,6 +3740,73 @@ export default function OperacaoPage() {
     }
 
     await executeOperationAction(action);
+  }
+
+  async function handleRemoteOpenAction(doorNumber: 1 | 2) {
+    if (!primaryRemoteOpenDevice) {
+      setPageMessage({ tone: 'error', text: 'Nenhum dispositivo de abertura remota está disponível para esta operação.' });
+      return;
+    }
+
+    const executionKey = `${primaryRemoteOpenDevice.id}:${doorNumber}`;
+    setRemoteOpenExecutingKey(executionKey);
+    setRemoteOpenFeedback((current) => ({ ...current, [executionKey]: 'idle' }));
+    setPageMessage(null);
+    try {
+      const response = await devicesService.remoteOpenControlId(primaryRemoteOpenDevice.id, {
+        doorNumber,
+        secboxId: primaryRemoteOpenDevice.remoteAccessConfig?.secboxId ?? null,
+        portalId: primaryRemoteOpenDevice.remoteAccessConfig?.portalId ?? null,
+        reason: primaryRemoteOpenDevice.remoteAccessConfig?.reason ?? 1,
+      });
+      if (response?.ok === false && response.message) {
+        throw new Error(response.message);
+      }
+      if (response?.ok === false) {
+        throw new Error('O comando foi enviado, mas o equipamento não confirmou a abertura.');
+      }
+      const queued = isQueuedControlResult(response);
+      const jobId = getControlJobId(response);
+      setRemoteOpenFeedback((current) => ({ ...current, [executionKey]: queued ? 'pending' : 'success' }));
+      setPageMessage({
+        tone: queued ? 'warning' : 'success',
+        text: queued
+          ? `${doorNumber === 1 ? 'Acionamento 1' : 'Acionamento 2'} enviado ao backend. Aguardando confirmação física do equipamento.`
+          : `${doorNumber === 1 ? 'Acionamento 1' : 'Acionamento 2'} executado pela API em ${primaryRemoteOpenDevice.name}.`,
+      });
+      if (queued && jobId) {
+        for (let attempt = 0; attempt < 15; attempt += 1) {
+          await wait(2000);
+          const job = await devicesService.getControlIdJob(primaryRemoteOpenDevice.id, jobId);
+          const status = getControlJobStatus(job);
+
+          if (status === 'SUCCEEDED') {
+            setRemoteOpenFeedback((current) => ({ ...current, [executionKey]: 'success' }));
+            setPageMessage({
+              tone: 'success',
+              text: `${doorNumber === 1 ? 'Acionamento 1' : 'Acionamento 2'} confirmado pelo equipamento.`,
+            });
+            return;
+          }
+
+          if (status === 'FAILED') {
+            throw new Error(job.message || 'O equipamento recusou ou falhou ao executar o acionamento.');
+          }
+        }
+        setPageMessage({
+          tone: 'warning',
+          text: `${doorNumber === 1 ? 'Acionamento 1' : 'Acionamento 2'} ainda está pendente no backend. O Control iD ainda não consumiu ou confirmou o comando.`,
+        });
+      }
+    } catch (error) {
+      setRemoteOpenFeedback((current) => ({ ...current, [executionKey]: 'error' }));
+      setPageMessage({
+        tone: 'error',
+        text: getErrorMessage(error, 'Não foi possível executar a abertura remota.'),
+      });
+    } finally {
+      setRemoteOpenExecutingKey(null);
+    }
   }
 
   async function handleSendResidentMessage() {
@@ -3717,7 +4209,13 @@ export default function OperacaoPage() {
         </header>
 
         {pageMessage ? (
-          <div className={`rounded-2xl border px-4 py-3 text-sm ${pageMessage.tone === 'success' ? `${brandClasses.softAccentPanel} text-white` : 'border-red-500/30 bg-red-500/10 text-red-100'}`}>
+          <div className={`rounded-2xl border px-4 py-3 text-sm ${
+            pageMessage.tone === 'success'
+              ? `${brandClasses.softAccentPanel} text-white`
+              : pageMessage.tone === 'warning'
+                ? 'border-amber-500/30 bg-amber-500/10 text-amber-100'
+                : 'border-red-500/30 bg-red-500/10 text-red-100'
+          }`}>
             {pageMessage.text}
           </div>
         ) : null}
@@ -3749,6 +4247,22 @@ export default function OperacaoPage() {
                 className="border-white/15 bg-black/20 text-white hover:bg-white/10"
               >
                 {offlineSyncing ? 'Sincronizando...' : 'Sincronizar agora'}
+              </Button>
+              <input
+                ref={photoSearchInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handlePhotoSearchFileChange}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                className="border-white/10 bg-white/5 text-white hover:bg-white/10"
+                onClick={openPhotoSearchUpload}
+                disabled={photoSearchPanel.loading}
+              >
+                Enviar imagem
               </Button>
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
@@ -3802,32 +4316,40 @@ export default function OperacaoPage() {
                   ) : cameras.length === 0 ? (
                     <h2 className="mt-1 text-base font-medium">Nenhuma câmera disponível no momento</h2>
                   ) : (
-                    <select
-                      value={selectedCamera?.id ?? ''}
-                      onChange={(event) => setSelectedCameraId(event.target.value)}
-                      className="mt-1 w-full max-w-[360px] rounded-xl border border-white/10 bg-slate-950/70 px-3 py-1.5 text-sm font-medium text-white outline-none"
-                    >
-                      {cameras.map((camera) => (
-                        <option key={camera.id} value={camera.id} className="bg-slate-950 text-white">
-                          {camera.name} {camera.location ? `| ${camera.location}` : ''}
-                        </option>
-                      ))}
-                    </select>
+                    <>
+                      <select
+                        value={selectedCamera?.id ?? ''}
+                        onChange={(event) => setSelectedCameraId(event.target.value)}
+                        className="mt-1 w-full max-w-[360px] rounded-xl border border-white/10 bg-slate-950/70 px-3 py-1.5 text-sm font-medium text-white outline-none"
+                      >
+                        {cameras.map((camera) => (
+                          <option key={camera.id} value={camera.id} className="bg-slate-950 text-white">
+                            {camera.name} {camera.location ? `| ${camera.location}` : ''}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="mt-2 text-xs text-slate-400">
+                        {cameras.length} câmera(s) liberada(s) para este operador. O monitor principal exibe uma por vez.
+                      </p>
+                    </>
                   )}
                 </div>
-                {selectedCamera ? <span className={`rounded-full border px-3 py-1 text-xs ${getCameraBadgeTone(selectedCamera.status)}`}>{selectedCamera.status}</span> : null}
+                {selectedCamera ? <span className={`rounded-full border px-3 py-1 text-xs ${getCameraBadgeTone(selectedCameraStatus)}`}>{selectedCameraStatus}</span> : null}
               </div>
 
               <div className={`relative bg-black ${selectedCamera ? 'h-[38vh] min-h-[285px] max-h-[390px]' : 'h-[30vh] min-h-[240px] max-h-[320px]'}`}>
                 {selectedCamera ? (
-                  <CameraFeed
-                    camera={selectedCamera}
-                    className={`${selectedCamera.status === 'OFFLINE' ? 'opacity-45' : ''}`}
-                    imageClassName="h-full w-full object-cover"
-                    emptyLabel="Sem imagem ao vivo"
+                  <CameraPlayer
+                    key={selectedCamera.id}
+                    cameraId={selectedCamera.id}
+                    cameraData={{
+                      ...selectedCamera,
+                      unitLabel: getScopeLabel(selectedCamera, unitLabels),
+                    }}
+                    heightClassName="h-[38vh] min-h-[285px] max-h-[390px]"
+                    compactOverlay
+                    onStatusChange={setSelectedCameraVisualStatus}
                     emptyHint="Snapshot ou image stream ainda não disponível."
-                    controls
-                    compactErrors
                   />
                 ) : (
                   <div className="flex h-full items-center justify-center bg-slate-950/80">
@@ -3856,98 +4378,44 @@ export default function OperacaoPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-1.5">
+            <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-3">
               <button type="button" onClick={openCameraMonitor} className={`rounded-[16px] border px-3 py-2 text-xs font-medium transition ${brandClasses.softAccentPanel} ${brandClasses.accentTextSoft}`}>
                 Monitor externo
               </button>
-              <button
+              <Button
                 type="button"
+                variant="outline"
+                className="border-white/10 bg-white/5 text-white hover:bg-white/10"
                 onClick={() => void handleSearchPeopleByCameraSnapshot()}
                 disabled={!selectedPhotoSearchCamera || photoSearchPanel.loading}
-                className={`rounded-[16px] border px-3 py-2 text-xs font-medium transition ${brandClasses.softAccentPanel} ${brandClasses.accentTextSoft} disabled:cursor-not-allowed disabled:opacity-50`}
               >
                 {photoSearchPanel.loading && photoSearchPanel.sourceLabel?.startsWith('Câmera') ? 'Buscando...' : 'Buscar rosto'}
-              </button>
+              </Button>
             </div>
 
+            {hasPhotoSearchContent ? (
             <div className="rounded-[18px] border border-white/10 bg-slate-950/35 p-3 backdrop-blur">
-              <input
-                ref={photoSearchInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={handlePhotoSearchFileChange}
-              />
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Busca por foto</p>
-                  <p className="mt-1 text-sm text-slate-300">
-                    Selecione uma câmera para buscar o rosto ou envie uma imagem manualmente.
-                  </p>
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="border-white/10 bg-white/5 text-white hover:bg-white/10"
-                  onClick={openPhotoSearchUpload}
-                  disabled={photoSearchPanel.loading}
-                >
-                  Enviar imagem
-                </Button>
-              </div>
-
-              <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
-                <label className="block">
-                  <span className="text-xs text-slate-400">Câmera para busca facial</span>
-                  <select
-                    value={selectedPhotoSearchCamera?.id ?? ''}
-                    onChange={(event) => setPhotoSearchCameraId(event.target.value)}
-                    className="mt-1 w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none"
-                  >
-                    {cameras.length === 0 ? (
-                      <option value="">Nenhuma câmera disponível</option>
-                    ) : (
-                      cameras.map((camera) => (
-                        <option key={`${camera.id}-photo-search`} value={camera.id} className="bg-slate-950 text-white">
-                          {camera.name} {camera.location ? `| ${camera.location}` : ''}
-                        </option>
-                      ))
-                    )}
-                  </select>
-                </label>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="self-end border-white/10 bg-white/5 text-white hover:bg-white/10"
-                  onClick={() => void handleSearchPeopleByCameraSnapshot()}
-                  disabled={!selectedPhotoSearchCamera || photoSearchPanel.loading}
-                >
-                  {photoSearchPanel.loading && photoSearchPanel.sourceLabel?.startsWith('Câmera') ? 'Buscando...' : 'Buscar pela câmera'}
-                </Button>
-              </div>
-
-              <div className="mt-3 grid gap-3 xl:grid-cols-[148px_minmax(0,1fr)]">
-                <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/40">
-                  {photoSearchPreviewUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={photoSearchPreviewUrl} alt="Prévia da busca facial" className="h-36 w-full object-cover" />
-                  ) : (
-                    <div className="flex h-36 items-center justify-center text-center text-xs text-slate-500">
-                      A imagem analisada aparecerá aqui.
-                    </div>
-                  )}
-                </div>
+              <div className={`grid gap-3 ${shouldShowPhotoSearchPreview ? 'xl:grid-cols-[148px_minmax(0,1fr)]' : ''}`}>
+                {shouldShowPhotoSearchPreview ? (
+                  <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/40">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={photoSearchPreviewUrl!} alt="Prévia da busca facial" className="h-36 w-full object-cover" />
+                  </div>
+                ) : null}
 
                 <div className="space-y-3">
-                  <div className="grid gap-2 sm:grid-cols-3">
-                    <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
-                      <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Origem</p>
-                      <p className="mt-1 text-sm font-medium text-white">{photoSearchPanel.sourceLabel ?? 'Aguardando ação'}</p>
-                    </div>
-                    <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
-                      <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Arquivo</p>
-                      <p className="mt-1 truncate text-sm font-medium text-white">{photoSearchPanel.lastFileName ?? 'N/A'}</p>
-                    </div>
+                  <div className="flex justify-end">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="h-8 px-3 text-xs text-slate-300 hover:bg-white/5 hover:text-white"
+                      onClick={clearPhotoSearchPanel}
+                      disabled={photoSearchPanel.loading}
+                    >
+                      Limpar
+                    </Button>
+                  </div>
+                  <div className={`grid gap-2 ${photoSearchPanel.lastFileName ? 'sm:grid-cols-2' : 'sm:grid-cols-1'}`}>
                     <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
                       <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Resultado</p>
                       <p className="mt-1 text-sm font-medium text-white">
@@ -3955,11 +4423,17 @@ export default function OperacaoPage() {
                           ? 'Processando'
                           : photoSearchPanel.result
                             ? photoSearchPanel.result.matched
-                              ? `${photoSearchPanel.result.matches?.length ?? 0} match(es)`
-                              : 'Sem match'
-                            : 'Sem consulta'}
+                            ? `${photoSearchPanel.result.matches?.length ?? 0} match(es)`
+                            : 'Sem match'
+                          : 'Sem consulta'}
                       </p>
                     </div>
+                    {photoSearchPanel.lastFileName ? (
+                      <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
+                        <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Arquivo</p>
+                        <p className="mt-1 truncate text-sm font-medium text-white">{photoSearchPanel.lastFileName}</p>
+                      </div>
+                    ) : null}
                   </div>
 
                   {photoSearchPanel.error ? (
@@ -4032,12 +4506,13 @@ export default function OperacaoPage() {
                     )
                   ) : (
                     <div className="rounded-2xl border border-dashed border-white/10 bg-white/5 px-3 py-3 text-sm text-slate-400">
-                      Nenhuma busca executada ainda nesta sessão.
+                      Aguardando o resultado da busca.
                     </div>
                   )}
                 </div>
               </div>
             </div>
+            ) : null}
 
             </div>
           </section>
@@ -4081,7 +4556,7 @@ export default function OperacaoPage() {
                   if (module.label.startsWith('Locat')) return <button key={module.label} type="button" className={className} onClick={() => openOperationalPeopleConsultation('RENTER')}>{tile}</button>;
                   if (module.label === 'Locatários') return <button key={module.label} type="button" className={className} onClick={() => openOperationalConsultation('RENTER')}>{tile}</button>;
                   if (module.label === 'Prestadores') return <button key={module.label} type="button" className={className} onClick={() => openOperationalPeopleConsultation('SERVICE_PROVIDER')}>{tile}</button>;
-                  if (module.label === 'Encomendas') return <button key={module.label} type="button" className={className} onClick={() => { setDeliveriesHistoryFilter('PENDING'); setOpenDeliveriesHistoryModal(true); }}>{tile}</button>;
+                  if (module.label === 'Encomendas') return <button key={module.label} type="button" className={className} onClick={() => { setDeliveriesHistoryFilter('ALL'); setOpenDeliveriesHistoryModal(true); }}>{tile}</button>;
                   if (module.label === 'Locatários') return <button key={module.label} type="button" className={className} onClick={() => openQuickPersonByCategory('RENTER')}>{tile}</button>;
                   if (module.label === 'Prestadores') return <button key={module.label} type="button" className={className} onClick={() => openQuickPersonByCategory('SERVICE_PROVIDER')}>{tile}</button>;
                   if (module.label === 'Encomendas') return <button key={module.label} type="button" className={className} onClick={openDeliveryRegistration}>{tile}</button>;
@@ -4093,6 +4568,161 @@ export default function OperacaoPage() {
 
             <div className="grid min-h-0 flex-1 items-start gap-1.5 overflow-y-auto pr-1 lg:grid-cols-[1.08fr_0.92fr]">
               <div className="grid content-start gap-2">
+                <div className={`rounded-[22px] border p-3 backdrop-blur ${brandClasses.softAccentPanel}`}>
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Consulta por unidade</p>
+                      <p className="mt-1 text-sm text-slate-300">Selecione a unidade para ver moradores, encomendas, veículos, alertas, câmeras e mensagens.</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {selectedOperationUnit ? (
+                        <span className="rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-cyan-100">
+                          Unidade ativa
+                        </span>
+                      ) : null}
+                      {(selectedOperationUnitId || operationUnitSearch) ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedOperationUnitId('');
+                            setOperationUnitSearch('');
+                          }}
+                          className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-200 transition hover:bg-white/10"
+                        >
+                          Limpar
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                  <input
+                    value={operationUnitSearch}
+                    onChange={(event) => setOperationUnitSearch(event.target.value)}
+                    placeholder="Buscar unidade por nome, bloco ou referência..."
+                    className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white outline-none placeholder:text-slate-500"
+                  />
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    {filteredOperationUnitOptions.length === 0 ? (
+                      <div className="rounded-2xl border border-dashed border-white/10 bg-white/5 px-3 py-3 text-sm text-slate-300 sm:col-span-2">
+                        Nenhuma unidade encontrada para essa busca.
+                      </div>
+                    ) : (
+                      filteredOperationUnitOptions.map((unit) => (
+                        <button
+                          key={`operation-unit-${unit.id}`}
+                          type="button"
+                          onClick={() => {
+                            setSelectedOperationUnitId(unit.id);
+                            setOperationUnitSearch(unit.label);
+                          }}
+                          className={`rounded-2xl border px-3 py-3 text-left transition ${
+                            selectedOperationUnitId === unit.id
+                              ? `${brandClasses.softAccent} text-white`
+                              : 'border-white/10 bg-white/5 text-slate-200 hover:bg-white/10'
+                          }`}
+                        >
+                          <p className="truncate text-sm font-medium">{unit.label}</p>
+                        </button>
+                      ))
+                    )}
+                  </div>
+
+                  {selectedOperationUnit ? (
+                    <div className="mt-3 space-y-3 rounded-2xl border border-white/10 bg-white/5 p-3">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-white">{selectedOperationUnitLabel || selectedOperationUnit.label}</p>
+                          <p className="mt-1 text-xs text-slate-400">
+                            {selectedOperationUnit.condominium?.name || 'Condomínio não informado'}
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="border-white/10 bg-white/5 text-white hover:bg-white/10"
+                            onClick={() => {
+                              setResidentSearch(selectedOperationUnit.label);
+                              openResidentsConsultation();
+                            }}
+                          >
+                            Ver moradores
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="border-white/10 bg-white/5 text-white hover:bg-white/10"
+                            onClick={() => {
+                              setEntryForm((current) => ({ ...current, unitId: selectedOperationUnit.id }));
+                              setOpenEntryModal(true);
+                            }}
+                          >
+                            Registrar entrada
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="border-white/10 bg-white/5 text-white hover:bg-white/10"
+                            onClick={() => {
+                              setDeliveryForm((current) => ({ ...current, recipientUnitId: selectedOperationUnit.id }));
+                              setOpenDeliveryModal(true);
+                            }}
+                          >
+                            Nova encomenda
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
+                        {[
+                          { label: 'Moradores', value: selectedOperationUnitResidents.length },
+                          { label: 'Encomendas', value: selectedOperationUnitDeliveries.length },
+                          { label: 'Veículos', value: selectedOperationUnitVehicles.length },
+                          { label: 'Alertas', value: selectedOperationUnitAlerts.length },
+                          { label: 'Câmeras', value: selectedOperationUnitCameras.length },
+                          { label: 'Mensagens', value: selectedOperationUnitMessages.length },
+                        ].map((item) => (
+                          <div key={`unit-summary-${item.label}`} className="rounded-2xl border border-white/10 bg-slate-950/30 px-3 py-2 text-center">
+                            <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">{item.label}</p>
+                            <p className="mt-1 text-lg font-semibold text-white">{item.value}</p>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="grid gap-3 lg:grid-cols-2">
+                        <div className="rounded-2xl border border-white/10 bg-slate-950/30 p-3">
+                          <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Moradores vinculados</p>
+                          <div className="mt-2 space-y-2">
+                            {selectedOperationUnitResidents.length === 0 ? (
+                              <p className="text-sm text-slate-300">Nenhum morador vinculado a esta unidade.</p>
+                            ) : (
+                              selectedOperationUnitResidents.slice(0, 4).map((person) => (
+                                <button
+                                  key={`unit-resident-${person.id}`}
+                                  type="button"
+                                  onClick={() => setSelectedResidentPerson(person)}
+                                  className="block w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-left text-sm text-white transition hover:bg-white/10"
+                                >
+                                  {person.name}
+                                </button>
+                              ))
+                            )}
+                          </div>
+                        </div>
+                        <div className="rounded-2xl border border-white/10 bg-slate-950/30 p-3">
+                          <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Pendências da unidade</p>
+                          <div className="mt-2 space-y-2 text-sm text-slate-300">
+                            <p>{selectedOperationUnitDeliveries.length} encomenda(s) aguardando retirada</p>
+                            <p>{selectedOperationUnitVehicles.length} veículo(s) vinculado(s)</p>
+                            <p>{selectedOperationUnitAlerts.length} alerta(s) recente(s)</p>
+                            <p>{selectedOperationUnitCameras.length} câmera(s) associada(s)</p>
+                            <p>{selectedOperationUnitMessages.length} mensagem(ns) recente(s)</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+
                 <div ref={consultationSectionRef} className={`rounded-[22px] border p-3 backdrop-blur ${brandClasses.softAccentPanel}`}>
                   <div className="mb-2 flex items-center justify-between gap-3">
                     <div>
@@ -4135,8 +4765,8 @@ export default function OperacaoPage() {
                     className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white outline-none placeholder:text-slate-500"
                   />
                   <div className="mt-3 space-y-2">
-                    {peopleError ? <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-100">Erro ao carregar pessoas.</div> : null}
-                    {!peopleError && hasOperationalConsultation && filteredOperationalPeople.length === 0 ? <div className="rounded-2xl border border-white/10 bg-white/5 p-3 text-sm text-slate-300">Nenhuma pessoa encontrada para essa busca.</div> : null}
+                    {showOperationalPeopleError ? <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-100">Não foi possível atualizar a lista de pessoas agora.</div> : null}
+                    {!showOperationalPeopleError && hasOperationalConsultation && filteredOperationalPeople.length === 0 ? <div className="rounded-2xl border border-white/10 bg-white/5 p-3 text-sm text-slate-300">Nenhuma pessoa encontrada para essa busca.</div> : null}
                     {!hasOperationalConsultation ? <div className="rounded-2xl border border-dashed border-white/10 bg-white/5 p-3 text-sm text-slate-300">Nenhum resultado exibido ainda. Comece digitando para consultar.</div> : null}
                     {hasOperationalConsultation ? filteredOperationalPeople.slice(0, 6).map((person) => (
                       <button key={person.id} type="button" onClick={() => setSelectedSearchPerson(person)} className="w-full text-left">
@@ -4167,7 +4797,7 @@ export default function OperacaoPage() {
                       <button
                         type="button"
                         onClick={() => void refetchInboxMessages()}
-                        disabled={inboxMessagesLoading}
+                        disabled={inboxMessagesLoading || inboxMessagesMode === 'empty'}
                         className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white transition hover:bg-white/10 disabled:opacity-60"
                       >
                         Atualizar
@@ -4176,7 +4806,11 @@ export default function OperacaoPage() {
                   </div>
 
                   <div className="space-y-2">
-                    {inboxMessagesError ? (
+                    {inboxMessagesMode === 'empty' ? (
+                      <div className="rounded-2xl border border-white/10 bg-white/5 p-3 text-sm text-slate-300">
+                        A caixa geral depende das unidades liberadas para este turno. Enquanto isso, abra a ficha do morador para conversar pela unidade correta.
+                      </div>
+                    ) : inboxMessagesError ? (
                       <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-3 text-sm text-amber-100">
                         Não foi possível carregar a caixa de entrada agora.
                       </div>
@@ -4227,55 +4861,74 @@ export default function OperacaoPage() {
                 </div>
               </div>
 
-              <div className="grid content-start gap-2">
-                <div className="rounded-[22px] border border-amber-400/20 bg-amber-400/[0.045] p-3 backdrop-blur">
-                  <div className="mb-3 flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-xs uppercase tracking-[0.18em] text-amber-200">Acionamentos</p>
-                      <h2 className="mt-1 text-base font-medium text-white">Comandos físicos</h2>
+                <div className="grid content-start gap-2">
+                  <div className="rounded-[22px] border border-amber-400/20 bg-amber-400/[0.045] p-3 backdrop-blur">
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                      <p className="text-xs uppercase tracking-[0.18em] text-amber-100">Acionamentos</p>
+                      <button
+                        type="button"
+                        onClick={() => setOpenActionsModal(true)}
+                        className="rounded-full border border-amber-300/25 bg-amber-300/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-50 transition hover:bg-amber-300/20"
+                      >
+                        Ampliar
+                      </button>
                     </div>
-                    <button type="button" onClick={() => setOpenActionsModal(true)} className="rounded-full border border-amber-400/30 bg-amber-400/12 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-amber-50 transition hover:border-amber-300/50 hover:bg-amber-400/20">
-                      Ver painel
-                    </button>
+                  {remoteOpenDevices.length > 1 ? (
+                    <select
+                      aria-label="Leitor para acionamento"
+                      value={selectedRemoteOpenDeviceId}
+                      onChange={(event) => setSelectedRemoteOpenDeviceId(event.target.value)}
+                      className="h-10 w-full rounded-2xl border border-amber-400/25 bg-slate-950/70 px-3 text-sm text-white outline-none"
+                    >
+                      {remoteOpenDevices.map((device) => (
+                        <option key={device.id} value={device.id} className="bg-slate-950 text-white">
+                          {device.name}
+                        </option>
+                      ))}
+                    </select>
+                  ) : null}
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    {remoteOpenButtons.length > 0 ? remoteOpenButtons.map((action) => {
+                      const feedbackKey = `${primaryRemoteOpenDevice?.id}:${action.doorNumber}`;
+                      const feedback = remoteOpenFeedback[feedbackKey];
+                      return (
+                      <button
+                        key={`remote-open-${action.doorNumber}`}
+                        type="button"
+                        onClick={() => void handleRemoteOpenAction(action.doorNumber)}
+                        disabled={!primaryRemoteOpenDevice || Boolean(remoteOpenExecutingKey)}
+                        className={`rounded-2xl border px-3 py-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-55 ${getRemoteOpenFeedbackClass(feedback, 'border-amber-400/25 bg-amber-400/10 text-amber-50 hover:border-amber-300/50 hover:bg-amber-400/20')}`}
+                      >
+                        <span className="flex items-center justify-between gap-3">
+                          <span className="flex items-center gap-2">
+                            <span className={`inline-flex h-8 w-8 items-center justify-center rounded-xl border ${getRemoteOpenDoorIconClass(feedback)}`}>
+                              <DoorClosed className="h-4 w-4" />
+                            </span>
+                            {remoteOpenExecutingKey === feedbackKey ? 'Acionando...' : action.label}
+                          </span>
+                          <span className="text-[10px] font-medium opacity-80">{getRemoteOpenDoorStateLabel(feedback)}</span>
+                        </span>
+                      </button>
+                      );
+                    }) : (
+                      <button type="button" disabled className="col-span-2 rounded-2xl border border-white/10 bg-slate-950/50 px-2 py-2.5 text-xs font-medium text-slate-300 opacity-75">
+                        Nenhum acionamento ativo
+                      </button>
+                    )}
                   </div>
-                  <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
-                    {visibleOperationActions.length > 0
-                      ? visibleOperationActions.map((action) => {
-                          const isExecuting = actionExecutingId === action.id;
-                          const cooldownRemaining = Math.max(0, Math.ceil(((actionCooldowns[action.id] ?? 0) - Date.now()) / 1000));
-                          return (
-                            <button
-                              key={action.id}
-                              type="button"
-                              onClick={() => void handleExecuteOperationAction(action.id)}
-                              disabled={!action.enabled || Boolean(actionExecutingId) || cooldownRemaining > 0}
-                              title={action.description ?? action.label}
-                              className="rounded-2xl border border-amber-400/25 bg-amber-400/10 px-2 py-2.5 text-xs font-medium text-amber-50 transition hover:border-amber-300/50 hover:bg-amber-400/20 disabled:cursor-not-allowed disabled:opacity-55"
-                            >
-                              {isExecuting ? 'Acionando...' : cooldownRemaining > 0 ? `${action.label} (${cooldownRemaining}s)` : action.label}
-                            </button>
-                          );
-                        })
-                      : fallbackOperationActionLabels.map((command) => (
-                          <button key={command} type="button" disabled className="rounded-2xl border border-white/10 bg-slate-950/50 px-2 py-2.5 text-xs font-medium text-slate-300 opacity-75">
-                            {operationActionsLoading ? 'Carregando...' : command}
-                          </button>
-                        ))}
                   </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="rounded-[22px] border border-white/10 bg-white/5 p-3">
-                    <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Pessoas em alerta</p>
-                    <p className="mt-2 text-center text-2xl font-semibold text-white">{overdueOperationalPeople.length}</p>
-                  </div>
-                  <div className="rounded-[22px] border border-white/10 bg-white/5 p-3">
-                    <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Eventos recentes</p>
-                    <p className="mt-2 text-center text-2xl font-semibold text-white">{alerts.length}</p>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                      <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Pessoas em alerta</p>
+                      <p className="mt-2 text-center text-2xl font-semibold text-white">{overdueOperationalPeople.length}</p>
+                    </div>
+                    <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                      <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Eventos recentes</p>
+                      <p className="mt-2 text-center text-2xl font-semibold text-white">{alerts.length}</p>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
           </section>
 
           <aside className="min-h-0 overflow-hidden">
@@ -4397,7 +5050,7 @@ export default function OperacaoPage() {
                 <button
                   type="button"
                   onClick={() => {
-                    setDeliveriesHistoryFilter('RECEIVED');
+                    setDeliveriesHistoryFilter('ALL');
                     setOpenDeliveriesHistoryModal(true);
                   }}
                   className="rounded-2xl border border-white/10 bg-slate-950/60 p-3 text-left transition hover:border-cyan-400/30 hover:bg-cyan-500/10"
@@ -4744,15 +5397,15 @@ export default function OperacaoPage() {
           title={
             deliveriesHistoryFilter === 'WITHDRAWN'
               ? 'Encomendas retiradas'
-              : deliveriesHistoryFilter === 'RECEIVED'
-                ? 'Encomendas aguardando aviso'
+              : deliveriesHistoryFilter === 'ALL'
+                ? 'Todas as encomendas'
                 : 'Encomendas aguardando retirada'
           }
           description={
             deliveriesHistoryFilter === 'WITHDRAWN'
               ? 'Consulta operacional das encomendas já retiradas na portaria.'
-              : deliveriesHistoryFilter === 'RECEIVED'
-                ? 'Consulta operacional das encomendas recebidas e ainda não notificadas.'
+              : deliveriesHistoryFilter === 'ALL'
+                ? 'Consulta operacional com o histórico acumulado das encomendas.'
                 : 'Consulta operacional das encomendas ainda pendentes na portaria.'
           }
           onClose={() => {
@@ -4763,22 +5416,24 @@ export default function OperacaoPage() {
           maxWidth="xl"
         >
           <div className="space-y-4">
-            <div className="grid gap-2 sm:grid-cols-4">
+            <div className="grid gap-2 sm:grid-cols-3">
+              <button
+                type="button"
+                onClick={() => setDeliveriesHistoryFilter('ALL')}
+                className={`rounded-2xl border p-3 text-center ${deliveriesHistoryFilter === 'ALL' ? brandClasses.softAccentPanel : 'border-white/10 bg-white/5'}`}
+              >
+                <p className={`text-[10px] uppercase tracking-[0.16em] ${brandClasses.accentTextSoft}`}>Total</p>
+                <p className="mt-1 text-center text-xl font-semibold tabular-nums text-white">{deliveryStats.total}</p>
+                <p className="mt-1 text-[11px] text-slate-400">Hoje {deliveryStats.totalToday}</p>
+              </button>
               <button
                 type="button"
                 onClick={() => setDeliveriesHistoryFilter('PENDING')}
                 className={`rounded-2xl border p-3 text-center ${deliveriesHistoryFilter === 'PENDING' ? 'border-amber-500/20 bg-amber-500/10' : 'border-white/10 bg-white/5'}`}
               >
-                <p className="text-[10px] uppercase tracking-[0.16em] text-amber-100">A retirar</p>
+                <p className="text-[10px] uppercase tracking-[0.16em] text-amber-100">Aguardando</p>
                 <p className="mt-1 text-center text-xl font-semibold tabular-nums text-white">{deliveryStats.pendingWithdrawal}</p>
-              </button>
-              <button
-                type="button"
-                onClick={() => setDeliveriesHistoryFilter('RECEIVED')}
-                className={`rounded-2xl border p-3 text-center ${deliveriesHistoryFilter === 'RECEIVED' ? brandClasses.softAccentPanel : 'border-white/10 bg-white/5'}`}
-              >
-                <p className={`text-[10px] uppercase tracking-[0.16em] ${brandClasses.accentTextSoft}`}>Aguardando</p>
-                <p className="mt-1 text-center text-xl font-semibold tabular-nums text-white">{deliveryStats.received}</p>
+                <p className="mt-1 text-[11px] text-slate-400">Hoje {deliveryStats.pendingToday}</p>
               </button>
               <button
                 type="button"
@@ -4787,8 +5442,9 @@ export default function OperacaoPage() {
               >
                 <p className="text-[10px] uppercase tracking-[0.16em] text-emerald-100">Retiradas</p>
                 <p className="mt-1 text-center text-xl font-semibold tabular-nums text-white">{deliveryStats.withdrawn}</p>
+                <p className="mt-1 text-[11px] text-slate-400">Hoje {deliveryStats.withdrawnToday}</p>
               </button>
-              <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-3 text-center">
+              <div className="hidden rounded-2xl border border-red-500/20 bg-red-500/10 p-3 text-center">
                 <p className="text-[10px] uppercase tracking-[0.16em] text-red-100">Sem código</p>
                 <p className="mt-1 text-center text-xl font-semibold tabular-nums text-white">{deliveryStats.pendingWithoutSecureCode}</p>
               </div>
@@ -4810,8 +5466,8 @@ export default function OperacaoPage() {
               <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
                 {deliveriesHistoryFilter === 'WITHDRAWN'
                   ? 'Nenhuma encomenda retirada encontrada.'
-                  : deliveriesHistoryFilter === 'RECEIVED'
-                    ? 'Nenhuma encomenda aguardando aviso encontrada.'
+                  : deliveriesHistoryFilter === 'ALL'
+                    ? 'Nenhuma encomenda encontrada.'
                     : 'Nenhuma encomenda aguardando retirada.'}
               </div>
             ) : deliveriesHistoryItems.length === 0 ? (
@@ -5023,54 +5679,41 @@ export default function OperacaoPage() {
           </div>
         </CrudModal>
 
-        <CrudModal open={openActionsModal} title="Painel de acionamentos" description="Reserva operacional para comandos físicos. Os botões ficam maiores para reduzir acionamentos por engano." onClose={() => setOpenActionsModal(false)} maxWidth="xl">
+        <CrudModal open={openActionsModal} title="Painel de acionamentos" description="Acione somente as portas cadastradas para este posto." onClose={() => setOpenActionsModal(false)} maxWidth="xl">
           <div className="space-y-4">
-            {operationActionsError ? (
+            {operationActionsError && !primaryRemoteOpenDevice ? (
               <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4 text-sm text-amber-100">
                 Não foi possível carregar os acionamentos agora. Tente novamente em instantes.
               </div>
             ) : null}
-            <div className="grid gap-2 sm:grid-cols-3">
-              <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3 text-center">
-                <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Disponiveis</p>
-                <p className="mt-1 text-center text-xl font-semibold tabular-nums text-white">{operationActions.filter((action) => action.enabled).length}</p>
-              </div>
-              <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-3 text-center">
-                <p className="text-[10px] uppercase tracking-[0.16em] text-amber-100">Com confirmação</p>
-                <p className="mt-1 text-center text-xl font-semibold tabular-nums text-white">{operationActions.filter((action) => action.requiresConfirmation).length}</p>
-              </div>
-              <div className={`rounded-2xl border p-3 text-center ${brandClasses.softAccentPanel}`}>
-                <p className={`text-[10px] uppercase tracking-[0.16em] ${brandClasses.accentTextSoft}`}>Em cooldown</p>
-                <p className="mt-1 text-center text-xl font-semibold tabular-nums text-white">{operationActions.filter((action) => (actionCooldowns[action.id] ?? 0) > Date.now()).length}</p>
-              </div>
-            </div>
             <div className="grid gap-3 sm:grid-cols-2">
-              {operationActions.length > 0
-                ? operationActions.map((action) => {
-                    const cooldownRemaining = Math.max(0, Math.ceil(((actionCooldowns[action.id] ?? 0) - Date.now()) / 1000));
-                    return (
-                      <button
-                        key={`${action.id}-modal`}
-                        type="button"
-                        onClick={() => void handleExecuteOperationAction(action.id)}
-                        disabled={!action.enabled || actionExecutingId === action.id || cooldownRemaining > 0}
-                        className="min-h-[86px] rounded-[24px] border border-cyan-400/25 bg-cyan-400/10 px-4 py-4 text-left text-base font-semibold text-cyan-50 transition hover:bg-cyan-400/20 disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        <span className="block">
-                          {actionExecutingId === action.id ? 'Acionando...' : cooldownRemaining > 0 ? `${action.label} (${cooldownRemaining}s)` : action.label}
-                        </span>
-                        <span className="mt-2 block text-xs font-normal uppercase tracking-[0.14em] text-cyan-100/70">{action.kind}</span>
-                        {action.requiresConfirmation ? (
-                          <span className="mt-2 block text-xs font-normal text-amber-100">Exige confirmação</span>
-                        ) : null}
-                      </button>
-                    );
-                  })
-                : ['Portao principal', 'Garagem', 'Portao pedestre', 'Sirene', 'Luz externa', 'Emergencia'].map((command) => (
-                    <button key={command} type="button" disabled className="min-h-[86px] rounded-[24px] border border-white/10 bg-slate-950/60 px-4 py-4 text-base font-semibold text-slate-300 opacity-75">
-                      {operationActionsLoading ? 'Carregando...' : command}
-                    </button>
-                  ))}
+              {remoteOpenButtons.length > 0 ? remoteOpenButtons.map((action) => {
+                const feedbackKey = `${primaryRemoteOpenDevice?.id}:${action.doorNumber}`;
+                const feedback = remoteOpenFeedback[feedbackKey];
+                return (
+                <button
+                  key={`${action.doorNumber}-modal`}
+                  type="button"
+                  onClick={() => void handleRemoteOpenAction(action.doorNumber)}
+                  disabled={!primaryRemoteOpenDevice || Boolean(remoteOpenExecutingKey)}
+                  className={`min-h-[86px] rounded-[24px] border px-4 py-4 text-left text-base font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${getRemoteOpenFeedbackClass(feedback, 'border-cyan-400/25 bg-cyan-400/10 text-cyan-50 hover:bg-cyan-400/20')}`}
+                >
+                  <span className="flex items-center justify-between gap-3">
+                    <span className="flex items-center gap-3">
+                      <span className={`inline-flex h-10 w-10 items-center justify-center rounded-2xl border ${getRemoteOpenDoorIconClass(feedback)}`}>
+                        <DoorClosed className="h-5 w-5" />
+                      </span>
+                      <span>{remoteOpenExecutingKey === feedbackKey ? 'Acionando...' : action.label}</span>
+                    </span>
+                    <span className="text-xs font-normal uppercase tracking-[0.14em] opacity-75">{getRemoteOpenDoorStateLabel(feedback)}</span>
+                  </span>
+                </button>
+                );
+              }) : (
+                <button type="button" disabled className="min-h-[86px] rounded-[24px] border border-white/10 bg-slate-950/60 px-4 py-4 text-base font-semibold text-slate-300 opacity-75 sm:col-span-2">
+                  Nenhum acionamento ativo
+                </button>
+              )}
             </div>
           </div>
         </CrudModal>
@@ -5285,7 +5928,7 @@ export default function OperacaoPage() {
         <CrudModal
           open={openCamerasListModal}
           title="Consulta de cameras"
-          description="Veja as cameras liberadas e abra uma delas no monitor da operacao."
+          description={`Veja as ${cameras.length} camera(s) liberada(s) para este operador e abra uma delas no monitor da operacao.`}
           onClose={() => setOpenCamerasListModal(false)}
           maxWidth="xl"
         >
@@ -5528,7 +6171,7 @@ export default function OperacaoPage() {
             <input
               value={exitForm.search}
               onChange={(event) => setExitForm((current) => ({ ...current, search: event.target.value }))}
-              placeholder="Buscar quem esta saindo..."
+              placeholder="Buscar quem está saindo..."
               className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none"
             />
 
@@ -5717,6 +6360,43 @@ export default function OperacaoPage() {
               </select>
             </label>
 
+            <label className="space-y-2">
+              <span className="text-sm text-slate-300">Vinculo da ocorrência</span>
+              <select
+                value={occurrenceForm.scopeType}
+                onChange={(event) =>
+                  setOccurrenceForm((current) => ({
+                    ...current,
+                    scopeType: event.target.value as OccurrenceFormData['scopeType'],
+                    unitId: event.target.value === 'UNIT' ? current.unitId || selectedOperationUnitId || selectedSearchPerson?.unitId || '' : '',
+                  }))
+                }
+                className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none"
+              >
+                <option value="CONDOMINIUM">Condomínio inteiro</option>
+                <option value="UNIT">Unidade específica</option>
+              </select>
+            </label>
+
+            {occurrenceForm.scopeType === 'UNIT' ? (
+              <label className="space-y-2">
+                <span className="text-sm text-slate-300">Unidade</span>
+                <select
+                  value={occurrenceForm.unitId}
+                  onChange={(event) => setOccurrenceForm((current) => ({ ...current, unitId: event.target.value }))}
+                  className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none"
+                  required
+                >
+                  <option value="">Selecione a unidade</option>
+                  {effectiveUnits.map((unit) => (
+                    <option key={`occurrence-unit-${unit.id}`} value={unit.id}>
+                      {[unit.structure?.label, unit.label].filter(Boolean).join(' / ')}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+
             <div className="flex flex-wrap justify-end gap-3">
               <button type="button" onClick={() => setOpenOccurrence(false)} className="rounded-xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-white transition hover:bg-white/15">
                 Cancelar
@@ -5818,6 +6498,8 @@ export default function OperacaoPage() {
                            title: `Ocorrencia com ${selectedSearchPerson.name}`,
                           description: `${getPersonLabel(selectedSearchPerson)} vinculado a ${getPersonUnitLabel(selectedSearchPerson, accessibleUnitsMap)}.`,
                            priority: scheduleState.label === 'Permanencia vencida' ? 'high' : 'medium',
+                           scopeType: selectedSearchPerson.unitId ? 'UNIT' : 'CONDOMINIUM',
+                           unitId: selectedSearchPerson.unitId ?? '',
                         });
                         setSelectedAlert(null);
                         setSelectedSearchPerson(null);
@@ -5885,6 +6567,7 @@ export default function OperacaoPage() {
                 latestAccessAction={latestAccessByPerson.get(selectedResidentPerson.id)?.action}
                 accessSummary={accessSummaryByPerson.get(selectedResidentPerson.id)}
                 highlighted
+                revealSensitive
               />
 
               <div className={`rounded-2xl border p-4 ${brandClasses.softAccentPanel}`}>
@@ -5918,7 +6601,7 @@ export default function OperacaoPage() {
                         <p className="text-sm font-medium text-white">Conexao WhatsApp</p>
                       </div>
                       <p className="text-sm text-slate-300">
-                        {residentPhone ? `Telefone do morador: ${maskPhone(residentPhone)}` : 'Morador sem telefone cadastrado para o WhatsApp.'}
+                        {residentPhone ? `Telefone do morador: ${residentPhone}` : 'Morador sem telefone cadastrado para o WhatsApp.'}
                       </p>
                       <div className="flex flex-wrap items-center gap-2">
                         <span className={`rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${residentWhatsAppReady ? 'border-emerald-400/30 bg-emerald-500/10 text-emerald-100' : 'border-amber-400/30 bg-amber-500/10 text-amber-100'}`}>
@@ -5981,7 +6664,7 @@ export default function OperacaoPage() {
                     </div>
                   ) : residentWhatsAppConnection?.enabled ? (
                     <div className="mt-3 rounded-xl border border-white/10 bg-white/5 p-3 text-sm text-slate-300">
-                      {residentWhatsAppReady ? 'WhatsApp conectado e pronto para uso.' : 'A conexao esta em preparacao. Assim que o QR code ficar disponivel, ele aparecera aqui.'}
+                      {residentWhatsAppReady ? 'WhatsApp conectado e pronto para uso.' : 'A conexão está em preparação. Assim que o QR Code ficar disponível, ele aparecerá aqui.'}
                     </div>
                   ) : null}
                 </div>

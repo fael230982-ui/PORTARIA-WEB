@@ -32,7 +32,7 @@ export const privacySections = [
   {
     title: '3. Compartilhamento',
     items: [
-      `Os dados podem circular entre ${brandConfig.appName}, App Morador, Guarita e Backend conforme a funcao de cada modulo dentro do ${brandConfig.ecosystemName}.`,
+      `Os dados podem circular entre ${brandConfig.appName}, App Morador, Guarita e Backend conforme a função de cada módulo dentro do ${brandConfig.ecosystemName}.`,
       'O compartilhamento deve respeitar necessidade operacional, perfil de acesso e base legal aplicavel.',
     ],
   },

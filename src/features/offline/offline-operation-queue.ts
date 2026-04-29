@@ -293,7 +293,7 @@ export async function flushOfflineOperationQueue(): Promise<OfflineOperationFlus
           status: 'pending',
           attempts: item.attempts + 1,
           lastAttemptAt: new Date().toISOString(),
-          lastError: reconciliation.errorMessage ?? (error instanceof Error ? error.message : 'Falha temporaria na sincronizacao.'),
+          lastError: reconciliation.errorMessage ?? (error instanceof Error ? error.message : 'Falha temporária na sincronização.'),
         });
         continue;
       }
@@ -305,7 +305,7 @@ export async function flushOfflineOperationQueue(): Promise<OfflineOperationFlus
           status: 'failed',
           attempts: item.attempts + 1,
           lastAttemptAt: new Date().toISOString(),
-          lastError: reconciliation.errorMessage ?? (error instanceof Error ? error.message : 'Falha definitiva na sincronizacao.'),
+          lastError: reconciliation.errorMessage ?? (error instanceof Error ? error.message : 'Falha definitiva na sincronização.'),
         });
         continue;
       }
@@ -317,7 +317,7 @@ export async function flushOfflineOperationQueue(): Promise<OfflineOperationFlus
           status: 'failed',
           attempts: item.attempts + 1,
           lastAttemptAt: new Date().toISOString(),
-          lastError: error instanceof Error ? error.message : 'Falha definitiva na sincronizacao.',
+          lastError: error instanceof Error ? error.message : 'Falha definitiva na sincronização.',
         });
         continue;
       }
@@ -327,7 +327,7 @@ export async function flushOfflineOperationQueue(): Promise<OfflineOperationFlus
         status: 'pending',
         attempts: item.attempts + 1,
         lastAttemptAt: new Date().toISOString(),
-        lastError: error instanceof Error ? error.message : 'Falha temporaria na sincronizacao.',
+        lastError: error instanceof Error ? error.message : 'Falha temporária na sincronização.',
       });
     }
   }

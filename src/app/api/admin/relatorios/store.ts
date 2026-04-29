@@ -27,7 +27,7 @@ export function createReportRecord(payload: ReportPayload): Report {
 
   return {
     id: crypto.randomUUID(),
-    title: normalizeText(payload.title, 'Sem titulo'),
+    title: normalizeText(payload.title, 'Sem título'),
     description: normalizeText(payload.description, ''),
     category: normalizeText(payload.category, 'geral'),
     status: normalizeText(payload.status, 'ativo'),

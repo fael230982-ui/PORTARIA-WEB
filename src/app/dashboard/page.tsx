@@ -157,7 +157,7 @@ export default function DashboardPage() {
             </div>
             <div className="rounded-lg border border-white/10 bg-slate-950/50 p-4 text-sm text-slate-300">
               <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Acesso rapido</p>
-              <p className="mt-2 text-white">Perfil e configuracoes pessoais</p>
+              <p className="mt-2 text-white">Perfil e configurações pessoais</p>
               <Link href="/dashboard/profile" className={`mt-2 inline-flex text-sm ${brandClasses.accentTextSoft}`}>
                 Abrir perfil
               </Link>
@@ -168,20 +168,20 @@ export default function DashboardPage() {
         {currentCondominium ? (
           <div className="mt-4 grid gap-3 md:grid-cols-3">
             <div className="rounded-lg border border-white/10 bg-slate-950/50 p-4 text-sm text-slate-300">
-              <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Contrato do condominio</p>
+              <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Contrato do condomínio</p>
               <p className="mt-2 text-white">{currentCondominium.name}</p>
-              <p className="mt-1 text-xs text-slate-400">Informacoes gerais da sua conta.</p>
+              <p className="mt-1 text-xs text-slate-400">Informações gerais da sua conta.</p>
             </div>
             <div className="rounded-lg border border-white/10 bg-slate-950/50 p-4 text-sm text-slate-300">
-              <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Recursos disponiveis</p>
-              <p className="mt-2 text-white">Informacoes atualizadas</p>
-              <p className="mt-1 text-xs text-slate-400">Os dados desta tela sao atualizados conforme o que estiver liberado para a sua unidade.</p>
+              <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Recursos disponíveis</p>
+              <p className="mt-2 text-white">Informações atualizadas</p>
+              <p className="mt-1 text-xs text-slate-400">Os dados desta tela são atualizados conforme o que estiver liberado para a sua unidade.</p>
             </div>
             <div className="rounded-lg border border-white/10 bg-slate-950/50 p-4 text-sm text-slate-300">
-              <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Configuracoes</p>
+              <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Configurações</p>
               <p className="mt-2 text-white">{residentManagementSummary}</p>
               <p className="mt-1 text-xs text-slate-400">
-                Recebimento por entregador: {currentCondominium.visitForecastSettings?.allowDeliverer ? 'permitido' : 'nao informado'}
+                Recebimento por entregador: {currentCondominium.visitForecastSettings?.allowDeliverer ? 'permitido' : 'não informado'}
               </p>
             </div>
           </div>

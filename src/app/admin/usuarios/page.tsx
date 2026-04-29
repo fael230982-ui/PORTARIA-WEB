@@ -65,6 +65,16 @@ type UserFormData = {
   personId: string;
 };
 
+const ROLE_LEVEL: Record<UserRole, number> = {
+  MORADOR: 1,
+  OPERADOR: 2,
+  CENTRAL: 2,
+  GERENTE: 3,
+  ADMIN: 4,
+  PARCEIRO: 5,
+  MASTER: 6,
+};
+
 const initialForm: UserFormData = {
   name: '',
   email: '',
@@ -184,6 +194,7 @@ function getRoleLabel(role: UserRole | string) {
   if (normalized === 'master') return 'Master';
   if (normalized === 'parceiro') return 'Parceiro';
   if (normalized === 'admin') return 'Admin';
+  if (normalized === 'gerente') return 'Gerente';
   if (normalized === 'operador' || normalized === 'operacional') return 'Operação';
   if (normalized === 'central') return 'Central';
   if (normalized === 'morador') return 'Morador';
@@ -234,6 +245,12 @@ function mapUiRoleToApi(role: UserRole): ApiUserRole {
   return role;
 }
 
+function canManageRole(currentRole: UserRole, targetRole: UserRole | string) {
+  const currentLevel = ROLE_LEVEL[currentRole] ?? 0;
+  const targetLevel = ROLE_LEVEL[targetRole as UserRole] ?? 0;
+  return currentLevel >= targetLevel;
+}
+
 function getScopeLabel(scopeType: string | null) {
   const normalized = normalizeString(scopeType);
 
@@ -259,6 +276,7 @@ function getRoleBadgeClass(role: UserRole | string) {
   if (normalized === 'master') return 'border-violet-400/30 bg-violet-500/15 text-violet-100';
   if (normalized === 'parceiro') return 'border-fuchsia-400/30 bg-fuchsia-500/15 text-fuchsia-100';
   if (normalized === 'admin') return 'border-sky-400/30 bg-sky-500/15 text-sky-100';
+  if (normalized === 'gerente') return 'border-indigo-400/30 bg-indigo-500/15 text-indigo-100';
   if (normalized === 'operador' || normalized === 'operacional') return 'border-emerald-400/30 bg-emerald-500/15 text-emerald-100';
   if (normalized === 'central') return 'border-amber-400/30 bg-amber-500/15 text-amber-100';
   if (normalized === 'morador') return 'border-rose-400/30 bg-rose-500/15 text-rose-100';
@@ -313,6 +331,7 @@ function UserForm({
   initialData,
   passwordRequired = true,
   submitLabel = 'Criar usuário',
+  roleLocked = false,
 }: {
   onSubmit: (data: UserFormData) => Promise<void> | void;
   onCancel: () => void;
@@ -325,6 +344,7 @@ function UserForm({
   initialData: Partial<UserFormData>;
   passwordRequired: boolean;
   submitLabel: string;
+  roleLocked?: boolean;
 }) {
   const [form, setForm] = useState<UserFormData>({
     ...initialForm,
@@ -382,19 +402,7 @@ function UserForm({
             onChange={(e) => setField('email', e.target.value)}
             className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none"
             placeholder="usuario@condominio.com"
-            required={passwordRequired}
-          />
-        </label>
-
-        <label className="space-y-2">
-          <span className="text-sm text-slate-300">Senha inicial</span>
-          <input
-            type="password"
-            value={form.password}
-            onChange={(e) => setField('password', e.target.value)}
-            className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none"
-            placeholder={passwordRequired ? 'Senha temporaria' : 'Deixe em branco para manter a senha atual'}
-            required
+            required={passwordRequired || form.role === 'MORADOR'}
           />
         </label>
 
@@ -403,6 +411,7 @@ function UserForm({
           <select
             value={form.role}
             onChange={(e) => setField('role', e.target.value)}
+            disabled={roleLocked}
             className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none"
           >
             {roleOptions.map((option) => (
@@ -448,13 +457,14 @@ function UserForm({
 
         {form.role === 'MORADOR' ? (
           <label className="space-y-2 md:col-span-2">
-            <span className="text-sm text-slate-300">Morador vinculado ao login do app</span>
+            <span className="text-sm text-slate-300">Morador já cadastrado</span>
             <select
               value={form.personId}
               onChange={(e) => setResident(e.target.value)}
               className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none"
+              required
             >
-              <option value="">Selecionar morador cadastrado</option>
+              <option value="">Selecione um morador já cadastrado</option>
               {residentOptions
                 .filter((resident) => !form.condominiumId || filteredUnits.some((unit) => unit.id === resident.unitId))
                 .map((resident) => (
@@ -464,14 +474,14 @@ function UserForm({
                 ))}
             </select>
             <p className="text-xs text-slate-500">
-              Para testar o app, crie o usuário com perfil Morador, e-mail, senha inicial e vínculo com o morador real.
+              Este fluxo cria apenas o acesso do app para um morador já cadastrado.
             </p>
           </label>
         ) : null}
       </div>
 
       <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-xs text-slate-400">
-        {passwordRequired ? 'A senha inicial é enviada somente na criação do usuário.' : 'Na edição, deixe a senha em branco para manter a atual. Use "Senha do app" para trocar a senha.'}
+        A senha não é definida nesta tela. O fluxo correto é envio de convite ou recuperação por e-mail.
       </div>
 
       <div className="flex flex-wrap justify-end gap-3 pt-2">
@@ -532,7 +542,7 @@ function StatCard({
 
 export default function AdminUsuariosPage() {
   const { user, canAccess, isChecking } = useProtectedRoute({
-    allowedRoles: ['ADMIN', 'MASTER'],
+    allowedRoles: ['ADMIN', 'GERENTE', 'MASTER'],
   });
   const currentUserRole = user?.role ?? 'ADMIN';
   const [filters, setFilters] = useState<Filters>({
@@ -542,7 +552,6 @@ export default function AdminUsuariosPage() {
   });
   const [openCreate, setOpenCreate] = useState(false);
   const [openView, setOpenView] = useState(false);
-  const [openPasswordHelp, setOpenPasswordHelp] = useState(false);
   const [openEditHelp, setOpenEditHelp] = useState(false);
   const [createInitialData, setCreateInitialData] = useState<Partial<UserFormData>>({});
   const [handledResidentAccessQuery, setHandledResidentAccessQuery] = useState(false);
@@ -550,9 +559,6 @@ export default function AdminUsuariosPage() {
   const [selectedUser, setSelectedUser] = useState<NormalizedUser | null>(null);
   const [editingUser, setEditingUser] = useState<UserResponse | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [passwordValue, setPasswordValue] = useState('');
-  const [passwordSaving, setPasswordSaving] = useState(false);
-  const [passwordError, setPasswordError] = useState<string | null>(null);
   const [permissionMatrix, setPermissionMatrix] = useState<PermissionMatrixItem[]>([]);
 
   const { data: usersData, isLoading, error, refetch } = useUsers();
@@ -622,7 +628,7 @@ export default function AdminUsuariosPage() {
 
   const stats = useMemo(() => {
     const total = users.length;
-    const admins = users.filter((item) => item.role === 'ADMIN').length;
+    const admins = users.filter((item) => item.role === 'ADMIN' || item.role === 'GERENTE').length;
     const operation = users.filter((item) => ['OPERADOR', 'CENTRAL'].includes(item.role)).length;
     const residents = users.filter((item) => item.role === 'MORADOR').length;
 
@@ -645,6 +651,15 @@ export default function AdminUsuariosPage() {
     if (currentUserRole === 'ADMIN') {
       return [
         { value: 'ADMIN' as const, label: 'Admin' },
+        { value: 'GERENTE' as const, label: 'Gerente' },
+        { value: 'OPERADOR' as const, label: 'Operação' },
+        { value: 'MORADOR' as const, label: 'Morador' },
+      ];
+    }
+
+    if (currentUserRole === 'GERENTE') {
+      return [
+        { value: 'GERENTE' as const, label: 'Gerente' },
         { value: 'OPERADOR' as const, label: 'Operação' },
         { value: 'MORADOR' as const, label: 'Morador' },
       ];
@@ -652,6 +667,7 @@ export default function AdminUsuariosPage() {
 
     return [
       { value: 'ADMIN' as const, label: 'Admin' },
+      { value: 'GERENTE' as const, label: 'Gerente' },
       { value: 'OPERADOR' as const, label: 'Operação' },
       { value: 'CENTRAL' as const, label: 'Central' },
       { value: 'MORADOR' as const, label: 'Morador' },
@@ -702,18 +718,26 @@ export default function AdminUsuariosPage() {
 
     try {
       const effectiveRole =
-        currentUserRole === 'ADMIN' && !['ADMIN', 'OPERADOR', 'MORADOR'].includes(form.role)
-          ? 'OPERADOR'
-          : form.role;
-      const effectiveCondominiumId =
         currentUserRole === 'ADMIN'
+          ? !['ADMIN', 'GERENTE', 'OPERADOR', 'MORADOR'].includes(form.role)
+            ? 'OPERADOR'
+            : form.role
+          : currentUserRole === 'GERENTE'
+            ? !['GERENTE', 'OPERADOR', 'MORADOR'].includes(form.role)
+              ? 'OPERADOR'
+              : form.role
+            : form.role;
+      if (effectiveRole === 'MORADOR' && !form.personId) {
+        throw new Error('Selecione um morador já cadastrado para criar o acesso.');
+      }
+      const effectiveCondominiumId =
+        ['ADMIN', 'GERENTE'].includes(currentUserRole)
           ? user.condominiumId ?? null
           : form.condominiumId || null;
 
       const payload: UserCreateRequest = {
         name: form.name.trim(),
         email: form.email.trim(),
-        password: form.password,
         role: mapUiRoleToApi(effectiveRole),
         condominiumId: effectiveCondominiumId,
         unitId: form.unitId || null,
@@ -738,12 +762,23 @@ export default function AdminUsuariosPage() {
     setSubmitError(null);
 
     try {
+      const editingRole = mapApiRoleToUi(editingUser.role);
+      if (!canManageRole(currentUserRole, editingRole)) {
+        throw new Error('Você não pode editar usuários de nível superior ao seu.');
+      }
+
       const effectiveRole =
-        currentUserRole === 'ADMIN' && !['ADMIN', 'OPERADOR', 'MORADOR'].includes(form.role)
-          ? 'OPERADOR'
-          : form.role;
-      const effectiveCondominiumId =
         currentUserRole === 'ADMIN'
+          ? !['ADMIN', 'GERENTE', 'OPERADOR', 'MORADOR'].includes(form.role)
+            ? 'OPERADOR'
+            : form.role
+          : currentUserRole === 'GERENTE'
+            ? !['GERENTE', 'OPERADOR', 'MORADOR'].includes(form.role)
+              ? 'OPERADOR'
+              : form.role
+            : form.role;
+      const effectiveCondominiumId =
+        ['ADMIN', 'GERENTE'].includes(currentUserRole)
           ? user.condominiumId ?? null
           : form.condominiumId || null;
 
@@ -758,10 +793,6 @@ export default function AdminUsuariosPage() {
         personId: effectiveRole === 'MORADOR' ? form.personId || null : null,
       };
 
-      if (form.password.trim()) {
-        payload.password = form.password;
-      }
-
       await updateUser(editingUser.id, payload);
       setOpenEditHelp(false);
       setEditingUser(null);
@@ -771,26 +802,6 @@ export default function AdminUsuariosPage() {
       setSubmitError(getUserErrorMessage(updateError, 'Não foi possível editar o usuário.'));
     } finally {
       setSaving(false);
-    }
-  }
-
-  async function handleSaveUserPassword() {
-    if (!selectedUser || !passwordValue.trim()) {
-      setPasswordError('Informe a nova senha.');
-      return;
-    }
-
-    setPasswordSaving(true);
-    setPasswordError(null);
-
-    try {
-      await updateUser(selectedUser.id, { password: passwordValue });
-      setPasswordValue('');
-      setOpenPasswordHelp(false);
-    } catch (error) {
-      setPasswordError(getUserErrorMessage(error, 'Não foi possível salvar a nova senha.'));
-    } finally {
-      setPasswordSaving(false);
     }
   }
 
@@ -852,7 +863,7 @@ export default function AdminUsuariosPage() {
               onClick={() => {
                 setCreateInitialData({
                   role: 'MORADOR',
-                  condominiumId: currentUserRole === 'ADMIN' ? user?.condominiumId ?? '' : '',
+                  condominiumId: ['ADMIN', 'GERENTE'].includes(currentUserRole) ? user?.condominiumId ?? '' : '',
                 });
                 setSubmitError(null);
                 setOpenCreate(true);
@@ -888,6 +899,7 @@ export default function AdminUsuariosPage() {
               <option value="MASTER">Master</option>
               <option value="PARCEIRO">Parceiro</option>
               <option value="ADMIN">Admin</option>
+              <option value="GERENTE">Gerente</option>
               <option value="OPERADOR">Operação</option>
               <option value="CENTRAL">Central</option>
               <option value="MORADOR">Morador</option>
@@ -942,7 +954,9 @@ export default function AdminUsuariosPage() {
             </div>
 
             <div className="divide-y divide-white/10">
-              {filteredUsers.map((item) => (
+              {filteredUsers.map((item) => {
+                const canEditUser = canManageRole(currentUserRole, item.role);
+                return (
                 <div key={item.id} className="grid grid-cols-12 items-center px-4 py-4 text-sm">
                   <div className="col-span-3">
                     <p className="font-medium text-white">{item.name}</p>
@@ -983,12 +997,15 @@ export default function AdminUsuariosPage() {
                     <button
                       type="button"
                       onClick={() => {
+                        if (!canEditUser) return;
                         setSelectedUser(item);
                         setEditingUser((usersData ?? []).find((candidate) => candidate.id === item.id) ?? null);
                         setSubmitError(null);
                         setOpenEditHelp(true);
                       }}
-                      className="rounded-lg bg-white/10 p-2 text-white transition hover:bg-white/15"
+                      disabled={!canEditUser}
+                      title={canEditUser ? 'Editar usuário' : 'Você só pode editar usuários do seu nível ou inferior'}
+                      className="rounded-lg bg-white/10 p-2 text-white transition hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-40"
                       aria-label="Editar usuário"
                     >
                       <Pencil className="h-4 w-4" />
@@ -1006,7 +1023,7 @@ export default function AdminUsuariosPage() {
                     </button>
                   </div>
                 </div>
-              ))}
+              )})}
             </div>
           </div>
         )}
@@ -1015,7 +1032,7 @@ export default function AdminUsuariosPage() {
       <CrudModal
         open={openCreate}
         title={createInitialData.role === 'MORADOR' ? 'Criar acesso de morador' : 'Novo usuário'}
-        description={createInitialData.role === 'MORADOR' ? 'Importe um morador já cadastrado e crie apenas o login do app.' : 'Crie uma nova conta de acesso ao sistema.'}
+        description={createInitialData.role === 'MORADOR' ? 'Selecione um morador já cadastrado e crie apenas o acesso dele ao app.' : 'Crie uma nova conta de acesso ao sistema.'}
         onClose={() => {
           setOpenCreate(false);
           setCreateInitialData({});
@@ -1037,18 +1054,19 @@ export default function AdminUsuariosPage() {
           }}
           loading={saving}
           condominiumOptions={
-            currentUserRole === 'ADMIN' && user?.condominiumId
+            ['ADMIN', 'GERENTE'].includes(currentUserRole) && user?.condominiumId
               ? condominiumOptions.filter((item) => item.id === user.condominiumId)
               : condominiumOptions
           }
           unitOptions={unitOptions}
           residentOptions={residentOptions}
           roleOptions={allowedRoleOptions}
-          condominiumLocked={currentUserRole === 'ADMIN'}
+          condominiumLocked={['ADMIN', 'GERENTE'].includes(currentUserRole)}
+          roleLocked={createInitialData.role === 'MORADOR'}
           passwordRequired={true}
           submitLabel="Criar usuário"
           initialData={{
-            condominiumId: currentUserRole === 'ADMIN' ? user?.condominiumId ?? '' : '',
+            condominiumId: ['ADMIN', 'GERENTE'].includes(currentUserRole) ? user?.condominiumId ?? '' : '',
             role: allowedRoleOptions[0]?.value ?? 'OPERADOR',
             ...createInitialData,
           }}
@@ -1144,13 +1162,9 @@ export default function AdminUsuariosPage() {
                 <span className="text-xs uppercase tracking-[0.18em]">Abrangência</span>
               </div>
               <p className="mt-2 text-base font-medium text-white">{selectedUser.scopeType}</p>
-              <button
-                type="button"
-                onClick={() => setOpenPasswordHelp(true)}
-                className="mt-3 rounded-xl border border-cyan-300/30 bg-cyan-300/10 px-4 py-2 text-sm font-medium text-cyan-50 transition hover:bg-cyan-300/20"
-              >
-                Senha do app
-              </button>
+              <div className="mt-3 rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+                A senha não pode ser alterada por esta tela. O fluxo correto é enviar recuperação por e-mail.
+              </div>
               <p className="mt-1 text-sm text-slate-400">{selectedUser.location || 'Sem localização atribuída'}</p>
             </div>
           </div>
@@ -1158,57 +1172,10 @@ export default function AdminUsuariosPage() {
       </CrudModal>
 
       <CrudModal
-        open={openPasswordHelp}
-        title="Senha do app do morador"
-        description="Defina uma nova senha para este usuário."
-        onClose={() => {
-          setOpenPasswordHelp(false);
-          setPasswordValue('');
-          setPasswordError(null);
-        }}
-        maxWidth="lg"
-      >
-        <div className="space-y-4 text-sm text-slate-300">
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-            <p className="font-medium text-white">{selectedUser?.name ?? 'Usuário selecionado'}</p>
-            <p className="mt-1 text-slate-400">{selectedUser?.email ?? 'E-mail não informado'}</p>
-          </div>
-          <label className="space-y-2">
-            <span className="text-sm text-slate-300">Nova senha</span>
-            <input
-              type="password"
-              value={passwordValue}
-              onChange={(event) => {
-                setPasswordValue(event.target.value);
-                setPasswordError(null);
-              }}
-              className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none"
-              placeholder="Digite a nova senha"
-            />
-          </label>
-          {passwordError ? (
-            <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-100">
-              {passwordError}
-            </div>
-          ) : null}
-          <div className="flex flex-wrap justify-end gap-3">
-            <button
-              type="button"
-              onClick={() => void handleSaveUserPassword()}
-              disabled={passwordSaving || !passwordValue.trim()}
-              className="rounded-xl bg-white px-4 py-3 text-sm font-medium text-slate-950 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {passwordSaving ? 'Salvando...' : 'Salvar nova senha'}
-            </button>
-          </div>
-        </div>
-      </CrudModal>
-
-      <CrudModal
         open={false}
         title="Senha do app do morador"
         description="Reenvio e recuperação assistida de senha ainda não estão disponíveis nesta tela."
-        onClose={() => setOpenPasswordHelp(false)}
+        onClose={() => undefined}
         maxWidth="lg"
       >
         <div className="space-y-4 text-sm text-slate-300">
@@ -1218,14 +1185,14 @@ export default function AdminUsuariosPage() {
           <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
             <p className="font-medium text-white">Recursos aguardando liberação</p>
             <p className="mt-2">Reenvio de e-mail para redefinição de senha.</p>
-            <p className="mt-1">Definição de senha temporária com envio assistido ao usuário.</p>
+            <p className="mt-1">Lembrete seguro do fluxo de recuperação para o usuário final.</p>
           </div>
           <div className="flex flex-wrap justify-end gap-3">
             <button type="button" disabled className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-400 opacity-70">
               Reenviar senha por e-mail
             </button>
             <button type="button" disabled className="rounded-xl bg-white px-4 py-3 text-sm font-medium text-slate-950 opacity-60">
-              Definir senha temporária
+              Enviar recuperação por e-mail
             </button>
           </div>
         </div>
@@ -1258,14 +1225,15 @@ export default function AdminUsuariosPage() {
             }}
             loading={saving}
             condominiumOptions={
-              currentUserRole === 'ADMIN' && user?.condominiumId
+              ['ADMIN', 'GERENTE'].includes(currentUserRole) && user?.condominiumId
                 ? condominiumOptions.filter((item) => item.id === user.condominiumId)
                 : condominiumOptions
             }
             unitOptions={unitOptions}
             residentOptions={residentOptions}
             roleOptions={allowedRoleOptions}
-            condominiumLocked={currentUserRole === 'ADMIN'}
+            condominiumLocked={['ADMIN', 'GERENTE'].includes(currentUserRole)}
+            roleLocked={!canManageRole(currentUserRole, mapApiRoleToUi(editingUser.role))}
             passwordRequired={false}
             submitLabel="Salvar usuário"
             initialData={{
@@ -1273,7 +1241,7 @@ export default function AdminUsuariosPage() {
               email: editingUser.email,
               password: '',
               role: mapApiRoleToUi(editingUser.role),
-              condominiumId: currentUserRole === 'ADMIN' ? user?.condominiumId ?? '' : editingUser.condominiumId ?? '',
+              condominiumId: ['ADMIN', 'GERENTE'].includes(currentUserRole) ? user?.condominiumId ?? '' : editingUser.condominiumId ?? '',
               unitId: editingUser.unitId ?? editingUser.unitIds?.[0] ?? '',
               personId: editingUser.personId ?? '',
             }}

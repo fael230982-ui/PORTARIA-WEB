@@ -227,6 +227,7 @@ export type OperationPhotoSearchRequest = {
   photoUrl?: string | null;
   photoBase64?: string | null;
   cameraId?: string | null;
+  unitId?: string | null;
   fileName?: string | null;
   maxMatches?: number;
 };

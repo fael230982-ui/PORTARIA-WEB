@@ -17,7 +17,7 @@ export default function PeoplePage() {
     <PageContainer title="Pessoas" description="Acompanhe e atualize as pessoas vinculadas a sua unidade.">
       {!peopleEnabled ? (
         <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-5 text-amber-100">
-          O acesso a pessoas nao esta disponivel para a sua unidade neste momento.
+          O acesso a pessoas não está disponível para a sua unidade neste momento.
         </div>
       ) : (
         <PeopleTable />

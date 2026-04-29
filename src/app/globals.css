@@ -21,6 +21,19 @@
   --input: 214.3 31.8% 91.4%;
   --ring: 221.2 83.2% 53.3%;
   --radius: 0.5rem;
+  --shell-bg: linear-gradient(180deg, #edf7ff 0%, #dceefe 100%);
+  --shell-bg-accent: radial-gradient(circle at top left, rgba(14,165,233,0.18), transparent 36%);
+  --surface: rgba(255,255,255,0.84);
+  --surface-strong: rgba(255,255,255,0.96);
+  --surface-muted: rgba(226,242,255,0.88);
+  --surface-border: rgba(125,170,205,0.35);
+  --text-main: #0f172a;
+  --text-soft: #17324d;
+  --text-muted: #42576f;
+  --nav-active-bg: #0f172a;
+  --nav-active-text: #f8fafc;
+  --nav-inactive-text: #24425c;
+  --shadow-elevated: 0 18px 50px rgba(15, 23, 42, 0.12);
 }
 
 .dark {
@@ -43,6 +56,19 @@
   --border: 217.2 32.6% 17.5%;
   --input: 217.2 32.6% 17.5%;
   --ring: 224.3 76.3% 94.1%;
+  --shell-bg: linear-gradient(180deg, #06111f 0%, #07192d 100%);
+  --shell-bg-accent: radial-gradient(circle at top left, rgba(56,189,248,0.18), transparent 36%);
+  --surface: rgba(9,23,40,0.82);
+  --surface-strong: rgba(6,18,32,0.94);
+  --surface-muted: rgba(12,31,54,0.82);
+  --surface-border: rgba(148, 203, 255, 0.14);
+  --text-main: #f8fafc;
+  --text-soft: #d6ebff;
+  --text-muted: #8fa8c2;
+  --nav-active-bg: #e0f2fe;
+  --nav-active-text: #0b1a2b;
+  --nav-inactive-text: #c8d9ea;
+  --shadow-elevated: 0 20px 60px rgba(2, 12, 24, 0.42);
 }
 
 * {
@@ -50,21 +76,153 @@
 }
 
 body {
-  color: hsl(var(--foreground));
-  background: hsl(var(--background));
+  min-height: 100vh;
+  color: var(--text-main);
+  background-image: var(--shell-bg-accent), var(--shell-bg);
+  background-attachment: fixed;
+  background-color: hsl(var(--background));
 }
 
 select {
-  color-scheme: dark;
+  color-scheme: light dark;
 }
 
 select option {
-  background-color: #020617;
-  color: #f8fafc;
+  background-color: var(--surface-strong);
+  color: var(--text-main);
 }
 
 select option:checked,
 select option:hover {
-  background-color: #0f766e;
-  color: #ffffff;
+  background-color: color-mix(in srgb, hsl(var(--primary)) 22%, transparent);
+  color: var(--text-main);
+}
+
+.app-shell {
+  background-image: var(--shell-bg-accent), var(--shell-bg);
+  background-attachment: fixed;
+}
+
+.app-card,
+.app-modal-panel,
+.app-sidebar,
+.app-panel,
+.app-panel-soft,
+.app-panel-hero {
+  border-color: var(--surface-border);
+  color: var(--text-main);
+  box-shadow: var(--shadow-elevated);
+}
+
+.app-card,
+.app-modal-panel,
+.app-sidebar,
+.app-panel {
+  background: var(--surface);
+}
+
+.app-panel-soft {
+  background: var(--surface-muted);
+}
+
+.app-panel-hero {
+  background-image:
+    radial-gradient(circle at top left, color-mix(in srgb, hsl(var(--primary)) 18%, transparent), transparent 30%),
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-strong) 88%, transparent), color-mix(in srgb, var(--surface) 96%, transparent));
+}
+
+.app-nav-active {
+  background: var(--nav-active-bg);
+  color: var(--nav-active-text);
+}
+
+.app-nav-inactive {
+  color: var(--nav-inactive-text);
+}
+
+.app-nav-inactive:hover {
+  background: color-mix(in srgb, var(--surface-strong) 82%, transparent);
+  color: var(--text-main);
+}
+
+.app-sidebar {
+  background: color-mix(in srgb, var(--surface-strong) 92%, transparent);
+  color: var(--text-main);
+}
+
+.app-theme-field,
+input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):not([type='file']),
+textarea,
+select {
+  background-color: var(--surface-strong);
+  color: var(--text-main);
+  border-color: var(--surface-border);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-muted);
+}
+
+.light .text-white {
+  color: var(--text-main) !important;
+}
+
+.light .text-slate-200,
+.light .text-slate-300,
+.light .text-slate-700,
+.light .text-slate-800 {
+  color: var(--text-soft) !important;
+}
+
+.light .text-slate-400,
+.light .text-slate-500,
+.light .text-slate-600 {
+  color: var(--text-muted) !important;
+}
+
+.light .text-black,
+.light .text-black\/70,
+.light .text-black\/80,
+.light .text-black\/90 {
+  color: var(--text-main) !important;
+}
+
+.light .placeholder\:text-slate-400::placeholder,
+.light .placeholder\:text-slate-500::placeholder {
+  color: var(--text-muted) !important;
+  opacity: 1;
+}
+
+.light .border-white\/10,
+.light .border-white\/15 {
+  border-color: var(--surface-border) !important;
+}
+
+.light .bg-white\/5,
+.light .bg-white\/10,
+.light .bg-white\/15,
+.light .bg-white\/\[0\.03\],
+.light .bg-white\/\[0\.04\],
+.light .bg-white\/\[0\.035\] {
+  background-color: var(--surface) !important;
+}
+
+.light .bg-slate-950,
+.light .bg-slate-950\/95,
+.light .bg-slate-950\/80,
+.light .bg-slate-950\/70,
+.light .bg-slate-950\/60,
+.light .bg-slate-950\/55,
+.light .bg-slate-950\/50,
+.light .bg-slate-950\/45,
+.light .bg-slate-950\/40,
+.light .bg-slate-950\/35,
+.light .bg-slate-950\/30,
+.light .bg-slate-950\/25,
+.light .bg-slate-900,
+.light .bg-slate-900\/70,
+.light .bg-slate-900\/60,
+.light .bg-slate-900\/50 {
+  background-color: var(--surface-strong) !important;
 }

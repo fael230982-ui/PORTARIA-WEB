@@ -446,7 +446,7 @@ function DeliveryForm({
           'Mantenha a mao estavel',
           'Revise a imagem antes do OCR',
         ]}
-        footer="Capture automatica ainda nao foi ligada no Portaria Web. Nesta etapa, o foco e padronizar a captura guiada para reduzir erro operacional."
+        footer="Captura automática ainda não foi ligada no Portaria Web. Nesta etapa, o foco é padronizar a captura guiada para reduzir erro operacional."
       />
       <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/10 p-4 text-sm text-cyan-50">
         <div className="mt-3 flex flex-wrap gap-3">
@@ -501,8 +501,8 @@ function DeliveryForm({
           <div className="mt-3 grid gap-3 md:grid-cols-2">
             <div className="rounded-xl border border-white/10 bg-black/20 p-3">
               <p className="text-xs uppercase tracking-[0.16em] text-white/60">Sugestoes</p>
-              <p className="mt-2">Unidade: {ocrReview.suggestedUnitName ?? 'Sem sugestao direta'}</p>
-              <p className="mt-1">Destinatario: {ocrReview.suggestedResidentName ?? 'Sem sugestao direta'}</p>
+              <p className="mt-2">Unidade: {ocrReview.suggestedUnitName ?? 'Sem sugestão direta'}</p>
+              <p className="mt-1">Destinatário: {ocrReview.suggestedResidentName ?? 'Sem sugestão direta'}</p>
               <p className="mt-1">Transportadora: {ocrReview.deliveryCompany ?? 'Não identificada'}</p>
               <p className="mt-1">Rastreio: {ocrReview.trackingCode ?? 'Não identificado'}</p>
             </div>
@@ -708,7 +708,7 @@ function StatCard({
 export default function EncomendasPage() {
   const router = useRouter();
   const { user, canAccess, isChecking } = useProtectedRoute({
-    allowedRoles: ['ADMIN', 'MASTER', 'OPERADOR', 'CENTRAL'],
+    allowedRoles: ['ADMIN', 'GERENTE', 'MASTER', 'OPERADOR', 'CENTRAL'],
   });
   const [activeUnitId, setActiveUnitId] = useState(() => {
     if (typeof window === 'undefined') return '';
@@ -1317,7 +1317,7 @@ export default function EncomendasPage() {
         </div>
         <div className="mt-3 grid gap-3 lg:grid-cols-[1fr_auto]">
           <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
-            Código e QR Code de retirada não devem ser exibidos para a portaria. O fluxo seguro é pedir a apresentação no app do morador e validar somente o que ele informar.
+            Código e QR Code de retirada não são exibidos para a portaria por questões de segurança. Apenas o morador tem acesso a essa informação.
           </div>
           <label className="rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3">
             <select

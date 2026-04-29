@@ -27,6 +27,10 @@ export default function Page() {
 
   useEffect(() => {
     if (!targetRoute) return;
+    if (typeof window !== 'undefined') {
+      window.location.replace(targetRoute);
+      return;
+    }
     router.replace(targetRoute);
   }, [targetRoute, router]);
 

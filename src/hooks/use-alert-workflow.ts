@@ -13,11 +13,13 @@ import {
 } from '@/features/alerts/alert-workflow';
 import type { Alert } from '@/types/alert';
 
+const EMPTY_ALERT_WORKFLOW_STORE: Record<string, AlertWorkflowRecord> = {};
+
 export function useAlertWorkflow(alerts?: Alert[]) {
   const store = useSyncExternalStore(
     subscribeAlertWorkflow,
     getAlertWorkflowStore,
-    () => ({}) as Record<string, AlertWorkflowRecord>
+    () => EMPTY_ALERT_WORKFLOW_STORE
   );
 
   useEffect(() => {

@@ -294,9 +294,9 @@ function VehicleForm({
 export default function AdminVeiculosPage() {
   const router = useRouter();
   const { user, canAccess, isChecking } = useProtectedRoute({
-    allowedRoles: ['ADMIN', 'MASTER'],
+    allowedRoles: ['ADMIN', 'GERENTE', 'MASTER'],
   });
-  const { units } = useResidenceCatalog(Boolean(user), user.role === 'ADMIN' ? user.condominiumId ?? undefined : undefined);
+  const { units } = useResidenceCatalog(Boolean(user), ['ADMIN', 'GERENTE'].includes(user.role) ? user.condominiumId ?? undefined : undefined);
   const { data: peopleData } = useAllPeople({ limit: 200, enabled: Boolean(user) });
   const { data: vehiclesData, isLoading, error, refetch } = useVehicles(Boolean(user));
   const [search, setSearch] = useState('');
@@ -359,15 +359,15 @@ export default function AdminVeiculosPage() {
   }, [vehicles]);
 
   const allowedCondominiumIds = useMemo(() => {
-    if (user?.role !== 'ADMIN') return [];
+    if (user?.role !== 'ADMIN' && user?.role !== 'GERENTE') return [];
     return [user.condominiumId, ...(user.condominiumIds ?? [])].filter(Boolean) as string[];
   }, [user?.condominiumId, user?.condominiumIds, user?.role]);
   const allowedUnitIds = useMemo(() => {
-    if (user?.role !== 'ADMIN') return [];
+    if (user?.role !== 'ADMIN' && user?.role !== 'GERENTE') return [];
     return [user.unitId, ...(user.unitIds ?? [])].filter(Boolean) as string[];
   }, [user?.role, user?.unitId, user?.unitIds]);
   const scopedUnits = useMemo(() => {
-    if (user?.role !== 'ADMIN') return units;
+    if (user?.role !== 'ADMIN' && user?.role !== 'GERENTE') return units;
     if (allowedUnitIds.length > 0) {
       return units.filter((unit) => allowedUnitIds.includes(unit.id) || Boolean(unit.legacyUnitId && allowedUnitIds.includes(unit.legacyUnitId)));
     }
@@ -734,7 +734,7 @@ export default function AdminVeiculosPage() {
         <div className="rounded-3xl border border-red-500/30 bg-red-500/10 p-5 text-sm text-red-100">Não foi possível carregar os veículos.</div>
       ) : null}
 
-      {user.role === 'ADMIN' && !scopedUnits.length ? (
+      {(user.role === 'ADMIN' || user.role === 'GERENTE') && !scopedUnits.length ? (
         <div className="rounded-3xl border border-amber-500/30 bg-amber-500/10 p-5 text-sm text-amber-100">
           Não encontramos unidades liberadas para o seu acesso. Para cadastrar veículos, este administrador precisa estar vinculado às unidades corretas.
         </div>

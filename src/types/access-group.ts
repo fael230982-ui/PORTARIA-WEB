@@ -3,7 +3,12 @@ export type AccessGroup = {
   name: string;
   condominiumId?: string | null;
   personIds: string[];
+  deviceIds?: string[];
   cameraIds: string[];
+  allowedPersonCategories?: string[];
+  minAuthorizedAge?: number | null;
+  minorGuardianAuthorizationRequired?: boolean | null;
+  policyNotes?: string | null;
   faceListId?: number | null;
   faceListName?: string | null;
   faceListSyncStatus?: string | null;
@@ -16,5 +21,10 @@ export type AccessGroupPayload = {
   name: string;
   condominiumId?: string | null;
   personIds?: string[];
+  deviceIds?: string[];
   cameraIds?: string[];
+  allowedPersonCategories?: string[];
+  minAuthorizedAge?: number | null;
+  minorGuardianAuthorizationRequired?: boolean | null;
+  policyNotes?: string | null;
 };

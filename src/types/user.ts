@@ -1,11 +1,15 @@
 export type UserScopeType = 'GLOBAL' | 'ASSIGNED' | 'RESIDENT' | 'UNSCOPED';
-export type ApiUserRole = 'MASTER' | 'PARCEIRO' | 'ADMIN' | 'OPERACIONAL' | 'CENTRAL' | 'MORADOR';
+export type ApiUserRole = 'MASTER' | 'PARCEIRO' | 'ADMIN' | 'GERENTE' | 'OPERACIONAL' | 'CENTRAL' | 'MORADOR';
 
 export type UserResponse = {
   id: string;
   name: string;
   email: string;
   personName?: string | null;
+  phone?: string | null;
+  photoUrl?: string | null;
+  photoUri?: string | null;
+  faceStatus?: string | null;
   role: ApiUserRole;
   permissions: string[];
   scopeType?: UserScopeType | null;
@@ -26,7 +30,7 @@ export type UserResponse = {
 export type UserCreateRequest = {
   name: string;
   email: string;
-  password: string;
+  password?: string;
   role: ApiUserRole;
   condominiumId?: string | null;
   condominiumIds?: string[];

@@ -156,7 +156,7 @@ export default function ResidentVehiclesPage() {
 
   async function handleSave() {
     if (!activeUnitId) {
-      setFormError('Selecione uma unidade ativa antes de cadastrar um veiculo.');
+      setFormError('Selecione uma unidade ativa antes de cadastrar um veículo.');
       return;
     }
 
@@ -173,10 +173,10 @@ export default function ResidentVehiclesPage() {
       const payload = buildPayload();
       if (editingVehicle) {
         await updateVehicle(editingVehicle.id, payload);
-        setMessage(`Veiculo ${payload.plate} atualizado com sucesso.`);
+        setMessage(`Veículo ${payload.plate} atualizado com sucesso.`);
       } else {
         await createVehicle(payload);
-        setMessage(`Veiculo ${payload.plate} cadastrado com sucesso.`);
+        setMessage(`Veículo ${payload.plate} cadastrado com sucesso.`);
       }
 
       setOpenForm(false);
@@ -190,12 +190,12 @@ export default function ResidentVehiclesPage() {
   }
 
   async function handleDelete(vehicle: Vehicle) {
-    const confirmed = window.confirm(`Remover o veiculo ${vehicle.plate}?`);
+    const confirmed = window.confirm(`Remover o veículo ${vehicle.plate}?`);
     if (!confirmed) return;
 
     try {
       await deleteVehicle(vehicle.id);
-      setMessage(`Veiculo ${vehicle.plate} removido com sucesso.`);
+      setMessage(`Veículo ${vehicle.plate} removido com sucesso.`);
       await refetch();
     } catch (deleteError) {
       setMessage(deleteError instanceof Error ? deleteError.message : 'Não foi possível remover o veículo.');
@@ -218,8 +218,8 @@ export default function ResidentVehiclesPage() {
 
       setMessage(
         vehicle.status === 'bloqueado'
-          ? `Veiculo ${vehicle.plate} reativado com sucesso.`
-          : `Veiculo ${vehicle.plate} bloqueado com sucesso.`
+          ? `Veículo ${vehicle.plate} reativado com sucesso.`
+          : `Veículo ${vehicle.plate} bloqueado com sucesso.`
       );
       await refetch();
     } catch (updateError) {
@@ -230,15 +230,15 @@ export default function ResidentVehiclesPage() {
   return (
     <PageContainer
       title="Veículos"
-      description="Cadastre, atualize e acompanhe os veiculos vinculados a sua unidade."
+      description="Cadastre, atualize e acompanhe os veículos vinculados à sua unidade."
     >
       {!vehiclesEnabled ? (
         <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-5 text-amber-100">
-          A gestao de veiculos nao esta disponivel para a sua unidade neste momento.
+          A gestão de veículos não está disponível para a sua unidade neste momento.
         </div>
       ) : !activeUnitId ? (
         <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-5 text-amber-100">
-          Selecione uma unidade ativa para consultar e cadastrar veiculos.
+          Selecione uma unidade ativa para consultar e cadastrar veículos.
         </div>
       ) : (
         <div className="space-y-6">
@@ -292,7 +292,7 @@ export default function ResidentVehiclesPage() {
                   className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2 text-sm font-medium text-slate-950 transition hover:bg-slate-200"
                 >
                   <Plus className="h-4 w-4" />
-                  Novo veiculo
+                  Novo veículo
                 </button>
               </div>
             </div>
@@ -312,13 +312,13 @@ export default function ResidentVehiclesPage() {
             <div className="mt-5 grid gap-4">
               {isLoading ? (
                 <div className="rounded-2xl border border-white/10 bg-slate-950/50 p-5 text-sm text-slate-400">
-                  Carregando veiculos...
+                  Carregando veículos...
                 </div>
               ) : filteredVehicles.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-white/10 bg-slate-950/40 p-8 text-center">
                   <Car className="mx-auto h-10 w-10 text-slate-600" />
-                  <p className="mt-3 text-sm text-slate-300">Nenhum veiculo encontrado.</p>
-                  <p className="mt-1 text-xs text-slate-500">Cadastre o primeiro veiculo da unidade para facilitar a identificacao.</p>
+                  <p className="mt-3 text-sm text-slate-300">Nenhum veículo encontrado.</p>
+                  <p className="mt-1 text-xs text-slate-500">Cadastre o primeiro veículo da unidade para facilitar a identificação.</p>
                 </div>
               ) : (
                 filteredVehicles.map((vehicle) => (
@@ -378,8 +378,8 @@ export default function ResidentVehiclesPage() {
 
       <CrudModal
         open={openForm}
-        title={editingVehicle ? 'Editar veiculo' : 'Novo veiculo'}
-        description="Preencha os dados principais do veiculo vinculado a sua unidade."
+        title={editingVehicle ? 'Editar veículo' : 'Novo veículo'}
+        description="Preencha os dados principais do veículo vinculado à sua unidade."
         onClose={() => {
           setOpenForm(false);
           resetForm();
@@ -455,7 +455,7 @@ export default function ResidentVehiclesPage() {
               value={form.notes}
               onChange={(event) => setField('notes', event.target.value)}
               className="min-h-24 w-full rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-white outline-none"
-              placeholder="Informacoes adicionais do veiculo"
+              placeholder="Informações adicionais do veículo"
             />
           </label>
 
@@ -499,7 +499,7 @@ export default function ResidentVehiclesPage() {
               disabled={saving}
               className="rounded-2xl bg-white px-4 py-3 text-sm font-medium text-slate-950 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {saving ? 'Salvando...' : editingVehicle ? 'Salvar alteracoes' : 'Cadastrar veiculo'}
+              {saving ? 'Salvando...' : editingVehicle ? 'Salvar alterações' : 'Cadastrar veículo'}
             </button>
           </div>
         </div>

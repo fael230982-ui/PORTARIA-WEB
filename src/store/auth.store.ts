@@ -4,13 +4,18 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { UserScopeType } from '@/types/user';
 
-export type UserRole = 'MASTER' | 'PARCEIRO' | 'ADMIN' | 'OPERADOR' | 'CENTRAL' | 'MORADOR';
+export type UserRole = 'MASTER' | 'PARCEIRO' | 'ADMIN' | 'GERENTE' | 'OPERADOR' | 'CENTRAL' | 'MORADOR';
 
 export type AuthUser = {
   id: string;
   name: string;
   email: string;
   personName?: string | null;
+  personId?: string | null;
+  phone?: string | null;
+  photoUrl?: string | null;
+  photoUri?: string | null;
+  faceStatus?: string | null;
   role: UserRole;
   permissions: string[];
   scopeType?: UserScopeType | null;

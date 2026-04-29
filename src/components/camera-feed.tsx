@@ -40,9 +40,10 @@ export function CameraFeed({
   compactErrors = false,
   showModeBadge = false,
 }: CameraFeedProps) {
-  const { token, user } = useAuth();
+  const { token, user, hydrated, loading } = useAuth();
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const { data: streamingData, error: streamingError } = useCameraStreaming(camera?.id, Boolean(camera?.id) && preferStreaming);
+  const streamingReady = Boolean(camera?.id) && preferStreaming && Boolean(token) && hydrated && !loading;
+  const { data: streamingData, error: streamingError } = useCameraStreaming(camera?.id, streamingReady);
   const previewMode = getCameraPreviewMode(camera, streamingData);
   const videoStreamUrl = getPreferredVideoStreamUrl(camera, streamingData);
   const webRtcUrl = getPreferredWebRtcUrl(camera, streamingData);
@@ -111,9 +112,18 @@ export function CameraFeed({
     if (!shouldUseVideo || !videoStreamUrl || !video) return;
 
     const isHls = videoStreamUrl.toLowerCase().split('?')[0].endsWith('.m3u8');
+    console.info('[camera-feed] URL recebida da API', {
+      cameraId: camera?.id,
+      liveUrl: camera?.liveUrl ?? streamingData?.liveUrl ?? null,
+      hlsUrl: camera?.hlsUrl ?? streamingData?.hlsUrl ?? null,
+      resolvedVideoUrl: videoStreamUrl,
+      using: isHls ? 'hls' : 'video',
+    });
+
     if (!isHls) return;
 
     if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      console.info('[camera-feed] usando HLS nativo', { cameraId: camera?.id, url: videoStreamUrl });
       video.src = videoStreamUrl;
       return;
     }
@@ -123,7 +133,7 @@ export function CameraFeed({
       destroy: () => void;
       loadSource: (source: string) => void;
       attachMedia: (media: HTMLMediaElement) => void;
-      on: (event: string, callback: () => void) => void;
+      on: (event: string, callback: (...args: any[]) => void) => void;
     } | null = null;
 
     import('hls.js')
@@ -137,11 +147,26 @@ export function CameraFeed({
           enableWorker: true,
           lowLatencyMode: true,
         });
+        console.info('[camera-feed] usando hls.js', { cameraId: camera?.id, url: videoStreamUrl });
         hlsInstance.loadSource(videoStreamUrl);
         hlsInstance.attachMedia(video);
-        hlsInstance.on(Hls.Events.ERROR, () => setFailedVideoMediaKey(mediaKey));
+        hlsInstance.on(Hls.Events.MANIFEST_LOADED, () => {
+          console.info('[camera-feed] manifest loaded', { cameraId: camera?.id, url: videoStreamUrl });
+        });
+        hlsInstance.on(Hls.Events.LEVEL_LOADED, () => {
+          console.info('[camera-feed] level loaded', { cameraId: camera?.id, url: videoStreamUrl });
+        });
+        hlsInstance.on(Hls.Events.ERROR, (_event, data) => {
+          console.error('[camera-feed] player error', { cameraId: camera?.id, url: videoStreamUrl, data });
+          if (data?.fatal) {
+            setFailedVideoMediaKey(mediaKey);
+          }
+        });
       })
-      .catch(() => setFailedVideoMediaKey(mediaKey));
+      .catch((error) => {
+        console.error('[camera-feed] erro ao inicializar hls.js', { cameraId: camera?.id, url: videoStreamUrl, error });
+        setFailedVideoMediaKey(mediaKey);
+      });
 
     return () => {
       disposed = true;
@@ -156,7 +181,10 @@ export function CameraFeed({
     const tryPlay = () => {
       const playResult = video.play();
       if (playResult && typeof playResult.catch === 'function') {
-        playResult.catch(() => setFailedVideoMediaKey((current) => current ?? mediaKey));
+        playResult.catch((error) => {
+          console.error('[camera-feed] erro real ao reproduzir video', { cameraId: camera?.id, url: videoStreamUrl, error });
+          setFailedVideoMediaKey((current) => current ?? mediaKey);
+        });
       }
     };
 

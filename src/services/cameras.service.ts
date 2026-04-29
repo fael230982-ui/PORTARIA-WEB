@@ -7,6 +7,8 @@ import {
 import type {
   Camera,
   CameraCreateRequest,
+  CameraReplayCreateRequest,
+  CameraReplayResponse,
   CameraUpdateRequest,
   CamerasListResponse,
   CameraStreamingResponse,
@@ -32,7 +34,7 @@ export const camerasService = {
     const normalized = normalizeCamerasListResponse(data);
 
     if (params?.unitId) {
-      const filteredCameras = normalized.data.filter((camera) => camera.unitId === params.unitId);
+      const filteredCameras = normalized.data.filter((camera) => camera.unitId === params.unitId || !camera.unitId);
 
       return {
         ...normalized,
@@ -54,6 +56,16 @@ export const camerasService = {
     return normalizeCamera(data);
   },
 
+  async createDetailed(payload: CameraCreateRequest) {
+    const response = await api.post<Camera>('/cameras', payload);
+    return {
+      camera: normalizeCamera(response.data),
+      status: response.status,
+      headers: response.headers,
+      body: response.data,
+    };
+  },
+
   async createAsync(payload: CameraCreateRequest): Promise<BackgroundJob> {
     const { data } = await api.post<BackgroundJob>('/cameras/async', payload);
     return data;
@@ -61,7 +73,7 @@ export const camerasService = {
 
   async update(id: string, payload: CameraUpdateRequest): Promise<Camera> {
     try {
-      const { data } = await api.put<Camera>(`/cameras/${id}`, payload);
+      const { data } = await api.patch<Camera>(`/cameras/${id}`, payload);
       return normalizeCamera(data);
     } catch (error) {
       const status = (error as { response?: { status?: number } }).response?.status;
@@ -69,7 +81,7 @@ export const camerasService = {
         throw error;
       }
 
-      const { data } = await api.patch<Camera>(`/cameras/${id}`, payload);
+      const { data } = await api.put<Camera>(`/cameras/${id}`, payload);
       return normalizeCamera(data);
     }
   },
@@ -86,6 +98,27 @@ export const camerasService = {
   async getStreaming(id: string): Promise<CameraStreamingResponse> {
     const { data } = await api.get<CameraStreamingResponse>(`/cameras/${id}/streaming`);
     return normalizeCameraStreamingResponse(data);
+  },
+
+  async provisionFaceServer(serverId: string, cameraId: string) {
+    const { data } = await api.post(`/integrations/face/servers/${serverId}/cameras/${cameraId}/provision`);
+    return data;
+  },
+
+  async createReplay(id: string, payload: CameraReplayCreateRequest): Promise<CameraReplayResponse> {
+    const { data } = await api.post<CameraReplayResponse>(`/cameras/${id}/replays`, payload);
+    return {
+      ...data,
+      replayUrl: data.replayUrl ?? null,
+    };
+  },
+
+  async getReplay(cameraId: string, replayId: string): Promise<CameraReplayResponse> {
+    const { data } = await api.get<CameraReplayResponse>(`/cameras/${cameraId}/replays/${replayId}`);
+    return {
+      ...data,
+      replayUrl: data.replayUrl ?? null,
+    };
   },
 
   getImageStreamPath(id: string, params?: { width?: number; height?: number; intervalMs?: number }) {

@@ -1,10 +1,26 @@
 import { api } from '@/lib/axios';
 import type { AccessGroup, AccessGroupPayload } from '@/types/access-group';
 
+type AccessGroupsListResponse =
+  | AccessGroup[]
+  | {
+      data?: AccessGroup[];
+      items?: AccessGroup[];
+      value?: AccessGroup[];
+    };
+
+function parseAccessGroupsList(payload: AccessGroupsListResponse): AccessGroup[] {
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.data)) return payload.data;
+  if (Array.isArray(payload?.items)) return payload.items;
+  if (Array.isArray(payload?.value)) return payload.value;
+  return [];
+}
+
 export const accessGroupsService = {
   async list(): Promise<AccessGroup[]> {
-    const { data } = await api.get<AccessGroup[]>('/access-groups');
-    return Array.isArray(data) ? data : [];
+    const { data } = await api.get<AccessGroupsListResponse>('/access-groups');
+    return parseAccessGroupsList(data);
   },
 
   async get(id: string): Promise<AccessGroup> {

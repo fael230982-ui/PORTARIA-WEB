@@ -37,6 +37,14 @@ api.interceptors.response.use(
   (error: AxiosError) => {
     if (error.response?.status === 401) {
       const authState = useAuthStore.getState();
+      const requestUrl = String(error.config?.url ?? '');
+      const responseMessage =
+        typeof error.response?.data === 'object' && error.response?.data && 'message' in error.response.data
+          ? String((error.response.data as Record<string, unknown>).message ?? '')
+          : '';
+      const isOperationPhotoSearchUnauthorized =
+        requestUrl.includes('/operation/people/search-by-photo') &&
+        responseMessage.includes('ERROR_UNAUTHORIZED');
       const sentAuthorizationHeader = Boolean(
         error.config?.headers &&
           'Authorization' in error.config.headers &&
@@ -46,7 +54,8 @@ api.interceptors.response.use(
         authState.hydrated &&
         authState.isAuthenticated &&
         Boolean(authState.token) &&
-        sentAuthorizationHeader;
+        sentAuthorizationHeader &&
+        !isOperationPhotoSearchUnauthorized;
 
       if (shouldInvalidateSession) {
         authState.clearSession();

@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from 'next';
-import type { CSSProperties } from 'react';
 import './globals.css';
+import { UppercaseInputGuard } from '@/components/forms/uppercase-input-guard';
 import { Providers } from '@/components/providers';
 import { brandConfig } from '@/config/brand';
 
@@ -23,16 +23,13 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const brandThemeStyle = {
-    '--primary': brandConfig.theme.primary,
-    '--primary-foreground': brandConfig.theme.primaryForeground,
-    '--ring': brandConfig.theme.ring,
-  } as CSSProperties;
-
   return (
-    <html lang={brandConfig.htmlLang}>
-      <body style={brandThemeStyle}>
-        <Providers>{children}</Providers>
+    <html lang={brandConfig.htmlLang} className="dark" suppressHydrationWarning>
+      <body>
+        <Providers>
+          <UppercaseInputGuard />
+          {children}
+        </Providers>
       </body>
     </html>
   );

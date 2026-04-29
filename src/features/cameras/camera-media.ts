@@ -56,13 +56,7 @@ export function resolveCameraMediaUrl(value?: string | null) {
   return url;
 }
 
-function isUnavailableLocalHlsUrl(value?: string | null) {
-  const url = String(value ?? '').trim().toLowerCase();
-  return url.includes('/media-hls/') && url.endsWith('/index.m3u8');
-}
-
 function resolvePlayableVideoUrl(value?: string | null) {
-  if (isUnavailableLocalHlsUrl(value)) return null;
   return resolveCameraMediaUrl(value);
 }
 

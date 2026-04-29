@@ -17,8 +17,6 @@ import type { Camera } from '@/types/camera';
 import type { Device } from '@/types/device';
 import type { Person } from '@/types/person';
 import type { Vehicle } from '@/types/vehicle';
-const ADMIN_MONITOR_MODE_KEY = 'admin-dashboard-monitor-mode';
-
 type AdminSnapshotCache = {
   people: Person[];
   alerts: Alert[];
@@ -452,12 +450,11 @@ export default function AdminPage() {
   const [selectedWindow, setSelectedWindow] = useState(7);
   const [devices, setDevices] = useState<Device[]>([]);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [monitorMode, setMonitorMode] = useState(false);
   const [highlightedKeys, setHighlightedKeys] = useState<string[]>([]);
   const dashboardRef = useRef<HTMLDivElement | null>(null);
   const previousMetricsRef = useRef<Record<string, number> | null>(null);
   const { user, canAccess, isChecking } = useProtectedRoute({
-    allowedRoles: ['ADMIN'],
+    allowedRoles: ['ADMIN', 'GERENTE', 'MASTER'],
   });
   const snapshotSignatureRef = useRef(getAdminSnapshotSignature(EMPTY_ADMIN_SNAPSHOT));
   const {
@@ -655,23 +652,6 @@ export default function AdminPage() {
   }, []);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    const syncMonitorMode = () => {
-      setMonitorMode(window.localStorage.getItem(ADMIN_MONITOR_MODE_KEY) === 'true');
-    };
-
-    syncMonitorMode();
-    window.addEventListener('storage', syncMonitorMode);
-    window.addEventListener('admin-monitor-mode-change', syncMonitorMode as EventListener);
-
-    return () => {
-      window.removeEventListener('storage', syncMonitorMode);
-      window.removeEventListener('admin-monitor-mode-change', syncMonitorMode as EventListener);
-    };
-  }, []);
-
-  useEffect(() => {
     if (!previousMetricsRef.current) {
       previousMetricsRef.current = trackedMetricValues;
       return;
@@ -726,7 +706,7 @@ export default function AdminPage() {
 
   if (isChecking) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-950 text-white">
+      <div className="app-shell flex min-h-screen items-center justify-center text-[color:var(--text-main)]">
         Carregando dashboard...
       </div>
     );
@@ -739,14 +719,6 @@ export default function AdminPage() {
   const pushWithContext = (pathname: string, params?: Record<string, string>) => {
     const search = new URLSearchParams(params ?? {});
     router.push(search.size ? `${pathname}?${search.toString()}` : pathname);
-  };
-
-  const toggleMonitorMode = () => {
-    if (typeof window === 'undefined') return;
-    const nextValue = !monitorMode;
-    window.localStorage.setItem(ADMIN_MONITOR_MODE_KEY, String(nextValue));
-    window.dispatchEvent(new Event('admin-monitor-mode-change'));
-    setMonitorMode(nextValue);
   };
 
   const exportAsPdf = () => {
@@ -778,7 +750,7 @@ export default function AdminPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#07111f] text-white">
+    <div className="app-shell min-h-screen text-[color:var(--text-main)]">
       <div ref={dashboardRef} className="mx-auto max-w-[1600px] space-y-6 p-4 md:p-6">
         {!isOnline ? (
           <section className="rounded-3xl border border-amber-500/25 bg-amber-500/10 p-4 text-sm text-amber-100">
@@ -801,27 +773,17 @@ export default function AdminPage() {
           </section>
         ) : null}
 
-        <section className="rounded-[2rem] border border-white/10 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.14),transparent_30%),linear-gradient(180deg,rgba(15,23,42,0.94),rgba(2,6,23,0.98))] p-5 shadow-2xl backdrop-blur">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+        <section className="app-panel-hero rounded-[2rem] border p-5 backdrop-blur">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
             <div>
               <p className="text-xs uppercase tracking-[0.22em] text-cyan-200/80">Painel analítico</p>
-              <h2 className="mt-2 text-2xl font-semibold text-white">Visão executiva</h2>
-              <p className="mt-2 max-w-3xl text-sm text-slate-300">
+              <h2 className="mt-1 text-xl font-semibold text-white">Visão executiva</h2>
+              <p className="mt-1 max-w-3xl text-sm text-slate-300">
                 Uma leitura direta do movimento, da operação e dos pontos que exigem atenção.
               </p>
             </div>
 
-            <div className="flex flex-wrap gap-2">
-              <PeriodFilter active={selectedWindow} label="Hoje" value={1} onSelect={setSelectedWindow} />
-              <PeriodFilter active={selectedWindow} label="7 dias" value={7} onSelect={setSelectedWindow} />
-              <PeriodFilter active={selectedWindow} label="30 dias" value={30} onSelect={setSelectedWindow} />
-              <button
-                type="button"
-                onClick={toggleMonitorMode}
-                className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-slate-200 transition hover:bg-white/10"
-              >
-                {monitorMode ? 'Sair do modo monitor' : 'Modo monitor'}
-              </button>
+            <div className="flex flex-wrap items-start gap-3">
               <button
                 type="button"
                 onClick={async () => {
@@ -832,28 +794,34 @@ export default function AdminPage() {
 
                   await document.exitFullscreen();
                 }}
-                className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-slate-200 transition hover:bg-white/10"
+                className="rounded-2xl border border-cyan-300/40 bg-cyan-300/20 px-5 py-3 text-sm font-semibold text-cyan-50 transition hover:bg-cyan-300/30"
               >
                 {isFullscreen ? 'Sair da tela cheia' : 'Tela cheia'}
               </button>
-              <button
-                type="button"
-                onClick={exportAsPdf}
-                className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-slate-200 transition hover:bg-white/10"
-              >
-                Exportar PDF
-              </button>
-              <button
-                type="button"
-                onClick={exportAsCsv}
-                className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-slate-200 transition hover:bg-white/10"
-              >
-                Exportar CSV
-              </button>
+              <div className="flex flex-wrap gap-2">
+                <PeriodFilter active={selectedWindow} label="Hoje" value={1} onSelect={setSelectedWindow} />
+                <PeriodFilter active={selectedWindow} label="7 dias" value={7} onSelect={setSelectedWindow} />
+                <PeriodFilter active={selectedWindow} label="30 dias" value={30} onSelect={setSelectedWindow} />
+                <button
+                  type="button"
+                  onClick={exportAsPdf}
+                  className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-slate-200 transition hover:bg-white/10"
+                >
+                  Exportar PDF
+                </button>
+                <button
+                  type="button"
+                  onClick={exportAsCsv}
+                  className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-slate-200 transition hover:bg-white/10"
+                >
+                  Exportar CSV
+                </button>
+              </div>
+
             </div>
           </div>
 
-          <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <MetricTile
               label="Cadastros"
               value={peopleLoading ? '...' : String(peopleInWindow)}

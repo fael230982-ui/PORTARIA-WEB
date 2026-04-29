@@ -9,6 +9,7 @@ import { camerasService } from '@/services/cameras.service';
 import { getPersonByCpf, suggestPersonDocumentData } from '@/services/people.service';
 import type { Unit } from '@/types/condominium';
 import type { Camera } from '@/types/camera';
+import type { AccessGroup } from '@/types/access-group';
 import type { PersonDocumentOcrSuggestionResponse, PersonDocumentType } from '@/types/person';
 import { Camera as CameraIcon, Upload, Video } from 'lucide-react';
 
@@ -26,6 +27,8 @@ export type MoradorFormData = {
   condominio: string;
   estrutura: string;
   unitId: string;
+  unitIds: string[];
+  accessGroupIds: string[];
   tipo: string;
   status: string;
   photoUrl: string;
@@ -46,6 +49,7 @@ type MoradorFormProps = {
   emailReadOnly?: boolean;
   emailHint?: string;
   cameras?: Camera[];
+  accessGroups?: AccessGroup[];
   existingResidents?: Array<{
     id: string;
     nome: string;
@@ -69,6 +73,8 @@ const defaultValues: MoradorFormData = {
   condominio: '',
   estrutura: '',
   unitId: '',
+  unitIds: [],
+  accessGroupIds: [],
   tipo: 'morador',
   status: 'ativo',
   photoUrl: '',
@@ -77,9 +83,19 @@ const defaultValues: MoradorFormData = {
 };
 
 function getInitialValues(initialData?: Partial<MoradorFormData>): MoradorFormData {
+  const initialUnitIds = normalizeSelectedUnitIds(
+    initialData?.unitIds?.length
+      ? initialData.unitIds
+      : initialData?.unitId
+        ? [initialData.unitId]
+        : []
+  );
+
   return {
     ...defaultValues,
     ...initialData,
+    unitIds: initialUnitIds,
+    unitId: initialUnitIds[0] ?? initialData?.unitId ?? '',
   };
 }
 
@@ -99,6 +115,10 @@ function getUniqueStructures(units: Unit[]) {
 
 function formatUnitOptionLabel(unit: Unit) {
   return [unit.condominium?.name, unit.structure?.label, unit.label].filter(Boolean).join(' / ') || unit.label;
+}
+
+function normalizeSelectedUnitIds(unitIds: string[]) {
+  return Array.from(new Set(unitIds.map((value) => value.trim()).filter(Boolean)));
 }
 
 function maskDocumentValue(value: string) {
@@ -143,6 +163,7 @@ export default function MoradorForm({
   emailReadOnly = false,
   emailHint,
   cameras = [],
+  accessGroups = [],
   existingResidents = [],
 }: MoradorFormProps) {
   const [form, setForm] = useState<MoradorFormData>(() => getInitialValues(initialData));
@@ -177,6 +198,11 @@ export default function MoradorForm({
       )
       .sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'));
   }, [availableUnits, form.estrutura]);
+
+  const selectedUnits = useMemo(
+    () => availableUnits.filter((unit) => form.unitIds.includes(unit.id)),
+    [availableUnits, form.unitIds]
+  );
 
   const availableCameras = useMemo(
     () => cameras.filter((camera) => camera.snapshotUrl || camera.streamUrl),
@@ -231,7 +257,7 @@ export default function MoradorForm({
       };
 
       if (field === 'estrutura') {
-        next.unitId = '';
+        next.estrutura = typeof normalizedValue === 'string' ? normalizedValue : '';
       }
 
       if (field === 'photoSource' && value !== 'camera') {
@@ -246,6 +272,38 @@ export default function MoradorForm({
 
       return next;
     });
+  };
+
+  const toggleUnitSelection = (unitId: string) => {
+    if (localError) {
+      setLocalError(null);
+    }
+
+    setForm((prev) => {
+      const nextUnitIds = prev.unitIds.includes(unitId)
+        ? prev.unitIds.filter((currentId) => currentId !== unitId)
+        : [...prev.unitIds, unitId];
+      const normalizedUnitIds = normalizeSelectedUnitIds(nextUnitIds);
+
+      return {
+        ...prev,
+        unitIds: normalizedUnitIds,
+        unitId: normalizedUnitIds[0] ?? '',
+      };
+    });
+  };
+
+  const toggleAccessGroupSelection = (groupId: string) => {
+    if (localError) {
+      setLocalError(null);
+    }
+
+    setForm((prev) => ({
+      ...prev,
+      accessGroupIds: prev.accessGroupIds.includes(groupId)
+        ? prev.accessGroupIds.filter((currentId) => currentId !== groupId)
+        : [...prev.accessGroupIds, groupId],
+    }));
   };
 
   const handleSubmit = async (event: React.FormEvent) => {
@@ -275,12 +333,17 @@ export default function MoradorForm({
       }
     }
 
-    if (!form.unitId) {
-      setLocalError('Selecione uma unidade existente.');
+    if (!form.unitIds.length) {
+      setLocalError('Selecione pelo menos uma unidade existente.');
       return;
     }
 
-    await onSubmit(form);
+    await onSubmit({
+      ...form,
+      unitIds: normalizeSelectedUnitIds(form.unitIds),
+      unitId: normalizeSelectedUnitIds(form.unitIds)[0] ?? '',
+      accessGroupIds: normalizeSelectedUnitIds(form.accessGroupIds),
+    });
   };
 
   const handlePhotoChange = (file: File | null) => {
@@ -800,7 +863,7 @@ export default function MoradorForm({
 
                 <CaptureGuidanceCard
                   title="Captura guiada do morador"
-                  description="Use uma foto frontal, nitida e bem enquadrada. Isso reduz falha de cadastro e melhora a sincronizacao facial."
+                  description="Use uma foto frontal, nítida e bem enquadrada. Isso reduz falha de cadastro e melhora a sincronização facial."
                   tips={[
                     'Rosto centralizado e sem corte',
                     'Evite tremor e contraluz',
@@ -1098,16 +1161,15 @@ export default function MoradorForm({
         </label>
 
         <label className="space-y-2">
-          <span className="text-sm text-slate-300">Estrutura</span>
+          <span className="text-sm text-slate-300">Estrutura (opcional)</span>
           <select
             value={form.estrutura}
             onChange={(e) => handleChange('estrutura', e.target.value)}
             className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none"
             disabled={catalogLoading || structureOptions.length === 0}
-            required
           >
             <option value="">
-              {catalogLoading ? 'Carregando estruturas...' : 'Selecione uma estrutura'}
+              {catalogLoading ? 'Carregando estruturas...' : 'Todas as estruturas'}
             </option>
             {structureOptions.map((option) => (
               <option key={option} value={option}>
@@ -1121,25 +1183,96 @@ export default function MoradorForm({
           </select>
         </label>
 
-        <label className="space-y-2">
-          <span className="text-sm text-slate-300">Unidade</span>
-          <select
-            value={form.unitId}
-            onChange={(e) => handleChange('unitId', e.target.value)}
-            className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none"
-            disabled={catalogLoading || filteredUnits.length === 0}
-            required
-          >
-            <option value="">
-              {catalogLoading ? 'Carregando unidades...' : 'Selecione uma unidade existente'}
-            </option>
-            {filteredUnits.map((unit) => (
-              <option key={unit.id} value={unit.id}>
-                {formatUnitOptionLabel(unit)}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div className="space-y-2 md:col-span-2">
+          <span className="text-sm text-slate-300">Unidades vinculadas</span>
+          {selectedUnits.length ? (
+            <div className="flex flex-wrap gap-2">
+              {selectedUnits.map((unit) => (
+                <button
+                  key={`selected-${unit.id}`}
+                  type="button"
+                  onClick={() => toggleUnitSelection(unit.id)}
+                  className="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-3 py-1 text-xs text-cyan-50 transition hover:bg-cyan-400/20"
+                >
+                  {formatUnitOptionLabel(unit)}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-slate-500">Selecione uma ou mais unidades para este cadastro.</p>
+          )}
+          <div className="max-h-64 space-y-2 overflow-y-auto rounded-2xl border border-white/10 bg-slate-900/70 p-3">
+            {catalogLoading ? (
+              <p className="text-sm text-slate-400">Carregando unidades...</p>
+            ) : filteredUnits.length ? (
+              filteredUnits.map((unit) => {
+                const checked = form.unitIds.includes(unit.id);
+                return (
+                  <label
+                    key={unit.id}
+                    className={`flex cursor-pointer items-start gap-3 rounded-xl border px-3 py-3 text-sm transition ${
+                      checked
+                        ? 'border-cyan-400/30 bg-cyan-400/10 text-cyan-50'
+                        : 'border-white/10 bg-white/5 text-slate-200 hover:bg-white/10'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleUnitSelection(unit.id)}
+                      className="mt-0.5 h-4 w-4"
+                    />
+                    <span className="leading-5">{formatUnitOptionLabel(unit)}</span>
+                  </label>
+                );
+              })
+            ) : (
+              <p className="text-sm text-slate-400">Nenhuma unidade disponível com esse filtro.</p>
+            )}
+          </div>
+        </div>
+
+        {accessGroups.length ? (
+          <div className="space-y-2 md:col-span-2">
+            <span className="text-sm text-slate-300">Grupos de acesso físico</span>
+            <div className="rounded-2xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-xs text-amber-100">
+              Selecione os grupos que autorizam abertura física. Se nenhum grupo for selecionado, a pessoa pode ficar com foto cadastrada, mas sem permissão de abertura.
+            </div>
+            <div className="max-h-56 space-y-2 overflow-y-auto rounded-2xl border border-white/10 bg-slate-900/70 p-3">
+              {accessGroups.map((group) => {
+                const checked = form.accessGroupIds.includes(group.id);
+                return (
+                  <label
+                    key={group.id}
+                    className={`flex cursor-pointer items-start gap-3 rounded-xl border px-3 py-3 text-sm transition ${
+                      checked
+                        ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-50'
+                        : 'border-white/10 bg-white/5 text-slate-200 hover:bg-white/10'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleAccessGroupSelection(group.id)}
+                      className="mt-0.5 h-4 w-4"
+                    />
+                    <span className="leading-5">
+                      <span className="block font-medium">{group.name}</span>
+                      <span className="text-xs text-slate-400">
+                        {(group.personIds?.length ?? 0)} pessoa(s) | {(group.cameraIds?.length ?? 0)} câmera(s)
+                        {group.faceListName ? ` | lista ${group.faceListName}` : ''}
+                      </span>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-xs text-amber-100 md:col-span-2">
+            Nenhum grupo de acesso físico está cadastrado. A foto pode ser salva, mas a permissão de abertura precisa ser confirmada depois.
+          </div>
+        )}
 
         <label className="space-y-2">
           <span className="text-sm text-slate-300">Tipo</span>
@@ -1227,7 +1360,7 @@ export default function MoradorForm({
       </div>
 
       <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-xs text-slate-400">
-        O morador será vinculado a uma unidade já cadastrada. A criação de unidade deve ser feita separadamente.
+        O cadastro pode ser vinculado a uma ou mais unidades já existentes. A criação de unidade continua sendo feita separadamente.
       </div>
 
       <div className="flex flex-wrap justify-end gap-3 pt-2">

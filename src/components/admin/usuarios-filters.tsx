@@ -61,7 +61,7 @@ export function UsuariosFilters({ onChange }: Props) {
             setSearch(value);
             emit(value, status, profile);
           }}
-          placeholder="Buscar por nome, e-mail ou funcao..."
+          placeholder="Buscar por nome, e-mail ou função..."
           className="border-white/10 bg-slate-950/60 pl-10 text-white placeholder:text-slate-500"
         />
       </div>

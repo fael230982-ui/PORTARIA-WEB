@@ -9,7 +9,9 @@ export function useCameraStreaming(cameraId?: string | null, enabled = true) {
     queryKey: ['camera-streaming', cameraId],
     queryFn: () => camerasService.getStreaming(cameraId as string),
     enabled: Boolean(cameraId) && enabled,
-    staleTime: 30 * 1000,
-    retry: 1,
+    staleTime: 0,
+    retry: 2,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
   });
 }

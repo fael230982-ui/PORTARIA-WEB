@@ -119,7 +119,14 @@ export type MasterOperationDevice = {
   metadata?: Record<string, unknown> | null;
 };
 
-type ApiListResponse<T> = T[] | { data?: T[] | null };
+type ApiListResponse<T> =
+  | T[]
+  | {
+      data?: T[] | null;
+      items?: T[] | null;
+      value?: T[] | null;
+      Count?: number | null;
+    };
 
 type ApiMasterClient = Condominium & {
   clientType?: ClientKind | null;
@@ -148,8 +155,24 @@ function normalizeClient(raw: ApiMasterClient): Condominium {
 }
 
 function normalizeClientList(response: ApiListResponse<ApiMasterClient>): Condominium[] {
-  const items = Array.isArray(response) ? response : Array.isArray(response.data) ? response.data : [];
+  const items = Array.isArray(response)
+    ? response
+    : Array.isArray(response.data)
+      ? response.data
+      : Array.isArray(response.items)
+        ? response.items
+        : Array.isArray(response.value)
+          ? response.value
+          : [];
   return items.map(normalizeClient);
+}
+
+function parsePermissionMatrix(response: ApiListResponse<PermissionMatrixItem>) {
+  if (Array.isArray(response)) return response;
+  if (Array.isArray(response.data)) return response.data;
+  if (Array.isArray(response.items)) return response.items;
+  if (Array.isArray(response.value)) return response.value;
+  return [];
 }
 
 function toMasterModuleKey(value: string) {
@@ -217,8 +240,8 @@ function toCondominiumPayload(payload: MasterClientCreatePayload | MasterClientP
 export const masterService = {
   async getPermissionsMatrix(): Promise<PermissionMatrixItem[]> {
     try {
-      const response = await api.get<PermissionMatrixItem[]>('/auth/permissions-matrix');
-      return Array.isArray(response.data) ? response.data : [];
+      const response = await api.get<ApiListResponse<PermissionMatrixItem>>('/auth/permissions-matrix');
+      return parsePermissionMatrix(response.data);
     } catch (error) {
       if (!isUnsupportedContract(error)) throw error;
       return [];

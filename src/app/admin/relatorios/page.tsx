@@ -137,7 +137,7 @@ function EmptyState({
 
 export default function RelatoriosPage() {
   const { user, canAccess, isChecking } = useProtectedRoute({
-    allowedRoles: ['ADMIN', 'MASTER'],
+    allowedRoles: ['ADMIN', 'GERENTE', 'MASTER'],
   });
 
   const [searchTerm, setSearchTerm] = useState('');

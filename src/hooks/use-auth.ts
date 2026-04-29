@@ -1,7 +1,33 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useAuthStore } from '@/store/auth.store';
+import { useAuthStore, type AuthUser } from '@/store/auth.store';
+
+type PersistedAuthStorage = {
+  state?: {
+    token?: string | null;
+    user?: AuthUser | null;
+  };
+};
+
+function readPersistedSession() {
+  if (typeof window === 'undefined') return null;
+
+  try {
+    const raw = window.localStorage.getItem('auth-storage');
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw) as PersistedAuthStorage;
+    const token = parsed?.state?.token ?? null;
+    const user = parsed?.state?.user ?? null;
+
+    if (!token || !user) return null;
+
+    return { token, user };
+  } catch {
+    return null;
+  }
+}
 
 export const useAuth = () => {
   const {
@@ -13,26 +39,36 @@ export const useAuth = () => {
     setSession,
     setUser,
     clearSession,
-    hydrateSession,
     setLoading,
   } = useAuthStore();
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    if (!hydrated) {
-      hydrateSession();
-    }
-
-    const fallbackTimer = window.setTimeout(() => {
+    const syncPersistedSession = () => {
       const state = useAuthStore.getState();
       if (!state.hydrated || state.loading) {
-        state.hydrateSession();
+        const persistedSession = readPersistedSession();
+
+        if (persistedSession) {
+          state.setSession(persistedSession.token, persistedSession.user);
+          return true;
+        }
+
+        state.clearSession();
+        return true;
       }
+      return false;
+    };
+
+    syncPersistedSession();
+
+    const fallbackTimer = window.setTimeout(() => {
+      syncPersistedSession();
     }, 1200);
 
     return () => window.clearTimeout(fallbackTimer);
-  }, [hydrated, hydrateSession, loading]);
+  }, [clearSession, hydrated, loading, setSession]);
 
   return {
     token,
@@ -43,7 +79,6 @@ export const useAuth = () => {
     setSession,
     setUser,
     clearSession,
-    hydrateSession,
     setLoading,
   };
 };

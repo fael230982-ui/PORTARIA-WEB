@@ -35,7 +35,7 @@ function formatDate(value?: string | null) {
 export default function DeliveryDetailsPage() {
   const params = useParams<{ id: string }>();
   const { user, canAccess, isChecking } = useProtectedRoute({
-    allowedRoles: ['ADMIN', 'MASTER', 'OPERADOR'],
+    allowedRoles: ['ADMIN', 'GERENTE', 'MASTER', 'OPERADOR'],
   });
   const { data, isLoading } = useAllDeliveries({ limit: 100, enabled: Boolean(user) });
   const deliveries = useMemo(() => normalizeDeliveries(data), [data]);

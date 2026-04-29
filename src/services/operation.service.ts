@@ -265,13 +265,24 @@ export const operationService = {
     const photoBase64 = payload.photoBase64?.trim();
     const photoUrl = payload.photoUrl?.trim();
     const cameraId = payload.cameraId?.trim();
+    const unitId = payload.unitId?.trim();
     const sourcePayload = photoBase64 ? { photoBase64 } : photoUrl ? { photoUrl } : cameraId ? { cameraId } : {};
 
-    const response = await api.post<ApiOperationPhotoSearchResponse>('/operation/people/search-by-photo', {
-      ...sourcePayload,
-      fileName: payload.fileName ?? null,
-      maxMatches: payload.maxMatches ?? 5,
-    });
+    const response = await api.post<ApiOperationPhotoSearchResponse>(
+      '/operation/people/search-by-photo',
+      {
+        ...sourcePayload,
+        fileName: payload.fileName ?? null,
+        maxMatches: payload.maxMatches ?? 5,
+      },
+      unitId
+        ? {
+            headers: {
+              'X-Selected-Unit-Id': unitId,
+            },
+          }
+        : undefined
+    );
     return normalizePhotoSearchResponse(response.data);
   },
 

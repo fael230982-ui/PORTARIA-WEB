@@ -56,8 +56,8 @@ export const brandConfig: AppBrandConfig = {
   topbarTitle: 'Plataforma de segurança e operação condominial',
   developmentLabel: 'Desenvolvimento',
   navigation: {
-    activeItemClassName: 'bg-white text-slate-950',
-    inactiveItemClassName: 'text-slate-300 hover:bg-white/10 hover:text-white',
+    activeItemClassName: 'app-nav-active',
+    inactiveItemClassName: 'app-nav-inactive',
   },
   metadata: {
     title: 'Portaria Web',

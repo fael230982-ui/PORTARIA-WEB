@@ -115,7 +115,7 @@ export default function ResidentDeliveriesPage() {
                     </div>
                   ) : (
                     <div className="mt-4 rounded-xl border border-dashed border-white/10 bg-slate-950/40 p-4 text-sm text-slate-400">
-                      Esta encomenda nao possui foto disponivel.
+                      Esta encomenda não possui foto disponível.
                     </div>
                   )}
 
@@ -134,7 +134,7 @@ export default function ResidentDeliveriesPage() {
                     <div className={`mt-4 rounded-lg border p-4 text-sm text-white ${brandClasses.softAccentPanel}`}>
                       <div className="flex items-center gap-2">
                         <QrCode className="h-4 w-4" />
-                        Codigo de retirada disponivel
+                        Código de retirada disponível
                       </div>
                       <div className="mt-3 overflow-hidden rounded-xl border border-white/10 bg-white p-3">
                         <img

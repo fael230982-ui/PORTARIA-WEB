@@ -125,12 +125,12 @@ function PendingList({
 }
 
 export default function AdminPendenciasPage() {
-  const { user, canAccess, isChecking } = useProtectedRoute({ allowedRoles: ['ADMIN', 'MASTER', 'OPERADOR'] });
+  const { user, canAccess, isChecking } = useProtectedRoute({ allowedRoles: ['ADMIN', 'GERENTE', 'MASTER', 'OPERADOR'] });
   const { data: deliveriesData, refetch: refetchDeliveries } = useAllDeliveries({ limit: 100, enabled: Boolean(user) });
   const { data: camerasData, refetch: refetchCameras } = useCameras({ enabled: Boolean(user) });
   const { data: peopleData, refetch: refetchPeople } = useAllPeople({ limit: 200, enabled: Boolean(user) });
   const { data: vehiclesData, refetch: refetchVehicles } = useVehicles(Boolean(user));
-  const { units, refetchAll: refetchCatalog } = useResidenceCatalog(Boolean(user), user?.role === 'ADMIN' ? user.condominiumId ?? undefined : undefined);
+  const { units, refetchAll: refetchCatalog } = useResidenceCatalog(Boolean(user), ['ADMIN', 'GERENTE'].includes(user?.role ?? '') ? user?.condominiumId ?? undefined : undefined);
   const [referenceNow] = useState(() => Date.now());
 
   const deliveries = deliveriesData?.data ?? [];
@@ -174,7 +174,7 @@ export default function AdminPendenciasPage() {
             <p className="text-xs uppercase tracking-[0.22em] text-slate-400">Operação</p>
             <h1 className="mt-2 text-2xl font-semibold">Pendências da portaria</h1>
             <p className="mt-2 max-w-2xl text-sm text-slate-400 text-justify">
-              Visão única dos pontos que exigem atenção com base nos dados disponíveis.
+              Aqui ficam reunidos os pontos que exigem revisão manual: encomendas atrasadas, câmeras offline, pessoas com cadastro incompleto, unidades sem morador e veículos pendentes.
             </p>
           </div>
           <button

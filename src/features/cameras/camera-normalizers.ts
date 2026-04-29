@@ -15,9 +15,16 @@ type CameraApiShape = Partial<Camera> & {
   hls_url?: string | null;
   web_rtc_url?: string | null;
   vms_streaming_url?: string | null;
+  stream_external_id?: string | null;
+  vms_device_id?: number | null;
+  vms_device_item_id?: number | null;
+  vms_recording_server_id?: number | null;
+  vms_server_id?: string | null;
   engine_stream_id?: number | null;
   engine_stream_uuid?: string | null;
   face_analytics_id?: number | null;
+  face_engine_server_id?: string | null;
+  face_engine_server_name?: string | null;
   last_seen?: string | null;
 };
 
@@ -63,10 +70,17 @@ export function normalizeCamera(raw: CameraApiShape): Camera {
     hlsUrl: resolveCameraMediaUrl(normalizeString(raw.hlsUrl) ?? normalizeString(raw.hls_url)),
     webRtcUrl: resolveCameraMediaUrl(normalizeString(raw.webRtcUrl) ?? normalizeString(raw.web_rtc_url)),
     vmsStreamingUrl: normalizeString(raw.vmsStreamingUrl) ?? normalizeString(raw.vms_streaming_url),
+    streamExternalId: normalizeString(raw.streamExternalId) ?? normalizeString(raw.stream_external_id),
+    vmsDeviceId: raw.vmsDeviceId ?? raw.vms_device_id ?? null,
+    vmsDeviceItemId: raw.vmsDeviceItemId ?? raw.vms_device_item_id ?? null,
+    vmsRecordingServerId: raw.vmsRecordingServerId ?? raw.vms_recording_server_id ?? null,
+    vmsServerId: normalizeString(raw.vmsServerId) ?? normalizeString(raw.vms_server_id),
     lastSeen: normalizeString(raw.lastSeen) ?? normalizeString(raw.last_seen),
     engineStreamId: raw.engineStreamId ?? raw.engine_stream_id ?? null,
     engineStreamUuid: normalizeString(raw.engineStreamUuid) ?? normalizeString(raw.engine_stream_uuid),
     faceAnalyticsId: raw.faceAnalyticsId ?? raw.face_analytics_id ?? null,
+    faceEngineServerId: normalizeString(raw.faceEngineServerId) ?? normalizeString(raw.face_engine_server_id),
+    faceEngineServerName: normalizeString(raw.faceEngineServerName) ?? normalizeString(raw.face_engine_server_name),
     unitId: normalizeString(raw.unitId),
     personId: normalizeString(raw.personId),
   };

@@ -9,14 +9,12 @@ import { useRouter } from 'next/navigation';
 
 type HeaderProps = {
   title: string;
-  subtitle?: string;
   onToggleSidebar: () => void;
   sidebarCollapsed: boolean;
 };
 
 export function Header({
   title,
-  subtitle,
   onToggleSidebar,
   sidebarCollapsed,
 }: HeaderProps) {
@@ -33,7 +31,7 @@ export function Header({
 
   return (
     <header className="sticky top-0 z-30 border-b border-white/10 bg-slate-950/90 backdrop-blur">
-      <div className="flex h-16 items-center justify-between gap-4 px-4 md:px-6">
+      <div className="flex h-12 items-center justify-between gap-3 px-3 md:px-4">
         <div className="flex items-center gap-3">
           <button
             type="button"
@@ -44,18 +42,17 @@ export function Header({
             {sidebarCollapsed ? <PanelLeftOpen className="h-5 w-5" /> : <PanelLeftClose className="h-5 w-5" />}
           </button>
 
-          <div className="flex items-center gap-4">
-            <BrandMark collapsed imageClassName="h-8 w-auto object-contain" />
+          <div className="flex items-center gap-3">
+            <BrandMark collapsed imageClassName="h-7 w-auto object-contain" />
             <div>
-              <h1 className="text-lg font-semibold text-white">{title}</h1>
-              {subtitle ? <p className="text-xs text-slate-400">{subtitle}</p> : null}
+              <h1 className="text-sm font-semibold text-white md:text-base">{title}</h1>
             </div>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
-          {user?.role === 'ADMIN' ? (
-            <div className="hidden rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-right md:block">
+          {user?.role === 'ADMIN' || user?.role === 'GERENTE' ? (
+            <div className="hidden rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-right md:block">
               <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Condomínio</p>
               <p className="text-sm font-medium text-white">
                 {condominiumName ?? (isLoading ? 'Carregando...' : 'Não vinculado')}

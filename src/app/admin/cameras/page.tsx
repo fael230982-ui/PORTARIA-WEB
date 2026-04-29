@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -21,14 +21,19 @@ import { useProtectedRoute } from '@/hooks/use-protected-route';
 import { useCameras } from '@/hooks/use-cameras';
 import { useResidenceCatalog } from '@/hooks/use-residence-catalog';
 import { camerasService } from '@/services/cameras.service';
+import { faceEngineServersService } from '@/services/face-engine-servers.service';
 import { jobsService } from '@/services/jobs.service';
+import { vmsServersService } from '@/services/vms-servers.service';
 import { CrudModal } from '@/components/admin/CrudModal';
 import { CameraFeed } from '@/components/camera-feed';
+import { CameraPlayer } from '@/components/operacao/camera-player';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { getCameraDiagnostics } from '@/features/cameras/camera-media';
+import { TimedAlert } from '@/components/ui/timed-alert';
+import { useAuthStore } from '@/store/auth.store';
 import type {
   Camera as CameraRecord,
   CameraCreateRequest,
@@ -36,7 +41,9 @@ import type {
   CameraDeviceUsageType,
   CameraStatus,
 } from '@/types/camera';
+import type { FaceEngineServer } from '@/types/face-engine-server';
 import type { BackgroundJob } from '@/types/job';
+import type { VmsExistingCamera, VmsExistingCameraLookupResponse, VmsServer } from '@/types/vms-server';
 
 type Filters = {
   search: string;
@@ -54,6 +61,13 @@ type CameraFormData = {
   engineStreamId: string;
   engineStreamUuid: string;
   faceAnalyticsId: string;
+  faceEngineServerId: string;
+  vmsServerId: string;
+  vmsExistingCameraId: string;
+  streamExternalId: string;
+  vmsDeviceId: string;
+  vmsDeviceItemId: string;
+  vmsRecordingServerId: string;
   status: CameraStatus;
   unitId: string;
 };
@@ -68,13 +82,19 @@ const initialForm: CameraFormData = {
   engineStreamId: '',
   engineStreamUuid: '',
   faceAnalyticsId: '',
+  faceEngineServerId: '',
+  vmsServerId: '',
+  vmsExistingCameraId: '',
+  streamExternalId: '',
+  vmsDeviceId: '',
+  vmsDeviceItemId: '',
+  vmsRecordingServerId: '',
   status: 'OFFLINE',
   unitId: '',
 };
 
 const DEVICE_TYPE_OPTIONS: Array<{ value: CameraDeviceType; label: string }> = [
   { value: 'CAMERA', label: 'Câmera comum' },
-  { value: 'IA_FACES', label: 'IA Faces' },
   { value: 'CAMERA_IA', label: 'Câmera IA' },
   { value: 'FACIAL_DEVICE', label: 'Dispositivo Facial' },
 ];
@@ -89,6 +109,7 @@ const DEVICE_USAGE_OPTIONS: Array<{ value: CameraDeviceUsageType; label: string 
 const CAMERA_RTSP_JOB_STORAGE_KEY = 'admin-cameras-last-rtsp-job';
 const CAMERAS_SNAPSHOT_STORAGE_KEY = 'admin-cameras-snapshot';
 const CAMERAS_LOCAL_DRAFTS_STORAGE_KEY = 'admin-cameras-local-drafts';
+const VMS_SERVERS_STORAGE_KEY = 'admin-vms-servers-snapshot';
 
 type LocalCameraSyncState = 'PENDING' | 'RUNNING' | 'SUCCEEDED' | 'FAILED';
 
@@ -118,7 +139,7 @@ function isLocalCameraDraft(camera: CameraRecord | LocalCameraDraft): camera is 
 }
 
 function supportsDeviceUsageType(deviceType: CameraDeviceType) {
-  return deviceType === 'IA_FACES' || deviceType === 'CAMERA_IA' || deviceType === 'FACIAL_DEVICE';
+  return deviceType === 'CAMERA_IA' || deviceType === 'FACIAL_DEVICE';
 }
 
 function normalizeString(value: unknown) {
@@ -140,7 +161,6 @@ function getCameraStatusLabel(status: CameraStatus | string) {
 }
 
 function getCameraDeviceTypeLabel(deviceType: CameraDeviceType | string | null | undefined) {
-  if (deviceType === 'IA_FACES') return 'IA Faces';
   if (deviceType === 'CAMERA_IA') return 'Câmera IA';
   if (deviceType === 'FACIAL_DEVICE') return 'Dispositivo Facial';
   return 'Câmera comum';
@@ -152,6 +172,15 @@ function getCameraDeviceUsageLabel(deviceUsageType: CameraDeviceUsageType | stri
   if (deviceUsageType === 'MONITORING') return 'Monitoramento';
   if (deviceUsageType === 'PASSAGE') return 'Passagem';
   return 'Não configurado';
+}
+
+function getCameraUnitLabel(
+  camera: Pick<CameraRecord, 'unitId'>,
+  units: Array<{ id: string; label: string; location: string }>
+) {
+  if (!camera.unitId) return 'Área comum do condomínio';
+
+  return units.find((unit) => unit.id === camera.unitId)?.location || 'Unidade não identificada';
 }
 
 function buildLocalCameraDraft(form: CameraFormData, job?: BackgroundJob | null): LocalCameraDraft {
@@ -178,6 +207,13 @@ function buildLocalCameraDraft(form: CameraFormData, job?: BackgroundJob | null)
     engineStreamId: form.engineStreamId.trim() ? Number(form.engineStreamId) || null : null,
     engineStreamUuid: form.engineStreamUuid.trim() || null,
     faceAnalyticsId: form.faceAnalyticsId.trim() ? Number(form.faceAnalyticsId) || null : null,
+    faceEngineServerId: form.faceEngineServerId.trim() || null,
+    faceEngineServerName: null,
+    streamExternalId: form.streamExternalId.trim() || null,
+    vmsDeviceId: form.vmsDeviceId.trim() ? Number(form.vmsDeviceId) || null : null,
+    vmsDeviceItemId: form.vmsDeviceItemId.trim() ? Number(form.vmsDeviceItemId) || null : null,
+    vmsRecordingServerId: form.vmsRecordingServerId.trim() ? Number(form.vmsRecordingServerId) || null : null,
+    vmsServerId: form.vmsServerId.trim() || null,
     unitId: form.unitId || null,
     personId: null,
     localOnly: true,
@@ -192,8 +228,52 @@ function cameraMatchesDraft(camera: CameraRecord, draft: LocalCameraDraft) {
   const sameName = normalizeString(camera.name) === normalizeString(draft.name);
   const sameStream = normalizeString(camera.streamUrl) === normalizeString(draft.streamUrl);
   const sameSnapshot = normalizeString(camera.snapshotUrl) === normalizeString(draft.snapshotUrl);
+  const sameEngineStreamId =
+    camera.engineStreamId != null &&
+    draft.engineStreamId != null &&
+    camera.engineStreamId === draft.engineStreamId;
+  const sameFaceAnalyticsId =
+    camera.faceAnalyticsId != null &&
+    draft.faceAnalyticsId != null &&
+    camera.faceAnalyticsId === draft.faceAnalyticsId;
 
-  return sameUnit && ((sameName && sameStream) || (sameName && sameSnapshot) || (sameStream && sameSnapshot));
+  return (
+    sameUnit &&
+    (
+      (sameName && sameStream) ||
+      (sameName && sameSnapshot) ||
+      (sameStream && sameSnapshot) ||
+      sameEngineStreamId ||
+      sameFaceAnalyticsId ||
+      sameName
+    )
+  );
+}
+
+function isDraftExpired(draft: LocalCameraDraft) {
+  const createdAt = new Date(draft.localCreatedAt).getTime();
+  if (Number.isNaN(createdAt)) return false;
+  const ageMs = Date.now() - createdAt;
+
+  if (draft.localSyncState === 'FAILED') {
+    return ageMs > 5 * 60 * 1000;
+  }
+
+  if (draft.localSyncState === 'SUCCEEDED') {
+    return ageMs > 10 * 60 * 1000;
+  }
+
+  return false;
+}
+
+function shouldKeepLocalDraft(draft: LocalCameraDraft) {
+  if (isDraftExpired(draft)) return false;
+
+  if (draft.localSyncState === 'PENDING' || draft.localSyncState === 'RUNNING') {
+    return true;
+  }
+
+  return false;
 }
 
 function isRtspStreamUrl(value: string | null | undefined) {
@@ -236,7 +316,7 @@ function humanizeCameraBackendMessage(message: string) {
   }
 
   if (normalized.includes('deviceusagetype')) {
-    return 'O uso do dispositivo só pode ser informado para IA Faces, Câmera IA e Dispositivo Facial.';
+    return 'O uso do dispositivo só pode ser informado para Câmera IA e Dispositivo Facial.';
   }
 
   return message;
@@ -290,7 +370,7 @@ function getCameraErrorMessage(error: unknown, fallback: string) {
 
   const normalizedFallbackMessage = `${String(detail ?? '')} ${String(message ?? '')}`.toLowerCase();
   if (normalizedFallbackMessage.includes('deviceusagetype')) {
-    return 'O uso do dispositivo só pode ser informado para IA Faces, Câmera IA e Dispositivo Facial.';
+    return 'O uso do dispositivo só pode ser informado para Câmera IA e Dispositivo Facial.';
   }
 
   if (maybeApiError.response.status === 500) {
@@ -314,6 +394,72 @@ function getCameraErrorMessage(error: unknown, fallback: string) {
     : fallback;
 }
 
+function toPlainHeaders(headers: unknown) {
+  if (!headers || typeof headers !== 'object') return {};
+  return Object.fromEntries(
+    Object.entries(headers as Record<string, unknown>).map(([key, value]) => [key, Array.isArray(value) ? value.join(', ') : String(value)])
+  );
+}
+
+function getCameraRequestUrl(path: string) {
+  if (typeof window !== 'undefined') {
+    return new URL(`/api/proxy${path}`, window.location.origin).toString();
+  }
+
+  return `/api/proxy${path}`;
+}
+
+function logCameraCreateDiagnostics(params: {
+  mode: 'reaproveitar-camera-vms' | 'fallback-criar-camera-vms' | 'cadastro-camera';
+  payload: CameraCreateRequest;
+  vmsServerId: string | null;
+  user: { email?: string | null; role?: string | null } | null;
+  authorizationPreview: string | null;
+  response?: { status?: number; data?: unknown; headers?: unknown };
+  error?: unknown;
+}) {
+  const timestamp = new Date().toISOString();
+  const requestUrl = getCameraRequestUrl('/cameras');
+  const groupedTitle = `[camera-vms] ${params.mode} ${timestamp}`;
+  const axiosError = params.error as {
+    response?: { status?: number; data?: unknown; headers?: unknown };
+    message?: string;
+  } | null;
+
+  const responseStatus = params.response?.status ?? axiosError?.response?.status ?? null;
+  const responseBody = params.response?.data ?? axiosError?.response?.data ?? null;
+  const responseHeaders = params.response?.headers ?? axiosError?.response?.headers ?? null;
+
+  console.groupCollapsed(groupedTitle);
+  console.info('Método', 'POST');
+  console.info('URL completa', requestUrl);
+  console.info('Horário exato', timestamp);
+  console.info('Ambiente/host', typeof window !== 'undefined' ? window.location.origin : 'server');
+  console.info('server_id usado', params.vmsServerId);
+  console.info('Usuário logado', params.user);
+  console.info('Token usado na chamada', params.authorizationPreview);
+  console.info('Payload final enviado', params.payload);
+  console.info('Payload usa camelCase', true);
+  console.info('deviceType enviado', params.payload.deviceType);
+  console.info('Campos VMS enviados', {
+    streamExternalId: params.payload.streamExternalId ?? null,
+    vmsDeviceId: params.payload.vmsDeviceId ?? null,
+    vmsDeviceItemId: params.payload.vmsDeviceItemId ?? null,
+    vmsRecordingServerId: params.payload.vmsRecordingServerId ?? null,
+    vmsServerId: params.payload.vmsServerId ?? null,
+    streamUrl: params.payload.streamUrl ?? null,
+    unitId: params.payload.unitId ?? null,
+    condominiumId: (params.payload as CameraCreateRequest & { condominiumId?: string | null }).condominiumId ?? null,
+  });
+  console.info('Status HTTP retornado', responseStatus);
+  console.info('Response body completo', responseBody);
+  console.info('Response headers principais', toPlainHeaders(responseHeaders));
+  if (axiosError?.message) {
+    console.error('Mensagem bruta do erro', axiosError.message);
+  }
+  console.groupEnd();
+}
+
 function cameraToFormData(camera: CameraRecord): CameraFormData {
   return {
     name: camera.name ?? '',
@@ -328,21 +474,30 @@ function cameraToFormData(camera: CameraRecord): CameraFormData {
     engineStreamId: camera.engineStreamId != null ? String(camera.engineStreamId) : '',
     engineStreamUuid: camera.engineStreamUuid ?? '',
     faceAnalyticsId: camera.faceAnalyticsId != null ? String(camera.faceAnalyticsId) : '',
+    faceEngineServerId: camera.faceEngineServerId ?? '',
+    vmsServerId: camera.vmsServerId ?? '',
+    vmsExistingCameraId: '',
+    streamExternalId: camera.streamExternalId ?? '',
+    vmsDeviceId: camera.vmsDeviceId != null ? String(camera.vmsDeviceId) : '',
+    vmsDeviceItemId: camera.vmsDeviceItemId != null ? String(camera.vmsDeviceItemId) : '',
+    vmsRecordingServerId: camera.vmsRecordingServerId != null ? String(camera.vmsRecordingServerId) : '',
     status: camera.status,
     unitId: camera.unitId ?? '',
   };
 }
 
 function buildCameraPayload(form: CameraFormData): CameraCreateRequest {
+  const hasFaceServer = Boolean(form.faceEngineServerId.trim());
+  const effectiveDeviceType: CameraDeviceType = hasFaceServer ? 'CAMERA' : form.deviceType;
   const payload: CameraCreateRequest = {
     name: form.name.trim(),
-    deviceType: form.deviceType,
+    deviceType: effectiveDeviceType,
     monitoringEnabled: true,
-    residentVisible: false,
+    residentVisible: !form.unitId,
     status: getAutomaticCameraStatusFromForm(form),
   };
 
-  payload.deviceUsageType = supportsDeviceUsageType(form.deviceType) ? form.deviceUsageType || null : null;
+  payload.deviceUsageType = hasFaceServer ? null : supportsDeviceUsageType(effectiveDeviceType) ? form.deviceUsageType || null : null;
 
   payload.location = form.location.trim() || null;
   payload.streamSourceType = form.streamUrl.trim() ? 'RTSP' : null;
@@ -351,6 +506,12 @@ function buildCameraPayload(form: CameraFormData): CameraCreateRequest {
   payload.eventExternalId = form.engineStreamId.trim() || null;
   payload.eventIntegrationVendor = form.engineStreamUuid.trim() || null;
   payload.eventIntegrationModel = form.faceAnalyticsId.trim() || null;
+  payload.faceEngineServerId = form.faceEngineServerId.trim() || null;
+  payload.streamExternalId = form.streamExternalId.trim() || null;
+  payload.vmsDeviceId = form.vmsDeviceId.trim() ? Number(form.vmsDeviceId) || null : null;
+  payload.vmsDeviceItemId = form.vmsDeviceItemId.trim() ? Number(form.vmsDeviceItemId) || null : null;
+  payload.vmsRecordingServerId = form.vmsRecordingServerId.trim() ? Number(form.vmsRecordingServerId) || null : null;
+  payload.vmsServerId = form.vmsServerId.trim() || null;
   payload.unitId = form.unitId || null;
 
   return payload;
@@ -399,6 +560,8 @@ function CameraForm({
   onCancel,
   loading = false,
   units,
+  faceEngineServers,
+  vmsServers,
   requireUnit = false,
 }: {
   initialData: Partial<CameraFormData>;
@@ -406,6 +569,8 @@ function CameraForm({
   onCancel: () => void;
   loading: boolean;
   units: Array<{ id: string; label: string; location: string }>;
+  faceEngineServers: FaceEngineServer[];
+  vmsServers: VmsServer[];
   requireUnit: boolean;
 }) {
   const [form, setForm] = useState<CameraFormData>({
@@ -413,6 +578,45 @@ function CameraForm({
     ...initialData,
   });
   const usageTypeEnabled = supportsDeviceUsageType(form.deviceType);
+  const [vmsExistingCameras, setVmsExistingCameras] = useState<VmsExistingCamera[]>([]);
+  const [vmsLookupLoading, setVmsLookupLoading] = useState(false);
+  const [vmsLookupMessage, setVmsLookupMessage] = useState<string | null>(null);
+  const [vmsShouldCreateNewCamera, setVmsShouldCreateNewCamera] = useState(false);
+
+  useEffect(() => {
+    if (!form.vmsServerId.trim()) {
+      setVmsExistingCameras([]);
+      setVmsLookupMessage(null);
+      setVmsShouldCreateNewCamera(false);
+      return;
+    }
+
+    let active = true;
+    setVmsLookupLoading(true);
+    void vmsServersService
+      .listExistingCameras(form.vmsServerId.trim())
+      .then((result: VmsExistingCameraLookupResponse) => {
+        if (!active) return;
+        setVmsExistingCameras(result.items);
+        setVmsLookupMessage(result.message ?? null);
+        setVmsShouldCreateNewCamera(Boolean(result.shouldCreateNewCamera));
+      })
+      .catch(() => {
+        if (!active) return;
+        setVmsExistingCameras([]);
+        setVmsLookupMessage('Não foi possível consultar as câmeras desse servidor VMS agora.');
+        setVmsShouldCreateNewCamera(false);
+      })
+      .finally(() => {
+        if (active) {
+          setVmsLookupLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [form.vmsServerId]);
 
   const setField = (field: keyof CameraFormData, value: string) => {
     setForm((prev) => {
@@ -425,7 +629,47 @@ function CameraForm({
         };
       }
 
+      if (field === 'vmsServerId') {
+        return {
+          ...prev,
+          vmsServerId: value,
+          vmsExistingCameraId: '',
+          streamExternalId: '',
+          vmsDeviceId: '',
+          vmsDeviceItemId: '',
+          vmsRecordingServerId: '',
+        };
+      }
+
       return { ...prev, [field]: value };
+    });
+  };
+
+  const handleExistingVmsCameraSelect = (cameraId: string) => {
+    const selectedCamera = vmsExistingCameras.find((item) => String(item.cameraId) === cameraId);
+
+    setForm((prev) => {
+      if (!selectedCamera) {
+        return {
+          ...prev,
+          vmsExistingCameraId: '',
+          streamExternalId: '',
+          vmsDeviceId: '',
+          vmsDeviceItemId: '',
+          vmsRecordingServerId: '',
+        };
+      }
+
+      return {
+        ...prev,
+        vmsExistingCameraId: cameraId,
+        name: selectedCamera.cameraName?.trim() || prev.name,
+        streamUrl: selectedCamera.streamUrl?.trim() || prev.streamUrl,
+        streamExternalId: selectedCamera.streamExternalId?.trim() || selectedCamera.cameraUuid?.trim() || '',
+        vmsDeviceId: String(selectedCamera.deviceId),
+        vmsDeviceItemId: String(selectedCamera.cameraId),
+        vmsRecordingServerId: String(selectedCamera.recordingServerId),
+      };
     });
   };
 
@@ -436,6 +680,10 @@ function CameraForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
+      <div className="rounded-2xl border border-white/10 bg-slate-900/60 px-4 py-3 text-sm text-slate-300">
+        Para cadastrar, normalmente basta preencher <span className="font-medium text-white">nome, servidor VMS, stream e unidade</span>.
+        Os demais campos são opcionais e ficam em configurações avançadas.
+      </div>
       <div className="grid gap-5 md:grid-cols-2">
         <label className="space-y-2">
           <span className="text-sm text-slate-300">Nome</span>
@@ -459,37 +707,53 @@ function CameraForm({
         </label>
 
         <label className="space-y-2">
-          <span className="text-sm text-slate-300">Tipo do dispositivo</span>
+          <span className="text-sm text-slate-300">Servidor VMS (obrigatório)</span>
           <select
-            value={form.deviceType}
-            onChange={(e) => setField('deviceType', e.target.value)}
+            value={form.vmsServerId}
+            onChange={(e) => setField('vmsServerId', e.target.value)}
             className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none"
+            required
           >
-            {DEVICE_TYPE_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="space-y-2">
-          <span className="text-sm text-slate-300">Uso do dispositivo</span>
-          <select
-            value={form.deviceUsageType}
-            onChange={(e) => setField('deviceUsageType', e.target.value)}
-            className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none disabled:cursor-not-allowed disabled:opacity-60"
-            disabled={!usageTypeEnabled}
-          >
-            <option value="">{usageTypeEnabled ? 'Selecione o uso' : 'Não se aplica a câmera comum'}</option>
-            {DEVICE_USAGE_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
+            <option value="">Selecione um servidor VMS</option>
+            {vmsServers.map((server) => (
+              <option key={server.id} value={server.id}>
+                {server.name}
               </option>
             ))}
           </select>
           <p className="text-xs text-slate-500">
-            Esse campo só se aplica a IA Faces, Câmera IA e Dispositivo Facial.
+            Selecione primeiro o servidor VMS. Esse campo é obrigatório para salvar a câmera. Se ele devolver câmeras, você poderá reaproveitar uma já existente.
+          </p>
+        </label>
+
+        <label className="space-y-2">
+          <span className="text-sm text-slate-300">Câmera existente no VMS</span>
+          <select
+            value={form.vmsExistingCameraId}
+            onChange={(e) => handleExistingVmsCameraSelect(e.target.value)}
+            className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={!form.vmsServerId.trim() || vmsLookupLoading}
+          >
+            <option value="">
+              {!form.vmsServerId.trim()
+                ? 'Selecione primeiro um servidor VMS'
+                : vmsLookupLoading
+                  ? 'Consultando câmeras do VMS...'
+                  : vmsExistingCameras.length
+                    ? 'Escolha uma câmera já existente'
+                    : vmsShouldCreateNewCamera
+                      ? 'Nenhuma câmera encontrada. Cadastre uma câmera nova.'
+                      : 'Nenhuma câmera retornada pelo VMS'}
+            </option>
+            {vmsExistingCameras.map((camera) => (
+              <option key={`${camera.deviceId}-${camera.cameraId}`} value={String(camera.cameraId)}>
+                {[camera.recordingServerName, camera.deviceName, camera.cameraName].filter(Boolean).join(' / ')}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-slate-500">
+            {vmsLookupMessage ||
+              'Se não houver câmera existente, preencha o stream e salve a câmera nova vinculada a este servidor VMS.'}
           </p>
         </label>
 
@@ -507,33 +771,22 @@ function CameraForm({
         </label>
 
         <label className="space-y-2">
-          <span className="text-sm text-slate-300">Snapshot URL</span>
-          <input
-            value={form.snapshotUrl}
-            onChange={(e) => setField('snapshotUrl', e.target.value)}
+          <span className="text-sm text-slate-300">Servidor facial</span>
+          <select
+            value={form.faceEngineServerId}
+            onChange={(e) => setField('faceEngineServerId', e.target.value)}
             className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none"
-            placeholder="https://..."
-          />
-        </label>
-
-        <label className="space-y-2">
-          <span className="text-sm text-slate-300">Engine Stream ID</span>
-          <input
-            value={form.engineStreamId}
-            onChange={(e) => setField('engineStreamId', e.target.value)}
-            className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none"
-            placeholder="ID numerico"
-          />
-        </label>
-
-        <label className="space-y-2">
-          <span className="text-sm text-slate-300">Engine Stream UUID</span>
-          <input
-            value={form.engineStreamUuid}
-            onChange={(e) => setField('engineStreamUuid', e.target.value)}
-            className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none"
-            placeholder="UUID do stream"
-          />
+          >
+            <option value="">Sem vínculo com motor facial</option>
+            {faceEngineServers.map((server) => (
+              <option key={server.id} value={server.id}>
+                {server.name}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-slate-500">
+            Para reconhecimento facial, cadastre primeiro o servidor facial e depois vincule a câmera aqui. Nesse caso, a câmera será salva como câmera comum do VMS e provisionada no servidor facial.
+          </p>
         </label>
 
         <label className="space-y-2">
@@ -566,10 +819,129 @@ function CameraForm({
               ? units.length > 0
                 ? 'Para admin de condomínio, a câmera deve ficar vinculada a uma unidade do próprio condomínio.'
                 : 'As unidades do condomínio não carregaram agora. A tela está usando as unidades liberadas na sua sessão.'
-              : 'Use a unidade para amarrar a câmera ao escopo operacional correto.'}
+              : 'Se a câmera for de área comum, deixe sem unidade. Assim ela poderá ficar disponível para visualização geral do condomínio.'}
           </p>
         </label>
       </div>
+
+      <details className="rounded-2xl border border-white/10 bg-slate-900/50">
+        <summary className="cursor-pointer list-none px-4 py-3 text-sm font-medium text-white">
+          Configurações avançadas da câmera
+        </summary>
+        <div className="grid gap-5 border-t border-white/10 px-4 py-4 md:grid-cols-2">
+          <label className="space-y-2">
+            <span className="text-sm text-slate-300">Tipo do dispositivo</span>
+            <select
+              value={form.deviceType}
+              onChange={(e) => setField('deviceType', e.target.value)}
+              className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none"
+            >
+              {DEVICE_TYPE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="space-y-2">
+            <span className="text-sm text-slate-300">Uso do dispositivo</span>
+            <select
+              value={form.deviceUsageType}
+              onChange={(e) => setField('deviceUsageType', e.target.value)}
+              className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={!usageTypeEnabled}
+            >
+              <option value="">{usageTypeEnabled ? 'Selecione o uso' : 'Não se aplica a câmera comum'}</option>
+              {DEVICE_USAGE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="space-y-2">
+            <span className="text-sm text-slate-300">Snapshot URL</span>
+            <input
+              value={form.snapshotUrl}
+              onChange={(e) => setField('snapshotUrl', e.target.value)}
+              className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none"
+              placeholder="https://..."
+            />
+          </label>
+
+          <label className="space-y-2">
+            <span className="text-sm text-slate-300">ID externo do stream</span>
+            <input
+              value={form.streamExternalId}
+              onChange={(e) => setField('streamExternalId', e.target.value)}
+              className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none"
+              placeholder="camera-uuid-21"
+            />
+          </label>
+
+          <label className="space-y-2">
+            <span className="text-sm text-slate-300">VMS Device ID</span>
+            <input
+              value={form.vmsDeviceId}
+              onChange={(e) => setField('vmsDeviceId', e.target.value)}
+              className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none"
+              placeholder="10"
+            />
+          </label>
+
+          <label className="space-y-2">
+            <span className="text-sm text-slate-300">VMS Camera ID</span>
+            <input
+              value={form.vmsDeviceItemId}
+              onChange={(e) => setField('vmsDeviceItemId', e.target.value)}
+              className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none"
+              placeholder="21"
+            />
+          </label>
+
+          <label className="space-y-2">
+            <span className="text-sm text-slate-300">VMS Recording Server ID</span>
+            <input
+              value={form.vmsRecordingServerId}
+              onChange={(e) => setField('vmsRecordingServerId', e.target.value)}
+              className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none"
+              placeholder="1"
+            />
+          </label>
+
+          <label className="space-y-2">
+            <span className="text-sm text-slate-300">Engine Stream ID</span>
+            <input
+              value={form.engineStreamId}
+              onChange={(e) => setField('engineStreamId', e.target.value)}
+              className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none"
+              placeholder="ID numerico"
+            />
+          </label>
+
+          <label className="space-y-2">
+            <span className="text-sm text-slate-300">Engine Stream UUID</span>
+            <input
+              value={form.engineStreamUuid}
+              onChange={(e) => setField('engineStreamUuid', e.target.value)}
+              className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none"
+              placeholder="UUID do stream"
+            />
+          </label>
+
+          <label className="space-y-2">
+            <span className="text-sm text-slate-300">Face Analytics ID</span>
+            <input
+              value={form.faceAnalyticsId}
+              onChange={(e) => setField('faceAnalyticsId', e.target.value)}
+              className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none"
+              placeholder="ID numerico"
+            />
+          </label>
+        </div>
+      </details>
 
       <div className="flex flex-wrap justify-end gap-3 pt-2">
         <button
@@ -618,11 +990,32 @@ export default function AdminCamerasPage() {
   const [saving, setSaving] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [faceEngineServers, setFaceEngineServers] = useState<FaceEngineServer[]>([]);
+  const [vmsServers, setVmsServers] = useState<VmsServer[]>([]);
   const [pendingRtspJob, setPendingRtspJob] = useState<BackgroundJob | null>(null);
   const [lastRtspJob, setLastRtspJob] = useState<BackgroundJob | null>(null);
   const [snapshotCameras, setSnapshotCameras] = useState<CameraRecord[]>([]);
   const [snapshotUpdatedAt, setSnapshotUpdatedAt] = useState<string | null>(null);
   const [localDraftCameras, setLocalDraftCameras] = useState<LocalCameraDraft[]>([]);
+  const [hideLoadErrorAlert, setHideLoadErrorAlert] = useState(false);
+
+  useEffect(() => {
+    setHideLoadErrorAlert(false);
+  }, [error]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    try {
+      const raw = window.localStorage.getItem(VMS_SERVERS_STORAGE_KEY);
+      const cached = raw ? (JSON.parse(raw) as VmsServer[]) : [];
+      if (Array.isArray(cached) && cached.length > 0) {
+        setVmsServers(cached);
+      }
+    } catch {
+      // Ignore invalid VMS cache.
+    }
+  }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -644,6 +1037,59 @@ export default function AdminCamerasPage() {
   }, []);
 
   useEffect(() => {
+    if (!user) return;
+
+    let active = true;
+    void faceEngineServersService
+      .list()
+      .then((servers) => {
+        if (active) {
+          setFaceEngineServers(servers);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setFaceEngineServers([]);
+        }
+      });
+
+    void vmsServersService
+      .list()
+      .then((servers) => {
+        if (active) {
+          setVmsServers(servers);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          try {
+            const raw = window.localStorage.getItem(VMS_SERVERS_STORAGE_KEY);
+            const cached = raw ? (JSON.parse(raw) as VmsServer[]) : [];
+            setVmsServers(Array.isArray(cached) ? cached : []);
+          } catch {
+            setVmsServers([]);
+          }
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [user]);
+
+  async function refreshVmsServers() {
+    try {
+      const servers = await vmsServersService.list();
+      setVmsServers(servers);
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(VMS_SERVERS_STORAGE_KEY, JSON.stringify(servers));
+      }
+    } catch {
+      // Keep current list when refresh fails.
+    }
+  }
+
+  useEffect(() => {
     if (typeof window === 'undefined') return;
 
     try {
@@ -651,7 +1097,7 @@ export default function AdminCamerasPage() {
       if (!raw) return;
 
       const parsed = JSON.parse(raw) as LocalCameraDraft[];
-      setLocalDraftCameras(Array.isArray(parsed) ? parsed : []);
+      setLocalDraftCameras(Array.isArray(parsed) ? parsed.filter((draft) => shouldKeepLocalDraft(draft)) : []);
     } catch {
       setLocalDraftCameras([]);
     }
@@ -841,7 +1287,7 @@ export default function AdminCamerasPage() {
     if (cameras.length === 0 || localDraftCameras.length === 0) return;
 
     setLocalDraftCameras((current) =>
-      current.filter((draft) => !cameras.some((camera) => cameraMatchesDraft(camera, draft)))
+      current.filter((draft) => shouldKeepLocalDraft(draft) && !cameras.some((camera) => cameraMatchesDraft(camera, draft)))
     );
   }, [cameras, localDraftCameras.length]);
 
@@ -851,7 +1297,9 @@ export default function AdminCamerasPage() {
 
     return visibleCameras.filter((camera) => {
       const automaticStatus = getAutomaticCameraStatus(camera);
-      const scopeOk = (!isAdminScope || (!!camera.unitId && accessibleUnitIds.has(camera.unitId))) && (!activeUnitId || camera.unitId === activeUnitId);
+      const scopeOk =
+        (!isAdminScope || !camera.unitId || accessibleUnitIds.has(camera.unitId)) &&
+        (!activeUnitId || camera.unitId === activeUnitId);
       const statusOk = status === 'all' || normalizeString(automaticStatus) === status;
       const hasPreview = Boolean(camera.snapshotUrl || camera.imageStreamUrl);
       const isRtspOnly = isRtspStreamUrl(camera.streamUrl) && !hasPreview;
@@ -886,20 +1334,27 @@ export default function AdminCamerasPage() {
     setSubmitError(null);
 
     try {
-      if (isAdminScope) {
-        if (!form.unitId) {
-          throw new Error('Selecione uma unidade do seu condomínio para cadastrar a câmera.');
-        }
+      if (isAdminScope && form.unitId && !accessibleUnitIds.has(form.unitId)) {
+        throw new Error('A unidade selecionada não pertence ao escopo do seu condomínio.');
+      }
 
-        if (!accessibleUnitIds.has(form.unitId)) {
-          throw new Error('A unidade selecionada não pertence ao escopo do seu condomínio.');
-        }
+      if (!form.vmsServerId.trim()) {
+        throw new Error('Selecione o servidor VMS antes de salvar a câmera.');
       }
 
       const payload = buildCameraPayload(form);
       const isRtspCamera = isRtspStreamUrl(form.streamUrl);
+      const shouldUseAsyncRtsp = isRtspCamera && !form.faceEngineServerId.trim() && !form.vmsServerId.trim();
+      const authState = useAuthStore.getState();
+      const authorizationPreview = authState.token ? `${authState.token.slice(0, 12)}...` : null;
+      const createMode: 'reaproveitar-camera-vms' | 'fallback-criar-camera-vms' | 'cadastro-camera' =
+        payload.vmsServerId && payload.streamExternalId && payload.vmsDeviceId != null && payload.vmsDeviceItemId != null
+          ? 'reaproveitar-camera-vms'
+          : payload.vmsServerId
+            ? 'fallback-criar-camera-vms'
+            : 'cadastro-camera';
 
-      if (isRtspCamera) {
+      if (shouldUseAsyncRtsp) {
         const job = await camerasService.createAsync(payload);
         const localDraft = buildLocalCameraDraft(form, job);
         setOpenCreate(false);
@@ -912,17 +1367,62 @@ export default function AdminCamerasPage() {
         return;
       }
 
-      const createdCamera = await camerasService.create(payload);
+      const createResponse = await camerasService.createDetailed(payload);
+      const createdCamera = createResponse.camera;
+      logCameraCreateDiagnostics({
+        mode: createMode,
+        payload,
+        vmsServerId: payload.vmsServerId ?? null,
+        user: authState.user
+          ? {
+              email: authState.user.email,
+              role: authState.user.role,
+            }
+          : null,
+        authorizationPreview,
+        response: {
+          status: createResponse.status,
+          data: createResponse.body,
+          headers: createResponse.headers,
+        },
+      });
       if (!createdCamera.id) {
         throw new Error(
           'O cadastro foi aceito, mas a confirmação final da câmera não voltou para a tela.'
         );
       }
 
+      if (form.faceEngineServerId.trim()) {
+        await camerasService.provisionFaceServer(form.faceEngineServerId.trim(), createdCamera.id);
+      }
+
       setOpenCreate(false);
-      setActionMessage('Câmera criada com status automático pela disponibilidade de preview.');
+      setActionMessage(
+        form.faceEngineServerId.trim()
+          ? 'Câmera criada e vinculada ao servidor facial.'
+          : 'Câmera criada com status automático pela disponibilidade de preview.'
+      );
       await refetch();
     } catch (createError) {
+      const authState = useAuthStore.getState();
+      logCameraCreateDiagnostics({
+        mode:
+          form.vmsServerId.trim() && form.streamExternalId.trim() && form.vmsDeviceId.trim() && form.vmsDeviceItemId.trim()
+            ? 'reaproveitar-camera-vms'
+            : form.vmsServerId.trim()
+              ? 'fallback-criar-camera-vms'
+              : 'cadastro-camera',
+        payload: buildCameraPayload(form),
+        vmsServerId: form.vmsServerId.trim() || null,
+        user: authState.user
+          ? {
+              email: authState.user.email,
+              role: authState.user.role,
+            }
+          : null,
+        authorizationPreview: authState.token ? `${authState.token.slice(0, 12)}...` : null,
+        error: createError,
+      });
       setSubmitError(getCameraErrorMessage(createError, 'Não foi possível criar a câmera.'));
     } finally {
       setSaving(false);
@@ -936,22 +1436,28 @@ export default function AdminCamerasPage() {
     setSubmitError(null);
 
     try {
-      if (isAdminScope) {
-        if (!form.unitId) {
-          throw new Error('Selecione uma unidade do seu condomínio para editar a câmera.');
-        }
+      if (isAdminScope && form.unitId && !accessibleUnitIds.has(form.unitId)) {
+        throw new Error('A unidade selecionada não pertence ao escopo do seu condomínio.');
+      }
 
-        if (!accessibleUnitIds.has(form.unitId)) {
-          throw new Error('A unidade selecionada não pertence ao escopo do seu condomínio.');
-        }
+      if (!form.vmsServerId.trim()) {
+        throw new Error('Selecione o servidor VMS antes de salvar a câmera.');
       }
 
       const payload = buildCameraPayload(form);
       const updatedCamera = await camerasService.update(selectedCamera.id, payload);
 
+      if (form.faceEngineServerId.trim()) {
+        await camerasService.provisionFaceServer(form.faceEngineServerId.trim(), updatedCamera.id);
+      }
+
       setSelectedCamera(updatedCamera);
       setOpenEdit(false);
-      setActionMessage('Câmera atualizada com status automático pela disponibilidade de preview.');
+      setActionMessage(
+        form.faceEngineServerId.trim()
+          ? 'Câmera atualizada e vínculo facial provisionado.'
+          : 'Câmera atualizada com status automático pela disponibilidade de preview.'
+      );
       await refetch();
     } catch (updateError) {
       setSubmitError(
@@ -966,6 +1472,17 @@ export default function AdminCamerasPage() {
   }
 
   async function handleDeleteCamera(camera: CameraRecord) {
+    if (isLocalCameraDraft(camera)) {
+      setLocalDraftCameras((current) => current.filter((draft) => draft.id !== camera.id));
+      if (selectedCamera?.id === camera.id) {
+        setSelectedCamera(null);
+      }
+      setOpenEdit(false);
+      setOpenView(false);
+      setActionMessage('Cadastro pendente removido da tela.');
+      return;
+    }
+
     const confirmed = window.confirm(`Excluir a câmera "${camera.name}"? Essa ação não pode ser desfeita.`);
     if (!confirmed) return;
 
@@ -1034,6 +1551,7 @@ export default function AdminCamerasPage() {
             <Button
               onClick={() => {
                 setSubmitError(null);
+                void refreshVmsServers();
                 setOpenCreate(true);
               }}
               className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-3 text-slate-950 hover:bg-slate-200"
@@ -1132,13 +1650,17 @@ export default function AdminCamerasPage() {
       </section>
 
       {actionMessage ? (
-        <div className="rounded-3xl border border-cyan-500/30 bg-cyan-500/10 p-5 text-sm text-cyan-100">
+        <TimedAlert tone="info" onClose={() => setActionMessage(null)} className="rounded-3xl p-5">
           {actionMessage}
-        </div>
+        </TimedAlert>
       ) : null}
 
       {lastRtspJob ? (
-        <div className={`rounded-3xl border p-5 text-sm ${getJobStatusClass(lastRtspJob.status)}`}>
+        <TimedAlert
+          tone={lastRtspJob.status === 'FAILED' ? 'error' : lastRtspJob.status === 'SUCCEEDED' ? 'success' : 'info'}
+          onClose={() => setLastRtspJob(null)}
+          className={`rounded-3xl p-5 ${getJobStatusClass(lastRtspJob.status)}`}
+        >
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="font-semibold">Acompanhamento do cadastro RTSP</p>
@@ -1159,7 +1681,7 @@ export default function AdminCamerasPage() {
               {lastRtspJob.errorMessage}
             </p>
           ) : null}
-        </div>
+        </TimedAlert>
       ) : null}
 
       {usingSnapshot ? (
@@ -1169,21 +1691,34 @@ export default function AdminCamerasPage() {
         </div>
       ) : null}
 
-      {!usingSnapshot && error ? (
-        <div className="rounded-3xl border border-red-500/30 bg-red-500/10 p-5 text-sm text-red-100">
-          {getCameraErrorMessage(error, 'Não foi possível carregar as câmeras.')}
+      {!usingSnapshot && localDraftCameras.length > 0 ? (
+        <div className="rounded-3xl border border-amber-400/30 bg-amber-500/10 p-5 text-sm text-amber-100">
+          {cameras.length} câmera(s) confirmada(s) pelo servidor e {localDraftCameras.length} aguardando sincronização final.
         </div>
+      ) : null}
+
+      {!usingSnapshot && error && !hideLoadErrorAlert ? (
+        <TimedAlert tone="error" onClose={() => setHideLoadErrorAlert(true)} className="rounded-3xl p-5">
+          {getCameraErrorMessage(error, 'Não foi possível carregar as câmeras.')}
+        </TimedAlert>
       ) : null}
 
       <div className="rounded-3xl border border-amber-500/20 bg-amber-500/10 p-5 text-sm text-amber-100">
         RTSP é aceito no cadastro, mas navegadores não reproduzem RTSP diretamente. Para visualizar na operação, use uma fonte compatível com navegador.
       </div>
 
+      <div className="rounded-3xl border border-cyan-500/20 bg-cyan-500/10 p-5 text-sm text-cyan-100">
+        O motor facial agora é configurado em <strong>Servidores faciais</strong>. Depois, vincule o servidor desejado na câmera correspondente.
+      </div>
+
       <section className="overflow-hidden rounded-3xl border border-white/10 bg-white/5 backdrop-blur">
         <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
           <div>
             <h2 className="text-lg font-semibold">Lista de câmeras</h2>
-            <p className="text-sm text-slate-400">{filteredCameras.length} registro(s) encontrado(s)</p>
+            <p className="text-sm text-slate-400">
+              {filteredCameras.length} registro(s) na tela
+              {!usingSnapshot ? ` • ${cameras.length} confirmado(s) pelo servidor` : ''}
+            </p>
           </div>
           <Filter className="h-5 w-5 text-slate-400" />
         </div>
@@ -1262,6 +1797,7 @@ export default function AdminCamerasPage() {
                   onClick={() => {
                     setSubmitError(null);
                     setSelectedCamera(camera);
+                    void refreshVmsServers();
                     setOpenEdit(true);
                   }}
                   disabled={isLocalCameraDraft(camera)}
@@ -1275,9 +1811,9 @@ export default function AdminCamerasPage() {
                   size="icon"
                   variant="outline"
                   onClick={() => void handleDeleteCamera(camera)}
-                  disabled={saving || isLocalCameraDraft(camera)}
+                  disabled={saving}
                   className="border-red-500/20 bg-red-500/10 text-red-100 hover:bg-red-500/20 disabled:opacity-60"
-                  aria-label="Excluir câmera"
+                  aria-label={isLocalCameraDraft(camera) ? 'Remover cadastro pendente' : 'Excluir câmera'}
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>
@@ -1290,7 +1826,11 @@ export default function AdminCamerasPage() {
                   >
                     Unidade
                   </Button>
-                ) : null}
+                ) : (
+                  <Badge className="border-cyan-500/20 bg-cyan-500/10 text-cyan-100">
+                    Área comum
+                  </Badge>
+                )}
 
                 <Button
                   variant="outline"
@@ -1324,7 +1864,9 @@ export default function AdminCamerasPage() {
           onCancel={() => setOpenCreate(false)}
           loading={saving}
           units={unitOptions}
-          requireUnit={isAdminScope}
+          faceEngineServers={faceEngineServers}
+          vmsServers={vmsServers}
+          requireUnit={false}
         />
       </CrudModal>
 
@@ -1354,7 +1896,9 @@ export default function AdminCamerasPage() {
             }}
             loading={saving}
             units={unitOptions}
-            requireUnit={isAdminScope}
+            faceEngineServers={faceEngineServers}
+            vmsServers={vmsServers}
+            requireUnit={false}
           />
         ) : null}
       </CrudModal>
@@ -1369,12 +1913,13 @@ export default function AdminCamerasPage() {
         {selectedCamera ? (
           <div className="grid gap-4 md:grid-cols-2">
             <div className="overflow-hidden rounded-2xl border border-white/10 bg-slate-950 md:col-span-2">
-              <CameraFeed
-                camera={selectedCamera}
-                className={`${getAutomaticCameraStatus(selectedCamera) === 'OFFLINE' ? 'opacity-45' : ''}`}
-                imageClassName="h-72 w-full object-cover"
-                emptyLabel="Nenhum preview disponível"
-                emptyHint="Nenhum snapshot ou image stream configurado para esta câmera."
+              <CameraPlayer
+                cameraId={selectedCamera.id}
+                cameraData={selectedCamera}
+                compactOverlay
+                className=""
+                heightClassName="h-72"
+                emptyHint="Nenhum preview ou stream ao vivo disponível para esta câmera."
               />
             </div>
             <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
@@ -1409,8 +1954,19 @@ export default function AdminCamerasPage() {
             <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
               <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Unidade</p>
               <p className="mt-2 text-base font-medium text-white">
-                {unitOptions.find((unit) => unit.id === selectedCamera.unitId)?.location ||
-                  (selectedCamera.unitId ? 'Unidade não identificada' : 'Não vinculada')}
+                {getCameraUnitLabel(selectedCamera, unitOptions)}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+              <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Servidor facial</p>
+              <p className="mt-2 text-base font-medium text-white">
+                {selectedCamera.faceEngineServerName || 'Sem vínculo com motor facial'}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+              <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Servidor VMS</p>
+              <p className="mt-2 text-base font-medium text-white">
+                {selectedCamera.vmsServerId || 'Sem vínculo com VMS'}
               </p>
             </div>
             <div className="rounded-2xl border border-white/10 bg-white/5 p-4 md:col-span-2">
@@ -1419,6 +1975,10 @@ export default function AdminCamerasPage() {
                 <p>Image Stream URL: {selectedCamera.imageStreamUrl || 'Não configurado'}</p>
                 <p>Stream URL: {selectedCamera.streamUrl || 'Não configurado'}</p>
                 <p>Snapshot URL: {selectedCamera.snapshotUrl || 'Não configurado'}</p>
+                <p>Stream External ID: {selectedCamera.streamExternalId || 'Não informado'}</p>
+                <p>VMS Device ID: {selectedCamera.vmsDeviceId ?? 'Não informado'}</p>
+                <p>VMS Camera ID: {selectedCamera.vmsDeviceItemId ?? 'Não informado'}</p>
+                <p>VMS Recording Server ID: {selectedCamera.vmsRecordingServerId ?? 'Não informado'}</p>
                 <p>Engine Stream ID: {selectedCamera.engineStreamId ?? 'Não informado'}</p>
                 <p>Engine Stream UUID: {selectedCamera.engineStreamUuid || 'Não informado'}</p>
                 <p>Face Analytics ID: {selectedCamera.faceAnalyticsId ?? 'Não informado'}</p>

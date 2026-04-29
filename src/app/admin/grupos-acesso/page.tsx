@@ -8,25 +8,48 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { getApiErrorMessage } from '@/features/http/api-error';
+import { useAuth } from '@/hooks/use-auth';
 import { useProtectedRoute } from '@/hooks/use-protected-route';
 import { accessGroupsService } from '@/services/access-groups.service';
-import { camerasService } from '@/services/cameras.service';
+import { devicesService } from '@/services/devices.service';
 import { getAllPeople } from '@/services/people.service';
 import type { AccessGroup } from '@/types/access-group';
-import type { Camera } from '@/types/camera';
+import type { Device } from '@/types/device';
 import type { Person } from '@/types/person';
 
 type AccessGroupForm = {
   name: string;
   personIds: string[];
+  deviceIds: string[];
   cameraIds: string[];
+  allowedPersonCategories: string[];
+  minAuthorizedAge: string;
+  minorGuardianAuthorizationRequired: boolean;
+  policyNotes: string;
 };
 
 const initialForm: AccessGroupForm = {
   name: '',
   personIds: [],
+  deviceIds: [],
   cameraIds: [],
+  allowedPersonCategories: [],
+  minAuthorizedAge: '',
+  minorGuardianAuthorizationRequired: false,
+  policyNotes: '',
 };
+
+const personCategoryOptions = [
+  { value: 'RESIDENT', label: 'Morador' },
+  { value: 'RENTER', label: 'Locatário' },
+  { value: 'VISITOR', label: 'Visitante' },
+  { value: 'SERVICE_PROVIDER', label: 'Prestador' },
+  { value: 'DELIVERER', label: 'Entregador' },
+];
+
+function getCategoryOptionLabel(value: string) {
+  return personCategoryOptions.find((option) => option.value === value)?.label ?? value;
+}
 
 function getErrorMessage(error: unknown, fallback: string) {
   return getApiErrorMessage(error, {
@@ -54,11 +77,18 @@ function toggleId(values: string[], id: string) {
   return values.includes(id) ? values.filter((value) => value !== id) : [...values, id];
 }
 
+function formatPreview(values: string[], emptyLabel: string) {
+  if (!values.length) return emptyLabel;
+  if (values.length <= 3) return values.join(', ');
+  return `${values.slice(0, 3).join(', ')} +${values.length - 3}`;
+}
+
 export default function AdminAccessGroupsPage() {
   const { isChecking, canAccess } = useProtectedRoute({ allowedRoles: ['ADMIN', 'MASTER'] });
+  const { user } = useAuth();
   const [groups, setGroups] = useState<AccessGroup[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
-  const [cameras, setCameras] = useState<Camera[]>([]);
+  const [devices, setDevices] = useState<Device[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState('');
@@ -68,6 +98,7 @@ export default function AdminAccessGroupsPage() {
   const [selectedGroup, setSelectedGroup] = useState<AccessGroup | null>(null);
   const [form, setForm] = useState<AccessGroupForm>(initialForm);
   const [modalOpen, setModalOpen] = useState(false);
+  const scopedCondominiumId = user?.condominiumId ?? user?.condominiumIds?.[0] ?? null;
 
   const filteredGroups = useMemo(() => {
     const normalized = search.trim().toLowerCase();
@@ -87,33 +118,37 @@ export default function AdminAccessGroupsPage() {
       .slice(0, 80);
   }, [people, pickerSearch]);
 
-  const filteredCameras = useMemo(() => {
+  const filteredDevices = useMemo(() => {
     const normalized = pickerSearch.trim().toLowerCase();
-    return cameras
-      .filter((camera) => {
+    return devices
+      .filter((device) => device.type === 'FACIAL_DEVICE')
+      .filter((device) => {
         if (!normalized) return true;
-        return [camera.name, camera.location, camera.provider]
+        return [device.name, device.vendor, device.model, device.host]
           .filter(Boolean)
           .some((value) => String(value).toLowerCase().includes(normalized));
       })
       .slice(0, 80);
-  }, [cameras, pickerSearch]);
+  }, [devices, pickerSearch]);
+
+  const peopleNameById = useMemo(() => new Map(people.map((person) => [person.id, person.name])), [people]);
+  const deviceNameById = useMemo(() => new Map(devices.map((device) => [device.id, device.name])), [devices]);
 
   const linkedPeople = groups.reduce((total, group) => total + (group.personIds?.length ?? 0), 0);
-  const linkedCameras = groups.reduce((total, group) => total + (group.cameraIds?.length ?? 0), 0);
+  const linkedDevices = groups.reduce((total, group) => total + (group.deviceIds?.length ?? group.cameraIds?.length ?? 0), 0);
 
   async function loadData() {
     setLoading(true);
     setError(null);
     try {
-      const [groupList, peopleList, cameraList] = await Promise.all([
+      const [groupList, peopleList, deviceList] = await Promise.all([
         accessGroupsService.list(),
         getAllPeople({ limit: 100 }),
-        camerasService.list(),
+        devicesService.list(),
       ]);
       setGroups(groupList);
       setPeople(peopleList.data);
-      setCameras(cameraList.data);
+      setDevices(deviceList);
     } catch (loadError) {
       setError(getErrorMessage(loadError, 'Não foi possível carregar os grupos de acesso.'));
     } finally {
@@ -140,7 +175,12 @@ export default function AdminAccessGroupsPage() {
     setForm({
       name: group.name,
       personIds: group.personIds ?? [],
+      deviceIds: group.deviceIds ?? group.cameraIds ?? [],
       cameraIds: group.cameraIds ?? [],
+      allowedPersonCategories: group.allowedPersonCategories ?? [],
+      minAuthorizedAge: group.minAuthorizedAge === null || group.minAuthorizedAge === undefined ? '' : String(group.minAuthorizedAge),
+      minorGuardianAuthorizationRequired: Boolean(group.minorGuardianAuthorizationRequired),
+      policyNotes: group.policyNotes ?? '',
     });
     setPickerSearch('');
     setModalOpen(true);
@@ -157,8 +197,14 @@ export default function AdminAccessGroupsPage() {
     try {
       const payload = {
         name: form.name.trim(),
+        condominiumId: scopedCondominiumId,
         personIds: form.personIds,
+        deviceIds: form.deviceIds,
         cameraIds: form.cameraIds,
+        allowedPersonCategories: form.allowedPersonCategories,
+        minAuthorizedAge: form.minAuthorizedAge.trim() ? Number(form.minAuthorizedAge) : null,
+        minorGuardianAuthorizationRequired: form.minorGuardianAuthorizationRequired,
+        policyNotes: form.policyNotes.trim() || null,
       };
 
       if (!payload.name) {
@@ -241,8 +287,8 @@ export default function AdminAccessGroupsPage() {
             <CardContent><p className="text-center text-4xl font-semibold text-cyan-200">{linkedPeople}</p></CardContent>
           </Card>
           <Card className="border-white/10 bg-white/[0.04] text-white">
-            <CardHeader><CardTitle className="text-center text-sm text-slate-300">Câmeras vinculadas</CardTitle></CardHeader>
-            <CardContent><p className="text-center text-4xl font-semibold text-emerald-300">{linkedCameras}</p></CardContent>
+            <CardHeader><CardTitle className="text-center text-sm text-slate-300">Dispositivos vinculados</CardTitle></CardHeader>
+            <CardContent><p className="text-center text-4xl font-semibold text-emerald-300">{linkedDevices}</p></CardContent>
           </Card>
         </section>
 
@@ -268,7 +314,10 @@ export default function AdminAccessGroupsPage() {
             <div className="rounded-2xl border border-white/10 bg-slate-950 p-8 text-center text-slate-300">Carregando grupos...</div>
           ) : filteredGroups.length ? (
             <div className="grid gap-4 xl:grid-cols-2">
-              {filteredGroups.map((group) => (
+              {filteredGroups.map((group) => {
+                const groupPeopleNames = (group.personIds ?? []).map((id) => peopleNameById.get(id) ?? id);
+                const groupDeviceNames = (group.deviceIds ?? group.cameraIds ?? []).map((id) => deviceNameById.get(id) ?? id);
+                return (
                 <article key={group.id} className="rounded-2xl border border-white/10 bg-slate-950 p-5">
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                     <div>
@@ -278,8 +327,22 @@ export default function AdminAccessGroupsPage() {
                         {group.faceListSyncStatus && <Badge className="bg-cyan-500/15 text-cyan-100">{group.faceListSyncStatus}</Badge>}
                       </div>
                       <p className="mt-2 text-sm text-slate-400">
-                        {group.personIds?.length ?? 0} pessoa(s) · {group.cameraIds?.length ?? 0} câmera(s)
+                        {group.personIds?.length ?? 0} pessoa(s) | {group.deviceIds?.length ?? group.cameraIds?.length ?? 0} dispositivo(s)
                       </p>
+                      <p className="mt-1 text-sm text-slate-500">
+                        Pessoas: {formatPreview(groupPeopleNames, 'nenhuma')}
+                      </p>
+                      <p className="mt-1 text-sm text-slate-500">
+                        Dispositivos: {formatPreview(groupDeviceNames, 'nenhum')}
+                      </p>
+                      {group.allowedPersonCategories?.length ? (
+                        <p className="mt-1 text-sm text-slate-500">
+                          Categorias permitidas: {group.allowedPersonCategories.map(getCategoryOptionLabel).join(', ')}
+                        </p>
+                      ) : null}
+                      {group.minAuthorizedAge !== null && group.minAuthorizedAge !== undefined ? (
+                        <p className="mt-1 text-sm text-slate-500">Idade mínima: {group.minAuthorizedAge} ano(s)</p>
+                      ) : null}
                       {group.faceListName && <p className="mt-1 text-sm text-slate-500">Lista facial: {group.faceListName}</p>}
                     </div>
                     <div className="flex flex-wrap gap-2">
@@ -294,7 +357,8 @@ export default function AdminAccessGroupsPage() {
                     </div>
                   </div>
                 </article>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div className="rounded-2xl border border-dashed border-white/10 bg-slate-950 p-8 text-center text-slate-300">
@@ -307,7 +371,7 @@ export default function AdminAccessGroupsPage() {
       <CrudModal
         open={modalOpen}
         title={selectedGroup ? 'Editar grupo' : 'Novo grupo'}
-        description="Selecione as pessoas e câmeras que fazem parte deste grupo."
+        description="Selecione as pessoas, dispositivos e regras que fazem parte deste grupo."
         onClose={() => setModalOpen(false)}
         maxWidth="2xl"
       >
@@ -317,9 +381,85 @@ export default function AdminAccessGroupsPage() {
             <Input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} className="border-white/10 bg-slate-900 text-white" required />
           </label>
 
+          <section className="rounded-2xl border border-white/10 bg-slate-900 p-4">
+            <h3 className="font-semibold">Regras do grupo</h3>
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <label className="space-y-1 text-sm text-slate-300">
+                Idade mínima
+                <Input
+                  value={form.minAuthorizedAge}
+                  onChange={(event) => setForm({ ...form, minAuthorizedAge: event.target.value.replace(/\D+/g, '').slice(0, 2) })}
+                  placeholder="Opcional"
+                  inputMode="numeric"
+                  className="border-white/10 bg-slate-950 text-white"
+                />
+              </label>
+              <label className="flex items-center gap-3 rounded-xl border border-white/10 bg-slate-950 px-3 py-3 text-sm text-slate-200">
+                <input
+                  type="checkbox"
+                  checked={form.minorGuardianAuthorizationRequired}
+                  onChange={(event) => setForm({ ...form, minorGuardianAuthorizationRequired: event.target.checked })}
+                />
+                Exigir autorização do responsável para menores
+              </label>
+            </div>
+            <div className="mt-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm text-slate-300">Categorias permitidas</p>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => setForm({ ...form, allowedPersonCategories: personCategoryOptions.map((option) => option.value) })}
+                  >
+                    Todos
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => setForm({ ...form, allowedPersonCategories: [] })}
+                  >
+                    Limpar
+                  </Button>
+                </div>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {personCategoryOptions.map((option) => {
+                  const checked = form.allowedPersonCategories.includes(option.value);
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => setForm({ ...form, allowedPersonCategories: toggleId(form.allowedPersonCategories, option.value) })}
+                      className={`rounded-full border px-3 py-1 text-xs transition ${
+                        checked
+                          ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-50'
+                          : 'border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="mt-2 text-xs text-slate-500">Se nenhuma categoria for selecionada, o backend pode aceitar qualquer categoria conforme regra padrão.</p>
+            </div>
+            <label className="mt-4 block space-y-1 text-sm text-slate-300">
+              Observações da política
+              <textarea
+                value={form.policyNotes}
+                onChange={(event) => setForm({ ...form, policyNotes: event.target.value })}
+                placeholder="Ex.: acesso liberado para portaria social e garagem."
+                className="min-h-24 w-full rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-white outline-none"
+              />
+            </label>
+          </section>
+
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
-            <Input value={pickerSearch} onChange={(event) => setPickerSearch(event.target.value)} placeholder="Buscar pessoa, unidade ou câmera" className="border-white/10 bg-slate-900 pl-10 text-white" />
+            <Input value={pickerSearch} onChange={(event) => setPickerSearch(event.target.value)} placeholder="Buscar pessoa, unidade ou dispositivo" className="border-white/10 bg-slate-900 pl-10 text-white" />
           </div>
 
           <div className="grid gap-5 lg:grid-cols-2">
@@ -344,20 +484,20 @@ export default function AdminAccessGroupsPage() {
 
             <section className="rounded-2xl border border-white/10 bg-slate-900 p-4">
               <div className="mb-3 flex items-center justify-between">
-                <h3 className="font-semibold">Câmeras</h3>
-                <Badge className="bg-white/10 text-white">{form.cameraIds.length}</Badge>
+                <h3 className="font-semibold">Dispositivos</h3>
+                <Badge className="bg-white/10 text-white">{form.deviceIds.length}</Badge>
               </div>
               <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
-                {filteredCameras.map((camera) => (
-                  <label key={camera.id} className="flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-slate-200 hover:bg-white/5">
-                    <input type="checkbox" checked={form.cameraIds.includes(camera.id)} onChange={() => setForm({ ...form, cameraIds: toggleId(form.cameraIds, camera.id) })} className="mt-1" />
+                {filteredDevices.map((device) => (
+                  <label key={device.id} className="flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-slate-200 hover:bg-white/5">
+                    <input type="checkbox" checked={form.deviceIds.includes(device.id)} onChange={() => setForm({ ...form, deviceIds: toggleId(form.deviceIds, device.id) })} className="mt-1" />
                     <span>
-                      <span className="block font-medium text-white">{camera.name}</span>
-                      <span className="text-xs text-slate-400">{camera.location || camera.provider || 'Sem localização informada'}</span>
+                      <span className="block font-medium text-white">{device.name}</span>
+                      <span className="text-xs text-slate-400">{[device.vendor, device.model, device.host].filter(Boolean).join(' | ') || 'Sem conexão informada'}</span>
                     </span>
                   </label>
                 ))}
-                {!filteredCameras.length && <p className="text-sm text-slate-400">Nenhuma câmera encontrada.</p>}
+                {!filteredDevices.length && <p className="text-sm text-slate-400">Nenhum dispositivo facial encontrado.</p>}
               </div>
             </section>
           </div>

@@ -3,11 +3,15 @@ import { env } from '@/lib/env';
 
 const API_BASE = env.apiBaseUrl;
 const UPSTREAM_TIMEOUT_MS = 15000;
+const ROOT_MEDIA_SEGMENTS = new Set(['media-hls', 'media', 'uploads', 'files', 'storage']);
 
 const METHODS_WITH_BODY = new Set(['POST', 'PUT', 'PATCH']);
 
 function buildTargetUrl(path: string[], request: NextRequest) {
-  const target = new URL(`${API_BASE}/${path.join('/')}`);
+  const baseOrigin = new URL(API_BASE).origin;
+  const joinedPath = path.join('/');
+  const baseUrl = ROOT_MEDIA_SEGMENTS.has(path[0] ?? '') ? baseOrigin : API_BASE;
+  const target = new URL(`${baseUrl}/${joinedPath}`);
   request.nextUrl.searchParams.forEach((value, key) => {
     target.searchParams.append(key, value);
   });

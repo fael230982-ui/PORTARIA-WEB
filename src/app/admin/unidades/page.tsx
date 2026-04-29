@@ -4,9 +4,11 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Building2, Camera, Car, Eye, Home, Package, Pencil, Plus, RefreshCw, Users } from 'lucide-react';
 import { maskDocument, maskEmail, maskPhone } from '@/features/legal/data-masking';
+import { getApiErrorMessage } from '@/features/http/api-error';
 import { getStructureTypeLabel } from '@/features/people/morador-normalizers';
 import { brandClasses } from '@/config/brand-classes';
 import { CrudModal } from '@/components/admin/CrudModal';
+import { TimedAlert } from '@/components/ui/timed-alert';
 import { useOfflineOperationQueue } from '@/hooks/use-offline-operation-queue';
 import { useProtectedRoute } from '@/hooks/use-protected-route';
 import { useAllPeople } from '@/hooks/use-people';
@@ -63,6 +65,10 @@ const personCategoryGroups: Array<{ key: PersonCategory | 'OTHER'; title: string
 
 const unitCsvTemplate = 'tipo_estrutura;estrutura;unidade\nSTREET;RUA 1;101\nBLOCK;A;202\nQUAD;QUADRA 2;LOTE 15\n';
 
+function toUpperTrim(value: string) {
+  return value.trim().toUpperCase();
+}
+
 function normalizeUnitRef(value?: string | null) {
   return String(value ?? '').trim().toLowerCase();
 }
@@ -110,20 +116,20 @@ function parseCsvLine(line: string, delimiter = ',') {
 function parseUnitCsv(content: string, existingUnits: Unit[]): UnitImportRow[] {
   const lines = content
     .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
+    .map((line) => ({ raw: line, trimmed: line.trim() }))
+    .filter((line) => Boolean(line.trimmed));
 
   if (lines.length < 2) return [];
 
-  const delimiter = detectCsvDelimiter(lines[0]);
-  const headers = parseCsvLine(lines[0], delimiter).map(normalizeCsvHeader);
+  const delimiter = detectCsvDelimiter(lines[0].trimmed);
+  const headers = parseCsvLine(lines[0].trimmed, delimiter).map(normalizeCsvHeader);
 
   return lines.slice(1).map((line, index) => {
-    const values = parseCsvLine(line, delimiter);
+    const values = parseCsvLine(line.trimmed, delimiter);
     const row = Object.fromEntries(headers.map((header, valueIndex) => [header, values[valueIndex] ?? '']));
     const structureType = String(row.tipo_estrutura || row.tipo || row.structure_type || 'STREET').trim().toUpperCase() as UnitStructureType;
-    const structureLabel = String(row.estrutura || row.rua || row.bloco || row.quadra || row.structure || '').trim();
-    const unitLabel = String(row.unidade || row.casa || row.apartamento || row.unit || '').trim();
+    const structureLabel = toUpperTrim(String(row.estrutura || row.rua || row.bloco || row.quadra || row.structure || ''));
+    const unitLabel = toUpperTrim(String(row.unidade || row.casa || row.apartamento || row.unit || ''));
     const existingUnit =
       existingUnits.find((unit) =>
         normalizeUnitRef(unit.label) === normalizeUnitRef(unitLabel) &&
@@ -139,6 +145,36 @@ function parseUnitCsv(content: string, existingUnits: Unit[]): UnitImportRow[] {
       selected: !existingUnit,
     };
   }).filter((row) => row.structureLabel && row.unitLabel);
+}
+
+function buildFriendlyUnitImportError(
+  failedRows: Array<{ row: UnitImportRow; message: string }>,
+  successCount: number
+) {
+  const previewItems = failedRows.slice(0, 3).map(({ row }) => `${row.structureLabel} / ${row.unitLabel}`);
+  const remainingCount = Math.max(failedRows.length - previewItems.length, 0);
+  const previewText = previewItems.length > 0 ? previewItems.join(', ') : '';
+  const tailText = remainingCount > 0 ? ` e mais ${remainingCount}` : '';
+  const successText =
+    successCount > 0 ? `${successCount} unidade(s) já foram importadas ou atualizadas.` : 'Nenhuma unidade foi importada nesta tentativa.';
+
+  return `Importação parcial. ${successText} ${failedRows.length} linha(s) precisam de revisão.${previewText ? ` Exemplos: ${previewText}${tailText}.` : ''}`;
+}
+
+function buildUnitImportDetail(
+  failedRows: Array<{ row: UnitImportRow; message: string }>,
+  successCount: number
+) {
+  const headline =
+    successCount > 0
+      ? `${successCount} unidade(s) deram certo. ${failedRows.length} ficaram pendentes.`
+      : `${failedRows.length} linha(s) ficaram pendentes.`;
+
+  const detailLines = failedRows.map(
+    ({ row, message }) => `Linha ${row.line} - ${row.structureLabel} / ${row.unitLabel}: ${message}`
+  );
+
+  return `${headline} ${detailLines.join(' | ')}`;
 }
 
 function isLinkedToUnit(person: Person, unit: Unit) {
@@ -277,7 +313,7 @@ function persistUnidadesSnapshot(userId: string, snapshot: UnidadesSnapshotCache
 export default function AdminUnidadesPage() {
   const router = useRouter();
   const { user, canAccess, isChecking } = useProtectedRoute({
-    allowedRoles: ['ADMIN'],
+    allowedRoles: ['ADMIN', 'GERENTE', 'MASTER'],
   });
   const [snapshotCache, setSnapshotCache] = useState<UnidadesSnapshotCache>(() => readUnidadesSnapshot(null));
   const snapshotSignatureRef = useRef(
@@ -514,7 +550,7 @@ export default function AdminUnidadesPage() {
     setError(null);
     setForm((prev) => ({
       ...prev,
-      [field]: value,
+      [field]: field === 'structureType' ? value : value.toUpperCase(),
     }));
   };
 
@@ -522,11 +558,11 @@ export default function AdminUnidadesPage() {
     setMessage(null);
     setError(null);
     setEditingUnit(unit);
-    setForm({
-      structureType: unit.structureType ?? unit.structure?.type ?? 'STREET',
-      structureLabel: unit.structure?.label ?? '',
-      unitLabel: unit.label,
-    });
+      setForm({
+        structureType: unit.structureType ?? unit.structure?.type ?? 'STREET',
+        structureLabel: toUpperTrim(unit.structure?.label ?? ''),
+        unitLabel: toUpperTrim(unit.label),
+      });
   };
 
   const handleCreateUnit = async (event: React.FormEvent) => {
@@ -563,7 +599,18 @@ export default function AdminUnidadesPage() {
       setEditingUnit(null);
       await refetchAll();
     } catch (err) {
-      const messageText = err instanceof Error ? err.message : 'Não foi possível criar a unidade.';
+      const messageText =
+        err instanceof Error && err.message
+          ? err.message
+          : getApiErrorMessage(err, {
+              fallback: 'Não foi possível criar a unidade.',
+              byStatus: {
+                400: 'Confira os dados da unidade antes de salvar.',
+                401: 'Sua sessão expirou. Entre novamente.',
+                403: 'Seu perfil não tem permissão para criar unidades.',
+                500: 'O backend falhou ao criar a unidade. Verifique a estrutura, a unidade e o cadastro-base do condomínio.',
+              },
+            });
       setError(messageText);
     } finally {
       setSaving(false);
@@ -628,6 +675,9 @@ export default function AdminUnidadesPage() {
     setMessage(null);
 
     try {
+      const failedRows: Array<{ row: UnitImportRow; message: string }> = [];
+      let successCount = 0;
+
       for (const row of selectedRows) {
         const payload = {
           condominiumId: currentCondominium.id,
@@ -637,19 +687,67 @@ export default function AdminUnidadesPage() {
           unitLabel: row.unitLabel,
         };
 
-        if (row.existingUnit) {
-          await updateResidenceUnit(row.existingUnit.id, payload);
-        } else {
-          await ensureResidenceUnit(payload);
+        try {
+          if (row.existingUnit) {
+            await updateResidenceUnit(row.existingUnit.id, payload);
+          } else {
+            await ensureResidenceUnit(payload);
+          }
+          successCount += 1;
+        } catch (rowError) {
+          failedRows.push({
+            row,
+            message: getApiErrorMessage(rowError, {
+              fallback: 'Não foi possível importar esta unidade.',
+              byStatus: {
+                400: 'O backend recusou os dados desta linha.',
+                401: 'Sessão expirada.',
+                403: 'Sem permissão para importar unidades.',
+                500: 'O backend falhou ao criar esta unidade.',
+              },
+            }),
+          });
         }
       }
 
-      setMessage(`${selectedRows.length} unidade(s) importada(s) ou atualizada(s) com sucesso.`);
-      setUnitImportRows([]);
-      setUnitImportMessage(null);
+      if (successCount > 0) {
+        const successMessage =
+          failedRows.length === 0
+            ? `${successCount} unidade(s) importada(s) ou atualizada(s) com sucesso.`
+            : `${successCount} unidade(s) importada(s) com sucesso. ${failedRows.length} falharam.`;
+        setMessage(successMessage);
+      } else {
+        setMessage(null);
+      }
+
+      if (failedRows.length > 0) {
+        setError(buildFriendlyUnitImportError(failedRows, successCount));
+        setUnitImportMessage(buildUnitImportDetail(failedRows, successCount));
+        setUnitImportRows((current) =>
+          current.map((row) => ({
+            ...row,
+            selected: failedRows.some((failure) => failure.row.line === row.line),
+          }))
+        );
+      } else {
+        setError(null);
+        setUnitImportRows([]);
+        setUnitImportMessage(null);
+      }
+
       await refetchAll();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Não foi possível importar as unidades.');
+      setError(
+        getApiErrorMessage(err, {
+          fallback: 'Não foi possível importar as unidades.',
+          byStatus: {
+            400: 'O backend recusou os dados da importação.',
+            401: 'Sua sessão expirou. Entre novamente.',
+            403: 'Seu perfil não tem permissão para importar unidades.',
+            500: 'O backend falhou ao processar a importação.',
+          },
+        })
+      );
     } finally {
       setSaving(false);
     }
@@ -697,28 +795,28 @@ export default function AdminUnidadesPage() {
         </div>
       </section>
 
-      <section className="rounded-3xl border border-white/10 bg-white/5 p-5">
-        <div className="mb-5">
+      <section className="rounded-3xl border border-white/10 bg-white/5 p-4">
+        <div className="mb-4">
           <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Estrutura física</p>
-          <h1 className="mt-2 text-2xl font-semibold text-white">{editingUnit ? `Editando unidade ${editingUnit.label}` : 'Unidades'}</h1>
-          <p className="mt-2 text-sm text-slate-400">
+          <h1 className="mt-1 text-xl font-semibold text-white">{editingUnit ? `Editando unidade ${editingUnit.label}` : 'Unidades'}</h1>
+          <p className="mt-1 text-sm text-slate-400">
             Cadastre unidades antes de vincular moradores. O formulario de moradores agora trabalha apenas com unidades existentes.
           </p>
         </div>
 
         {message && (
-          <div className="mb-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
+          <TimedAlert tone="success" onClose={() => setMessage(null)} className="mb-4">
             {message}
-          </div>
+          </TimedAlert>
         )}
 
         {error && (
-          <div className="mb-4 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-100">
+          <TimedAlert tone="error" onClose={() => setError(null)} className="mb-4">
             {error}
-          </div>
+          </TimedAlert>
         )}
 
-        <div className="mb-5 rounded-2xl border border-white/10 bg-slate-950/40 p-4">
+        <div className="mb-4 rounded-2xl border border-white/10 bg-slate-950/40 p-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h2 className="text-base font-semibold text-white">Importar unidades por CSV</h2>
@@ -730,11 +828,11 @@ export default function AdminUnidadesPage() {
               <button
                 type="button"
                 onClick={downloadUnitTemplate}
-                className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-white transition hover:bg-white/15"
+                className="rounded-2xl border border-white/10 bg-white/10 px-4 py-2.5 text-sm text-white transition hover:bg-white/15"
               >
                 Baixar modelo
               </button>
-              <label className="cursor-pointer rounded-2xl bg-white px-4 py-3 text-sm font-medium text-slate-950 transition hover:bg-slate-200">
+              <label className="cursor-pointer rounded-2xl bg-white px-4 py-2.5 text-sm font-medium text-slate-950 transition hover:bg-slate-200">
                 Selecionar CSV
                 <input type="file" accept=".csv,text/csv" onChange={handleUnitCsvSelected} className="hidden" />
               </label>
@@ -800,13 +898,13 @@ export default function AdminUnidadesPage() {
           ) : null}
         </div>
 
-        <form onSubmit={handleCreateUnit} className="grid gap-4 md:grid-cols-4">
+        <form onSubmit={handleCreateUnit} className="grid gap-3 md:grid-cols-[0.9fr_1.2fr_1fr_auto]">
           <label className="space-y-2">
             <span className="text-sm text-slate-300">Tipo de estrutura</span>
             <select
               value={form.structureType}
               onChange={(e) => handleChange('structureType', e.target.value as UnitStructureType)}
-              className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none"
+              className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-2.5 text-white outline-none"
             >
               <option value="STREET">Rua</option>
               <option value="BLOCK">Bloco</option>
@@ -821,7 +919,7 @@ export default function AdminUnidadesPage() {
               type="text"
               value={form.structureLabel}
               onChange={(e) => handleChange('structureLabel', e.target.value)}
-              className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none placeholder:text-slate-500"
+              className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-2.5 text-white outline-none placeholder:text-slate-500"
               placeholder="Ex.: A, 3, Alameda Central"
               required
             />
@@ -833,7 +931,7 @@ export default function AdminUnidadesPage() {
               type="text"
               value={form.unitLabel}
               onChange={(e) => handleChange('unitLabel', e.target.value)}
-              className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none placeholder:text-slate-500"
+              className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-2.5 text-white outline-none placeholder:text-slate-500"
               placeholder="Ex.: 101"
               required
             />
@@ -849,7 +947,7 @@ export default function AdminUnidadesPage() {
                   setError(null);
                   setMessage(null);
                 }}
-                className="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-white transition hover:bg-white/15"
+                className="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/10 px-4 py-2.5 text-sm text-white transition hover:bg-white/15"
               >
                 Cancelar
               </button>
@@ -857,7 +955,7 @@ export default function AdminUnidadesPage() {
             <button
               type="submit"
               disabled={saving}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-medium text-slate-950 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-white px-4 py-2.5 text-sm font-medium text-slate-950 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Plus className="h-4 w-4" />
               {saving ? 'Salvando...' : editingUnit ? 'Salvar unidade' : 'Criar unidade'}
@@ -866,30 +964,30 @@ export default function AdminUnidadesPage() {
         </form>
       </section>
 
-      <section className="rounded-3xl border border-white/10 bg-white/5 p-5">
+      <section className="rounded-3xl border border-white/10 bg-white/5 p-4">
         <div className="overflow-hidden rounded-2xl border border-white/10">
           <div className="grid grid-cols-12 bg-white/5 px-4 py-3 text-xs uppercase tracking-[0.16em] text-slate-400">
-            <div className="col-span-4">Unidade</div>
+            <div className="col-span-3">Unidade</div>
             <div className="col-span-4">Estrutura</div>
-            <div className="col-span-2">Vínculos</div>
+            <div className="col-span-3">Vínculos</div>
             <div className="col-span-2 text-right">Ações</div>
           </div>
 
           <div className="divide-y divide-white/10">
             {condominiumUnits.map((unit) => (
-              <div key={unit.id} className="grid grid-cols-12 items-center px-4 py-4 text-sm">
+              <div key={unit.id} className="grid grid-cols-12 items-center px-4 py-3 text-sm">
                 <button
                   type="button"
                   onClick={() => setSelectedUnit(unit)}
-                  className={`col-span-4 text-left font-medium text-white underline-offset-4 transition hover:underline ${brandClasses.accentTextSoft}`}
+                  className={`col-span-3 text-left font-medium text-white underline-offset-4 transition hover:underline ${brandClasses.accentTextSoft}`}
                 >
                   {unit.label}
                 </button>
                 <div className="col-span-4 text-slate-300">
                   {formatStructureLabel(unit.structureType, unit.structure?.label)}
                 </div>
-                <div className="col-span-2 text-slate-300">
-                  {getUnitLinksCount(unit)}
+                <div className="col-span-3 text-slate-300">
+                  {getUnitLinksCount(unit)} vínculo(s)
                 </div>
                 <div className="col-span-2 flex justify-end gap-2">
                   <button

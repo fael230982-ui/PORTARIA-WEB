@@ -18,7 +18,7 @@ export function CameraMonitor({ cameras = [] }: CameraMonitorProps) {
       <div className="space-y-4">
         {cameras.length === 0 ? (
           <div className="rounded-2xl border border-white/10 bg-slate-950/50 p-4 text-sm text-slate-400">
-            Nenhuma camera disponivel para o monitor secundario.
+            Nenhuma câmera disponível para o monitor secundário.
           </div>
         ) : (
           cameras.map((camera) => (

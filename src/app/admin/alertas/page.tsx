@@ -5,7 +5,7 @@ import { useProtectedRoute } from '@/hooks/use-protected-route';
 
 export default function AdminAlertasPage() {
   const { canAccess, isChecking } = useProtectedRoute({
-    allowedRoles: ['ADMIN', 'MASTER'],
+    allowedRoles: ['ADMIN', 'GERENTE', 'MASTER'],
   });
 
   if (isChecking) {

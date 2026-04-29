@@ -9,10 +9,27 @@ import type {
   ProvisioningKeyCreateResponse,
 } from '@/types/partner';
 
+type ApiListResponse<T> =
+  | T[]
+  | {
+      data?: T[] | null;
+      items?: T[] | null;
+      value?: T[] | null;
+      Count?: number | null;
+    };
+
+function parseList<T>(payload: ApiListResponse<T>) {
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload.data)) return payload.data;
+  if (Array.isArray(payload.items)) return payload.items;
+  if (Array.isArray(payload.value)) return payload.value;
+  return [];
+}
+
 export const partnersService = {
   async listPartners(): Promise<PartnerCompany[]> {
-    const { data } = await api.get<PartnerCompany[]>('/master/partners');
-    return Array.isArray(data) ? data : [];
+    const { data } = await api.get<ApiListResponse<PartnerCompany>>('/master/partners');
+    return parseList(data);
   },
 
   async createPartner(payload: PartnerCompanyPayload): Promise<PartnerCompany> {
@@ -26,8 +43,8 @@ export const partnersService = {
   },
 
   async listProvisioningKeys(params?: { ownerType?: string; ownerId?: string }): Promise<ProvisioningKey[]> {
-    const { data } = await api.get<ProvisioningKey[]>('/master/provisioning-keys', { params });
-    return Array.isArray(data) ? data : [];
+    const { data } = await api.get<ApiListResponse<ProvisioningKey>>('/master/provisioning-keys', { params });
+    return parseList(data);
   },
 
   async createProvisioningKey(payload: ProvisioningKeyCreatePayload): Promise<ProvisioningKeyCreateResponse> {
@@ -41,8 +58,8 @@ export const partnersService = {
   },
 
   async listPartnerClients(): Promise<Condominium[]> {
-    const { data } = await api.get<Condominium[]>('/partner/clients');
-    return Array.isArray(data) ? data : [];
+    const { data } = await api.get<ApiListResponse<Condominium>>('/partner/clients');
+    return parseList(data);
   },
 
   async createPartnerClient(payload: PartnerClientCreatePayload): Promise<Condominium> {
@@ -51,7 +68,7 @@ export const partnersService = {
   },
 
   async listMyProvisioningKeys(): Promise<ProvisioningKey[]> {
-    const { data } = await api.get<ProvisioningKey[]>('/partner/provisioning-keys');
-    return Array.isArray(data) ? data : [];
+    const { data } = await api.get<ApiListResponse<ProvisioningKey>>('/partner/provisioning-keys');
+    return parseList(data);
   },
 };

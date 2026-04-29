@@ -1517,7 +1517,7 @@ export default function MasterPage() {
               <div className="mt-3 grid gap-3 md:grid-cols-3">
                 <Field label="Nome" value={form.adminName} onChange={(value) => setField('adminName', value)} placeholder="Maria Gestora" required />
                 <Field label="E-mail" value={form.adminEmail} onChange={(value) => setField('adminEmail', value)} placeholder="admin@cliente.com" type="email" required />
-                <Field label="Senha temporaria" value={form.adminPassword} onChange={(value) => setField('adminPassword', value)} placeholder="Senha inicial" type="password" required />
+                <Field label="Senha temporária" value={form.adminPassword} onChange={(value) => setField('adminPassword', value)} placeholder="Senha inicial" type="password" required />
               </div>
             </div>
 

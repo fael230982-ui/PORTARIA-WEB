@@ -18,11 +18,18 @@ export type Camera = {
   hlsUrl?: string | null;
   webRtcUrl?: string | null;
   vmsStreamingUrl?: string | null;
+  streamExternalId?: string | null;
+  vmsDeviceId?: number | null;
+  vmsDeviceItemId?: number | null;
+  vmsRecordingServerId?: number | null;
+  vmsServerId?: string | null;
   status: CameraStatus;
   lastSeen?: string | null;
   engineStreamId?: number | null;
   engineStreamUuid?: string | null;
   faceAnalyticsId?: number | null;
+  faceEngineServerId?: string | null;
+  faceEngineServerName?: string | null;
   unitId?: string | null;
   personId?: string | null;
 };
@@ -55,6 +62,29 @@ export type CameraStreamingResponse = {
   streams?: object[];
 };
 
+export type CameraReplayCreateRequest = {
+  eventTime: string;
+  secondsBefore?: number;
+  secondsAfter?: number;
+};
+
+export type CameraReplayResponse = {
+  id: string;
+  cameraId: string;
+  provider: string;
+  vendor?: string | null;
+  status: string;
+  eventTime: string;
+  startTime: string;
+  endTime: string;
+  secondsBefore: number;
+  secondsAfter: number;
+  replayUrl?: string | null;
+  mediaAuthType?: string | null;
+  mediaExpirationSupported?: boolean;
+  errorMessage?: string | null;
+};
+
 export type CameraCreateRequest = {
   name: string;
   deviceType?: CameraDeviceType;
@@ -63,6 +93,11 @@ export type CameraCreateRequest = {
   residentVisible?: boolean | null;
   monitoringEnabled?: boolean | null;
   vmsCameraId?: string | null;
+  streamExternalId?: string | null;
+  vmsDeviceId?: number | null;
+  vmsDeviceItemId?: number | null;
+  vmsRecordingServerId?: number | null;
+  vmsServerId?: string | null;
   location?: string | null;
   eventIntegrationVendor?: string | null;
   eventIntegrationModel?: string | null;
@@ -75,6 +110,7 @@ export type CameraCreateRequest = {
   streamSourceType?: string | null;
   streamUrl?: string | null;
   snapshotUrl?: string | null;
+  faceEngineServerId?: string | null;
   status?: CameraStatus;
   unitId?: string | null;
   personId?: string | null;

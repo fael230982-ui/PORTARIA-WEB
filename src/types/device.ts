@@ -6,6 +6,12 @@ export type DeviceUsageType = 'ENTRY' | 'EXIT' | 'MONITORING' | 'PASSAGE';
 
 export type DeviceRemoteAccessTargetType = 'DOOR' | 'SECBOX';
 
+export type DeviceInterlockConfig = {
+  enabled?: boolean;
+  blockedByDeviceIds?: string[];
+  openStateTtlSeconds?: number;
+};
+
 export type DeviceRemoteAccessConfig = {
   targetType: DeviceRemoteAccessTargetType;
   doorNumber?: number | null;
@@ -13,6 +19,11 @@ export type DeviceRemoteAccessConfig = {
   portalId?: number | null;
   reason?: number;
   residentEnabled?: boolean;
+  actionOneLabel?: string | null;
+  actionTwoLabel?: string | null;
+  actionOneEnabled?: boolean | null;
+  actionTwoEnabled?: boolean | null;
+  interlockConfig?: DeviceInterlockConfig | null;
 };
 
 export type Device = {
@@ -28,6 +39,7 @@ export type Device = {
   aiPort?: number | null;
   webPort?: number | null;
   username?: string | null;
+  hasPassword?: boolean;
   streamUrl?: string | null;
   snapshotUrl?: string | null;
   monitoringEnabled?: boolean;
@@ -35,10 +47,19 @@ export type Device = {
   remoteAccessConfig?: DeviceRemoteAccessConfig | null;
   cameraEnabled?: boolean;
   deviceUsageType?: DeviceUsageType | null;
-  minAuthorizedAge?: number | null;
   unitId?: string | null;
+  condominiumId?: string | null;
+  accessGroupIds?: string[];
+  accessGroupNames?: string[];
   cameraId?: string | null;
   cameraName?: string | null;
+};
+
+export type DeviceProvisioningStatus = {
+  ok: boolean;
+  message: string;
+  errorType?: string | null;
+  result?: Record<string, unknown> | null;
 };
 
 export type DevicePayload = {
@@ -60,8 +81,9 @@ export type DevicePayload = {
   remoteAccessConfig?: DeviceRemoteAccessConfig | null;
   cameraEnabled?: boolean;
   deviceUsageType?: DeviceUsageType | null;
-  minAuthorizedAge?: number | null;
   unitId?: string | null;
+  condominiumId?: string | null;
+  accessGroupIds?: string[];
   status?: DeviceStatus;
 };
 
@@ -69,7 +91,16 @@ export type DeviceControlResponse = {
   ok: boolean;
   vendor: string;
   operation: string;
+  message?: string | null;
+  status?: string | null;
   result?: Record<string, unknown>;
+};
+
+export type ControlIdJobStatus = 'PENDING' | 'RUNNING' | 'SUCCEEDED' | 'FAILED';
+
+export type DeviceCreateResult = {
+  device: Device;
+  controlIdProvisioning?: DeviceProvisioningStatus | null;
 };
 
 export type ControlIdConfigurePushPayload = {

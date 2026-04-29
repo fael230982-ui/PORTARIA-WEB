@@ -44,7 +44,7 @@ export function ActivityFeed({ items = [] }: { items?: ActivityItem[] }) {
       <CardContent className="space-y-4">
         {items.length === 0 ? (
           <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-slate-400">
-            Nenhuma atividade recente disponivel.
+            Nenhuma atividade recente disponível.
           </div>
         ) : (
           items.map((activity) => {

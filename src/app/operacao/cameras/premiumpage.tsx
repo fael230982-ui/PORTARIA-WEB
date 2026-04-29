@@ -1,18 +1,18 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Button } from '@/components/ui/button';
 import { Maximize2 } from 'lucide-react';
-import { useProtectedRoute } from '@/hooks/use-protected-route';
-import { useCameras } from '@/hooks/use-cameras';
-import { useResidenceCatalog } from '@/hooks/use-residence-catalog';
 import { CameraGrid } from '@/components/operacao/camera-grid';
 import { CameraPlayer } from '@/components/operacao/camera-player';
+import { Button } from '@/components/ui/button';
+import { useCameras } from '@/hooks/use-cameras';
+import { useProtectedRoute } from '@/hooks/use-protected-route';
+import { useResidenceCatalog } from '@/hooks/use-residence-catalog';
 
 const allowedRoles = ['OPERADOR', 'CENTRAL', 'MASTER'] as const;
 
 function getCameraUnitLabel(unitId: string | null | undefined, unitLabels: Map<string, string>) {
-  if (!unitId) return 'Sem unidade vinculada';
+  if (!unitId) return 'Área comum do condomínio';
   return unitLabels.get(unitId) ?? 'Unidade não identificada';
 }
 
@@ -33,10 +33,7 @@ export default function CamerasPremiumPage() {
     return [];
   }, [units, user]);
 
-  const accessibleUnitIds = useMemo(
-    () => new Set(accessibleUnits.map((unit) => unit.id)),
-    [accessibleUnits]
-  );
+  const accessibleUnitIds = useMemo(() => new Set(accessibleUnits.map((unit) => unit.id)), [accessibleUnits]);
 
   const unitLabels = useMemo(
     () =>
@@ -56,7 +53,7 @@ export default function CamerasPremiumPage() {
       .filter((camera) => {
         if (!user) return false;
         if (user.role === 'MASTER' || user.role === 'CENTRAL') return true;
-        if (!camera.unitId) return false;
+        if (!camera.unitId) return true;
         return accessibleUnitIds.has(camera.unitId);
       })
       .map((camera) => ({

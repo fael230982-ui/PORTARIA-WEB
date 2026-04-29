@@ -31,6 +31,13 @@ export type MoradorRow = {
   estruturaLabel?: string;
   localizacao?: string;
   unit?: Unit | null;
+  unitIds?: string[];
+  unitNames?: string[];
+  accessGroupIds?: string[];
+  accessGroupNames?: string[];
+  faceListId?: number | null;
+  faceListItemId?: number | null;
+  hasFacialCredential?: boolean;
   faceStatus?: Person['faceStatus'];
   faceUpdatedAt?: string | null;
   faceErrorMessage?: string | null;
@@ -274,6 +281,8 @@ export function buildPersonUpsertPayload(input: {
   source?: string | null;
   residence?: ResidenceFormData;
   unitId?: string | null;
+  unitIds?: string[];
+  accessGroupIds?: string[];
 }) {
   const payload: {
     name: string;
@@ -284,6 +293,8 @@ export function buildPersonUpsertPayload(input: {
     documentType?: PersonDocumentType | null;
     birthDate?: string | null;
     unitId?: string;
+    unitIds?: string[];
+    accessGroupIds?: string[];
     photoUrl?: string | null;
     minorFacialAuthorization?: MinorFacialAuthorization | null;
     source?: string | null;
@@ -333,10 +344,20 @@ export function buildPersonUpsertPayload(input: {
     payload.source = input.source;
   }
 
-  if (input.unitId) {
+  const normalizedUnitIds = Array.from(new Set((input.unitIds ?? []).map((value) => value.trim()).filter(Boolean)));
+
+  if (normalizedUnitIds.length > 0) {
+    payload.unitIds = normalizedUnitIds;
+    payload.unitId = normalizedUnitIds[0];
+  } else if (input.unitId) {
     payload.unitId = input.unitId;
   } else if (legacyUnitId) {
     payload.unitId = legacyUnitId;
+  }
+
+  const normalizedAccessGroupIds = Array.from(new Set((input.accessGroupIds ?? []).map((value) => value.trim()).filter(Boolean)));
+  if (normalizedAccessGroupIds.length > 0) {
+    payload.accessGroupIds = normalizedAccessGroupIds;
   }
 
   return payload;
@@ -462,6 +483,13 @@ export function normalizePerson(person: Person): MoradorRow {
     estruturaLabel: residence.estruturaLabel,
     localizacao: residence.localizacao,
     unit: person.unit ?? null,
+    unitIds: person.unitIds ?? (person.unitId ? [person.unitId] : []),
+    unitNames: person.unitNames ?? (person.unitName ? [person.unitName] : []),
+    accessGroupIds: person.accessGroupIds ?? [],
+    accessGroupNames: person.accessGroupNames ?? [],
+    faceListId: person.faceListId ?? null,
+    faceListItemId: person.faceListItemId ?? null,
+    hasFacialCredential: person.hasFacialCredential ?? false,
     faceStatus: person.faceStatus ?? null,
     faceUpdatedAt: person.faceUpdatedAt ?? null,
     faceErrorMessage: person.faceErrorMessage ?? null,

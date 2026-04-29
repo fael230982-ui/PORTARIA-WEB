@@ -35,6 +35,11 @@ export type Person = {
   unitName?: string | null;
   unitNames?: string[];
   unit?: Unit | null;
+  accessGroupIds?: string[];
+  accessGroupNames?: string[];
+  faceListId?: number | null;
+  faceListItemId?: number | null;
+  hasFacialCredential?: boolean;
   startDate?: string | null;
   endDate?: string | null;
   createdAt?: string | null;
@@ -74,6 +79,7 @@ export type CreatePersonRequest = {
   category: PersonCategory;
   unitId?: string | null;
   unitIds?: string[];
+  accessGroupIds?: string[];
   unit?: Unit | null;
   photoUrl?: string | null;
   minorFacialAuthorization?: MinorFacialAuthorization | null;

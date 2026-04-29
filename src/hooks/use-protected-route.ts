@@ -18,15 +18,19 @@ export function useProtectedRoute(options: UseProtectedRouteOptions = {}) {
   const router = useRouter();
   const pathname = usePathname();
   const auth = useAuth();
+  const hasSessionSnapshot = Boolean(auth.token && auth.user);
 
   const canAccess = useMemo(() => {
-    if (auth.loading || !auth.hydrated) return false;
+    if (auth.loading || !auth.hydrated) {
+      if (!hasSessionSnapshot || !auth.user) return false;
+      return canAccessRole(auth.user.role, allowedRoles);
+    }
     if (!auth.isAuthenticated || !auth.user) return false;
     return canAccessRole(auth.user.role, allowedRoles);
-  }, [auth.hydrated, auth.isAuthenticated, auth.loading, auth.user, allowedRoles]);
+  }, [allowedRoles, auth.hydrated, auth.isAuthenticated, auth.loading, auth.user, hasSessionSnapshot]);
 
   useEffect(() => {
-    if (auth.loading || !auth.hydrated) return;
+    if ((auth.loading || !auth.hydrated) && !hasSessionSnapshot) return;
 
     if (!auth.isAuthenticated || !auth.user) {
       router.replace(redirectTo);
@@ -41,11 +45,11 @@ export function useProtectedRoute(options: UseProtectedRouteOptions = {}) {
     if (pathname !== '/acordo' && !hasAcceptedCurrentLegalVersion()) {
       router.replace('/acordo');
     }
-  }, [allowedRoles, auth.hydrated, auth.isAuthenticated, auth.loading, auth.user, pathname, redirectTo, router]);
+  }, [allowedRoles, auth.hydrated, auth.isAuthenticated, auth.loading, auth.user, hasSessionSnapshot, pathname, redirectTo, router]);
 
   return {
     ...auth,
     canAccess,
-    isChecking: auth.loading || !auth.hydrated,
+    isChecking: (auth.loading || !auth.hydrated) && !hasSessionSnapshot,
   };
 }

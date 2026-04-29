@@ -42,6 +42,14 @@ export default function LoginPage() {
   const [resetToken, setResetToken] = useState('');
   const isResetMode = Boolean(resetToken);
 
+  const navigateToRoute = (target: string) => {
+    if (typeof window !== 'undefined') {
+      window.location.replace(target);
+      return;
+    }
+    router.replace(target);
+  };
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     setResetToken(params.get('token') ?? params.get('resetToken') ?? '');
@@ -62,8 +70,8 @@ export default function LoginPage() {
   useEffect(() => {
     if (loading) return;
     if (!token || !user || !isAuthenticated) return;
-    router.replace(getRouteForRole(user.role));
-  }, [loading, token, user, isAuthenticated, router]);
+    navigateToRoute(getRouteForRole(user.role));
+  }, [isAuthenticated, loading, token, user]);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -81,7 +89,7 @@ export default function LoginPage() {
       if (acceptedTerms) {
         acceptCurrentLegalVersion();
       }
-      router.replace(getRouteForRole(response.user.role));
+      navigateToRoute(getRouteForRole(response.user.role));
     } catch (err) {
       const message = err instanceof Error ? err.message : 'E-mail ou senha inválidos.';
       setError(message);
@@ -134,7 +142,7 @@ export default function LoginPage() {
       setResetMessage('Senha alterada. Entre usando a nova senha.');
       setNewPassword('');
       setConfirmNewPassword('');
-      router.replace('/login');
+      navigateToRoute('/login');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Não foi possível alterar a senha.';
       setResetError(message);
