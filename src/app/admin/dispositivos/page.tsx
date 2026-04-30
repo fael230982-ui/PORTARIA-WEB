@@ -40,6 +40,7 @@ import type { AccessGroup } from '@/types/access-group';
 import type {
   Device,
   DeviceControlResponse,
+  DeviceDoorStatus,
   DevicePayload,
   DeviceStatus,
   DeviceType,
@@ -475,6 +476,7 @@ export default function AdminDevicesPage() {
   const [controlMessage, setControlMessage] = useState<string | null>(null);
   const [controlError, setControlError] = useState<string | null>(null);
   const [actionFeedback, setActionFeedback] = useState<Record<string, ActionFeedback>>({});
+  const [doorStatusByDevice, setDoorStatusByDevice] = useState<Record<string, DeviceDoorStatus>>({});
   const [verifiedOnlineDeviceIds, setVerifiedOnlineDeviceIds] = useState<string[]>([]);
   const devicesRef = useRef<Device[]>([]);
   const pendingDeviceIdsRef = useRef<string[]>([]);
@@ -531,6 +533,7 @@ export default function AdminDevicesPage() {
   const selectedActionTwoLabel = selectedDevice?.remoteAccessConfig?.actionTwoLabel?.trim() || 'Acionamento 2';
   const selectedActionOneEnabled = selectedDevice?.remoteAccessConfig?.actionOneEnabled ?? true;
   const selectedActionTwoEnabled = selectedDevice?.remoteAccessConfig?.actionTwoEnabled ?? true;
+  const selectedDoorStatus = selectedDevice ? doorStatusByDevice[selectedDevice.id] ?? null : null;
   const scopedAccessGroups = useMemo(() => {
     if (!scopedCondominiumId) return accessGroups;
     return accessGroups.filter((group) => !group.condominiumId || group.condominiumId === scopedCondominiumId);
@@ -579,6 +582,35 @@ function getActionButtonClass(actionKey: string) {
     return 'Sensor não monitorado';
   }
 
+  function getDoorStatusFromResponse(response: unknown): DeviceDoorStatus | null {
+    const result = (response as { result?: unknown } | null)?.result;
+    if (!result || typeof result !== 'object') return null;
+    return result as DeviceDoorStatus;
+  }
+
+  function isDoorOpenBySensor(doorStatus?: DeviceDoorStatus | null) {
+    if (!doorStatus?.sensorAvailable) return false;
+    const normalized = String(doorStatus.doorStatus ?? doorStatus.doorState ?? '').toUpperCase();
+    return doorStatus.doorOpen === true || normalized === 'OPEN';
+  }
+
+  function getSensorDoorStateLabel(doorStatus?: DeviceDoorStatus | null) {
+    if (!doorStatus?.sensorAvailable) return 'Sensor não monitorado';
+    const normalized = String(doorStatus.doorStatus ?? doorStatus.doorState ?? '').toUpperCase();
+    if (doorStatus.doorOpen === true || normalized === 'OPEN') return 'Porta aberta';
+    if (doorStatus.doorOpen === false || normalized === 'CLOSED') return 'Porta fechada';
+    return 'Sensor sem estado';
+  }
+
+  function getSensorDoorIndicatorClass(doorStatus?: DeviceDoorStatus | null) {
+    if (doorStatus?.sensorAvailable) {
+      const normalized = String(doorStatus.doorStatus ?? doorStatus.doorState ?? '').toUpperCase();
+      if (doorStatus.doorOpen === true || normalized === 'OPEN') return 'border-red-300/50 bg-red-400/20 text-red-50';
+      if (doorStatus.doorOpen === false || normalized === 'CLOSED') return 'border-emerald-300/50 bg-emerald-400/20 text-emerald-50';
+    }
+    return 'border-white/15 bg-white/10 text-slate-200';
+  }
+
   useEffect(() => {
     devicesRef.current = allDevices;
   }, [allDevices]);
@@ -596,6 +628,42 @@ function getActionButtonClass(actionKey: string) {
     if (typeof window === 'undefined') return;
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [message, error]);
+
+  useEffect(() => {
+    if (modal !== 'control' || !selectedDevice) return;
+
+    let cancelled = false;
+
+    async function loadDoorStatus() {
+      if (!selectedDevice) return;
+      try {
+        const response = await devicesService.getControlIdDoorStatus(selectedDevice.id);
+        const status = getDoorStatusFromResponse(response);
+        if (!status || cancelled) return;
+        setDoorStatusByDevice((current) => ({
+          ...current,
+          [selectedDevice.id]: status,
+        }));
+      } catch {
+        if (cancelled) return;
+        setDoorStatusByDevice((current) => {
+          const next = { ...current };
+          delete next[selectedDevice.id];
+          return next;
+        });
+      }
+    }
+
+    void loadDoorStatus();
+    const timer = window.setInterval(() => {
+      void loadDoorStatus();
+    }, 30000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [modal, selectedDevice]);
 
   async function loadDevices(options?: { preserveExistingOnEmpty?: boolean }) {
     setLoading(true);
@@ -886,6 +954,20 @@ function getActionButtonClass(actionKey: string) {
       setControlError(getErrorMessage(actionError, 'Não foi possível executar o comando.'));
       setError(getErrorMessage(actionError, 'Não foi possível executar o comando.'));
     } finally {
+      if (selectedDevice && label.startsWith('open-')) {
+        try {
+          const response = await devicesService.getControlIdDoorStatus(selectedDevice.id);
+          const status = getDoorStatusFromResponse(response);
+          if (status) {
+            setDoorStatusByDevice((current) => ({
+              ...current,
+              [selectedDevice.id]: status,
+            }));
+          }
+        } catch {
+          // Se o sensor nao estiver configurado, o painel continua exibindo estado nao monitorado.
+        }
+      }
       setActionLoading(null);
     }
   }
@@ -1587,6 +1669,10 @@ function getActionButtonClass(actionKey: string) {
                 <p className="text-sm text-slate-400">
                   Escolha o acionamento desejado. O operador não precisa preencher campos manuais.
                 </p>
+                <div className="rounded-xl border border-white/10 bg-slate-950/70 px-3 py-2 text-xs text-slate-300">
+                  Estado físico: <span className="font-semibold text-white">{getSensorDoorStateLabel(selectedDoorStatus)}</span>
+                  {selectedDoorStatus?.deviceMessage ? <span className="ml-1 text-slate-400">({selectedDoorStatus.deviceMessage})</span> : null}
+                </div>
                 <div className="grid gap-3 sm:grid-cols-2">
                   {selectedActionOneEnabled ? (
                     <Button
@@ -1607,12 +1693,14 @@ function getActionButtonClass(actionKey: string) {
                     >
                       <span className="flex w-full items-center justify-between gap-3">
                         <span className="flex items-center gap-2">
-                          <span className={`inline-flex h-8 w-8 items-center justify-center rounded-xl border ${getDoorIndicatorClass('open-1')}`}>
-                            <DoorClosed className="h-4 w-4" />
+                          <span className={`inline-flex h-8 w-8 items-center justify-center rounded-xl border ${getSensorDoorIndicatorClass(selectedDoorStatus)}`}>
+                            {isDoorOpenBySensor(selectedDoorStatus) ? <DoorOpen className="h-4 w-4" /> : <DoorClosed className="h-4 w-4" />}
                           </span>
                           {selectedActionOneLabel}
                         </span>
-                        <span className="text-[10px] font-medium opacity-80">{getDoorStateLabel('open-1')}</span>
+                        <span className="text-[10px] font-medium opacity-80">
+                          {actionFeedback['open-1'] === 'pending' ? 'Aguardando confirmação' : getSensorDoorStateLabel(selectedDoorStatus)}
+                        </span>
                       </span>
                     </Button>
                   ) : null}
@@ -1636,12 +1724,14 @@ function getActionButtonClass(actionKey: string) {
                     >
                       <span className="flex w-full items-center justify-between gap-3">
                         <span className="flex items-center gap-2">
-                          <span className={`inline-flex h-8 w-8 items-center justify-center rounded-xl border ${getDoorIndicatorClass('open-2')}`}>
-                            <DoorClosed className="h-4 w-4" />
+                          <span className={`inline-flex h-8 w-8 items-center justify-center rounded-xl border ${getSensorDoorIndicatorClass(selectedDoorStatus)}`}>
+                            {isDoorOpenBySensor(selectedDoorStatus) ? <DoorOpen className="h-4 w-4" /> : <DoorClosed className="h-4 w-4" />}
                           </span>
                           {selectedActionTwoLabel}
                         </span>
-                        <span className="text-[10px] font-medium opacity-80">{getDoorStateLabel('open-2')}</span>
+                        <span className="text-[10px] font-medium opacity-80">
+                          {actionFeedback['open-2'] === 'pending' ? 'Aguardando confirmação' : getSensorDoorStateLabel(selectedDoorStatus)}
+                        </span>
                       </span>
                     </Button>
                   ) : null}

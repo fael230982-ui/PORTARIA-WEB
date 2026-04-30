@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } f
 import {
   Bell,
   DoorClosed,
+  DoorOpen,
   Building2,
   Camera as CameraIcon,
   Delete,
@@ -108,7 +109,7 @@ import type { AccessLog } from '@/types/access-log';
 import type { Camera } from '@/types/camera';
 import type { Unit } from '@/types/condominium';
 import type { Delivery, DeliveryPayload } from '@/types/delivery';
-import type { Device } from '@/types/device';
+import type { Device, DeviceDoorStatus } from '@/types/device';
 import type { OperationAction, OperationMessage, OperationPhotoSearchResponse, OperationShiftChange } from '@/types/operation';
 import type { Person, PersonCategory } from '@/types/person';
 import type { Report, ShiftHandoverReportMetadata } from '@/types/report';
@@ -186,6 +187,49 @@ function getRemoteOpenDoorIconClass(feedback: 'idle' | 'success' | 'pending' | '
   if (feedback === 'pending') return 'border-amber-300/40 bg-amber-300/20 text-amber-50';
   if (feedback === 'error') return 'border-red-300/40 bg-red-300/20 text-red-50';
   return 'border-white/15 bg-white/10 text-slate-100';
+}
+
+function getRemoteOpenDoorStateLabelWithSensor(
+  feedback: 'idle' | 'success' | 'pending' | 'error' | undefined,
+  doorStatus?: DeviceDoorStatus | null
+) {
+  if (doorStatus?.sensorAvailable) {
+    const normalized = String(doorStatus.doorStatus ?? doorStatus.doorState ?? '').toUpperCase();
+    if (doorStatus.doorOpen === true || normalized === 'OPEN') return 'Porta aberta';
+    if (doorStatus.doorOpen === false || normalized === 'CLOSED') return 'Porta fechada';
+    return 'Sensor sem estado';
+  }
+  if (feedback === 'success') return 'Comando confirmado';
+  if (feedback === 'pending') return 'Aguardando confirmação';
+  if (feedback === 'error') return 'Falha no comando';
+  return 'Sensor não monitorado';
+}
+
+function getRemoteOpenDoorIconClassWithSensor(
+  feedback: 'idle' | 'success' | 'pending' | 'error' | undefined,
+  doorStatus?: DeviceDoorStatus | null
+) {
+  if (doorStatus?.sensorAvailable) {
+    const normalized = String(doorStatus.doorStatus ?? doorStatus.doorState ?? '').toUpperCase();
+    if (doorStatus.doorOpen === true || normalized === 'OPEN') return 'border-red-300/50 bg-red-400/20 text-red-50';
+    if (doorStatus.doorOpen === false || normalized === 'CLOSED') return 'border-emerald-300/50 bg-emerald-400/20 text-emerald-50';
+  }
+  if (feedback === 'success') return 'border-emerald-300/40 bg-emerald-300/20 text-emerald-50';
+  if (feedback === 'pending') return 'border-amber-300/40 bg-amber-300/20 text-amber-50';
+  if (feedback === 'error') return 'border-red-300/40 bg-red-300/20 text-red-50';
+  return 'border-white/15 bg-white/10 text-slate-100';
+}
+
+function getDoorStatusFromResponse(response: unknown): DeviceDoorStatus | null {
+  const result = (response as { result?: unknown } | null)?.result;
+  if (!result || typeof result !== 'object') return null;
+  return result as DeviceDoorStatus;
+}
+
+function isDoorOpenBySensor(doorStatus?: DeviceDoorStatus | null) {
+  if (!doorStatus?.sensorAvailable) return false;
+  const normalized = String(doorStatus.doorStatus ?? doorStatus.doorState ?? '').toUpperCase();
+  return doorStatus.doorOpen === true || normalized === 'OPEN';
 }
 
 function isQueuedControlResult(result: unknown) {
@@ -1539,6 +1583,7 @@ export default function OperacaoPage() {
   const [remoteOpenLoading, setRemoteOpenLoading] = useState(false);
   const [remoteOpenExecutingKey, setRemoteOpenExecutingKey] = useState<string | null>(null);
   const [remoteOpenFeedback, setRemoteOpenFeedback] = useState<Record<string, 'idle' | 'success' | 'pending' | 'error'>>({});
+  const [remoteDoorStatusByDevice, setRemoteDoorStatusByDevice] = useState<Record<string, DeviceDoorStatus>>({});
   const [inboxMessages, setInboxMessages] = useState<OperationMessage[]>([]);
   const [inboxMessagesLoading, setInboxMessagesLoading] = useState(false);
   const [inboxMessagesError, setInboxMessagesError] = useState<string | null>(null);
@@ -2120,29 +2165,42 @@ export default function OperacaoPage() {
       return;
     }
 
-    if (!inboxUnitIds.length) {
-      setInboxMessages([]);
-      setInboxMessagesError(null);
-      setInboxMessagesMode('empty');
-      return;
-    }
-
     setInboxMessagesLoading(true);
     setInboxMessagesError(null);
     setInboxMessagesMode('unit');
 
     try {
-      const responses = await Promise.all(
-        inboxUnitIds.map((unitId) => operationService.listMessages({ unitId, limit: 20 }))
-      );
-      const mergedMessages = mergeOperationMessagesById(
-        responses.flatMap((response) => response.data ?? []).slice(0, 200)
-      ).slice(0, 50);
+      const inboxResponse = await operationService.listMessageInbox({ limit: 50 });
+      let mergedMessages = mergeOperationMessagesById(inboxResponse.data ?? []).slice(0, 50);
+
+      if (!mergedMessages.length && inboxUnitIds.length) {
+        const responses = await Promise.all(
+          inboxUnitIds.map((unitId) => operationService.listMessages({ unitId, limit: 20 }))
+        );
+        mergedMessages = mergeOperationMessagesById(
+          responses.flatMap((response) => response.data ?? []).slice(0, 200)
+        ).slice(0, 50);
+      }
+
       setInboxMessages(mergedMessages);
+      setInboxMessagesMode(mergedMessages.length || inboxUnitIds.length ? 'unit' : 'empty');
     } catch (error) {
-      setInboxMessagesError(
-        error instanceof Error ? error.message : 'Nao foi possivel atualizar as mensagens agora.'
-      );
+      if (inboxUnitIds.length) {
+        try {
+          const responses = await Promise.all(
+            inboxUnitIds.map((unitId) => operationService.listMessages({ unitId, limit: 20 }))
+          );
+          const mergedMessages = mergeOperationMessagesById(
+            responses.flatMap((response) => response.data ?? []).slice(0, 200)
+          ).slice(0, 50);
+          setInboxMessages(mergedMessages);
+          setInboxMessagesMode(mergedMessages.length ? 'unit' : 'empty');
+          return;
+        } catch {
+          // Mantem o erro original da inbox, que e o endpoint canonico para a portaria.
+        }
+      }
+      setInboxMessagesError(error instanceof Error ? error.message : 'Não foi possível atualizar as mensagens agora.');
     } finally {
       setInboxMessagesLoading(false);
     }
@@ -2150,7 +2208,7 @@ export default function OperacaoPage() {
   useEffect(() => {
     void refetchInboxMessages();
 
-    if (!user || !inboxUnitIds.length) return;
+    if (!user) return;
 
     const timer = window.setInterval(() => {
       void refetchInboxMessages();
@@ -2173,6 +2231,42 @@ export default function OperacaoPage() {
     return remoteOpenDevices.find((device) => device.id === selectedRemoteOpenDeviceId) ?? remoteOpenDevices[0] ?? null;
   }, [remoteOpenDevices, selectedRemoteOpenDeviceId]);
   const remoteOpenButtons = useMemo(() => getRemoteOpenButtons(primaryRemoteOpenDevice), [primaryRemoteOpenDevice]);
+  const primaryDoorStatus = primaryRemoteOpenDevice ? remoteDoorStatusByDevice[primaryRemoteOpenDevice.id] ?? null : null;
+
+  useEffect(() => {
+    if (!primaryRemoteOpenDevice) return;
+
+    let cancelled = false;
+
+    async function loadDoorStatus() {
+      try {
+        const response = await devicesService.getControlIdDoorStatus(primaryRemoteOpenDevice.id);
+        const status = getDoorStatusFromResponse(response);
+        if (!status || cancelled) return;
+        setRemoteDoorStatusByDevice((current) => ({
+          ...current,
+          [primaryRemoteOpenDevice.id]: status,
+        }));
+      } catch {
+        if (cancelled) return;
+        setRemoteDoorStatusByDevice((current) => {
+          const next = { ...current };
+          delete next[primaryRemoteOpenDevice.id];
+          return next;
+        });
+      }
+    }
+
+    void loadDoorStatus();
+    const timer = window.setInterval(() => {
+      void loadDoorStatus();
+    }, 30000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [primaryRemoteOpenDevice]);
 
   const alerts = useMemo(
     () => (alertsData?.data?.length ? alertsData.data : !isOnline ? snapshotCache.alerts : alertsData?.data ?? []),
@@ -3805,6 +3899,18 @@ export default function OperacaoPage() {
         text: getErrorMessage(error, 'Não foi possível executar a abertura remota.'),
       });
     } finally {
+      try {
+        const statusResponse = await devicesService.getControlIdDoorStatus(primaryRemoteOpenDevice.id);
+        const status = getDoorStatusFromResponse(statusResponse);
+        if (status) {
+          setRemoteDoorStatusByDevice((current) => ({
+            ...current,
+            [primaryRemoteOpenDevice.id]: status,
+          }));
+        }
+      } catch {
+        // Sem sensor ou endpoint indisponível: a tela mantém o estado como não monitorado.
+      }
       setRemoteOpenExecutingKey(null);
     }
   }
@@ -4891,6 +4997,8 @@ export default function OperacaoPage() {
                     {remoteOpenButtons.length > 0 ? remoteOpenButtons.map((action) => {
                       const feedbackKey = `${primaryRemoteOpenDevice?.id}:${action.doorNumber}`;
                       const feedback = remoteOpenFeedback[feedbackKey];
+                      const doorStatus = primaryDoorStatus;
+                      const DoorIcon = isDoorOpenBySensor(doorStatus) ? DoorOpen : DoorClosed;
                       return (
                       <button
                         key={`remote-open-${action.doorNumber}`}
@@ -4901,12 +5009,12 @@ export default function OperacaoPage() {
                       >
                         <span className="flex items-center justify-between gap-3">
                           <span className="flex items-center gap-2">
-                            <span className={`inline-flex h-8 w-8 items-center justify-center rounded-xl border ${getRemoteOpenDoorIconClass(feedback)}`}>
-                              <DoorClosed className="h-4 w-4" />
+                            <span className={`inline-flex h-8 w-8 items-center justify-center rounded-xl border ${getRemoteOpenDoorIconClassWithSensor(feedback, doorStatus)}`}>
+                              <DoorIcon className="h-4 w-4" />
                             </span>
                             {remoteOpenExecutingKey === feedbackKey ? 'Acionando...' : action.label}
                           </span>
-                          <span className="text-[10px] font-medium opacity-80">{getRemoteOpenDoorStateLabel(feedback)}</span>
+                          <span className="text-[10px] font-medium opacity-80">{getRemoteOpenDoorStateLabelWithSensor(feedback, doorStatus)}</span>
                         </span>
                       </button>
                       );
@@ -5690,6 +5798,8 @@ export default function OperacaoPage() {
               {remoteOpenButtons.length > 0 ? remoteOpenButtons.map((action) => {
                 const feedbackKey = `${primaryRemoteOpenDevice?.id}:${action.doorNumber}`;
                 const feedback = remoteOpenFeedback[feedbackKey];
+                const doorStatus = primaryDoorStatus;
+                const DoorIcon = isDoorOpenBySensor(doorStatus) ? DoorOpen : DoorClosed;
                 return (
                 <button
                   key={`${action.doorNumber}-modal`}
@@ -5700,12 +5810,12 @@ export default function OperacaoPage() {
                 >
                   <span className="flex items-center justify-between gap-3">
                     <span className="flex items-center gap-3">
-                      <span className={`inline-flex h-10 w-10 items-center justify-center rounded-2xl border ${getRemoteOpenDoorIconClass(feedback)}`}>
-                        <DoorClosed className="h-5 w-5" />
+                      <span className={`inline-flex h-10 w-10 items-center justify-center rounded-2xl border ${getRemoteOpenDoorIconClassWithSensor(feedback, doorStatus)}`}>
+                        <DoorIcon className="h-5 w-5" />
                       </span>
                       <span>{remoteOpenExecutingKey === feedbackKey ? 'Acionando...' : action.label}</span>
                     </span>
-                    <span className="text-xs font-normal uppercase tracking-[0.14em] opacity-75">{getRemoteOpenDoorStateLabel(feedback)}</span>
+                    <span className="text-xs font-normal uppercase tracking-[0.14em] opacity-75">{getRemoteOpenDoorStateLabelWithSensor(feedback, doorStatus)}</span>
                   </span>
                 </button>
                 );

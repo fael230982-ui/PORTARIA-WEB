@@ -156,6 +156,15 @@ function normalizeOperationMessage(message: ApiOperationMessage): OperationMessa
   };
 }
 
+function parseOperationMessagesPayload(payload: OperationMessagesResponse | ApiOperationMessage[] | ApiOperationMessage): ApiOperationMessage[] {
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray((payload as OperationMessagesResponse).data)) return (payload as OperationMessagesResponse).data as ApiOperationMessage[];
+  const payloadWithItems = payload as unknown as { items?: ApiOperationMessage[] };
+  if (Array.isArray(payloadWithItems.items)) return payloadWithItems.items;
+  if (payload && typeof payload === 'object' && 'id' in payload) return [payload as ApiOperationMessage];
+  return [];
+}
+
 function normalizeSearchItem(type: OperationSearchResponse['data'][number]['type'], raw: Record<string, unknown>) {
   const id = String(raw.id ?? raw.personId ?? raw.deliveryId ?? raw.accessLogId ?? crypto.randomUUID());
   const title = String(raw.name ?? raw.title ?? raw.personName ?? raw.deliveryCompany ?? raw.unitLabel ?? raw.unitName ?? id);
@@ -337,8 +346,14 @@ export const operationService = {
   },
 
   async listMessages(params?: OperationMessagesParams): Promise<OperationMessagesResponse> {
-    const response = await api.get<OperationMessagesResponse | ApiOperationMessage[]>('/messages', { params });
-    const messages = Array.isArray(response.data) ? response.data : response.data.data;
+    const response = await api.get<OperationMessagesResponse | ApiOperationMessage[] | ApiOperationMessage>('/messages', { params });
+    const messages = parseOperationMessagesPayload(response.data);
+    return { data: messages.map(normalizeOperationMessage) };
+  },
+
+  async listMessageInbox(params?: { limit?: number; unreadOnly?: boolean }): Promise<OperationMessagesResponse> {
+    const response = await api.get<OperationMessagesResponse | ApiOperationMessage[] | ApiOperationMessage>('/messages/inbox', { params });
+    const messages = parseOperationMessagesPayload(response.data);
     return { data: messages.map(normalizeOperationMessage) };
   },
 

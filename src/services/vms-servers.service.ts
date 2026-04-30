@@ -1,5 +1,7 @@
 import { api } from '@/lib/axios';
-import type { VmsExistingCamera, VmsExistingCameraLookupResponse, VmsServer, VmsServerPayload } from '@/types/vms-server';
+import { normalizeCamera } from '@/features/cameras/camera-normalizers';
+import type { Camera } from '@/types/camera';
+import type { VmsCameraImportPayload, VmsExistingCamera, VmsExistingCameraLookupResponse, VmsServer, VmsServerPayload } from '@/types/vms-server';
 
 type VmsServerListResponse =
   | VmsServer[]
@@ -67,6 +69,21 @@ export const vmsServersService = {
       foundCount: typeof data?.foundCount === 'number' ? data.foundCount : Array.isArray(data?.items) ? data.items.length : 0,
       shouldCreateNewCamera: Boolean(data?.shouldCreateNewCamera),
       message: typeof data?.message === 'string' ? data.message : null,
+    };
+  },
+
+  async importExistingCamera(serverId: string, payload: VmsCameraImportPayload): Promise<Camera> {
+    const { data } = await api.post<Camera>(`/integrations/vms/servers/${serverId}/cameras/import`, payload);
+    return normalizeCamera(data);
+  },
+
+  async importExistingCameraDetailed(serverId: string, payload: VmsCameraImportPayload) {
+    const response = await api.post<Camera>(`/integrations/vms/servers/${serverId}/cameras/import`, payload);
+    return {
+      camera: normalizeCamera(response.data),
+      status: response.status,
+      headers: response.headers,
+      body: response.data,
     };
   },
 };

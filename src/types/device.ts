@@ -98,6 +98,20 @@ export type DeviceControlResponse = {
 
 export type ControlIdJobStatus = 'PENDING' | 'RUNNING' | 'SUCCEEDED' | 'FAILED';
 
+export type DeviceDoorStatus = {
+  deviceId?: string;
+  doorStatus?: string | null;
+  doorState?: string | null;
+  doorOpen?: boolean | null;
+  doorLastEventAt?: string | null;
+  source?: string | null;
+  sensorAvailable?: boolean | null;
+  eventType?: string | null;
+  serial?: string | null;
+  rawPayload?: unknown;
+  deviceMessage?: string | null;
+};
+
 export type DeviceCreateResult = {
   device: Device;
   controlIdProvisioning?: DeviceProvisioningStatus | null;

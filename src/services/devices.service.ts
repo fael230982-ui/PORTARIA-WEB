@@ -158,6 +158,11 @@ export const devicesService = {
     return data;
   },
 
+  async getControlIdDoorStatus(id: string): Promise<DeviceControlResponse> {
+    const { data } = await api.get<DeviceControlResponse>(`/devices/${id}/control-id/door-status`);
+    return data;
+  },
+
   async syncPersonToControlId(id: string, personId: string): Promise<DeviceControlResponse> {
     const { data } = await api.post<DeviceControlResponse>(`/devices/${id}/control-id/people/${personId}/sync`);
     return data;

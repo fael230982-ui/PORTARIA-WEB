@@ -1367,7 +1367,17 @@ export default function AdminCamerasPage() {
         return;
       }
 
-      const createResponse = await camerasService.createDetailed(payload);
+      const createResponse =
+        createMode === 'reaproveitar-camera-vms' && payload.vmsServerId && payload.vmsDeviceItemId != null
+          ? await vmsServersService.importExistingCameraDetailed(payload.vmsServerId, {
+              cameraId: payload.vmsDeviceItemId,
+              recordingServerId: payload.vmsRecordingServerId ?? null,
+              name: payload.name ?? null,
+              location: payload.location ?? null,
+              unitId: payload.unitId ?? null,
+              residentVisible: false,
+            })
+          : await camerasService.createDetailed(payload);
       const createdCamera = createResponse.camera;
       logCameraCreateDiagnostics({
         mode: createMode,

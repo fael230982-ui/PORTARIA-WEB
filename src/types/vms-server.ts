@@ -52,3 +52,14 @@ export type VmsExistingCameraLookupResponse = {
   shouldCreateNewCamera?: boolean | null;
   message?: string | null;
 };
+
+export type VmsCameraImportPayload = {
+  cameraId: number;
+  recordingServerId?: number | null;
+  name?: string | null;
+  location?: string | null;
+  unitId?: string | null;
+  residentVisible?: boolean;
+  residentVisibleUnitIds?: string[];
+  accessGroupIds?: string[];
+};
