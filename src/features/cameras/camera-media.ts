@@ -61,17 +61,25 @@ function resolvePlayableVideoUrl(value?: string | null) {
 }
 
 export function getPreferredVideoStreamUrl(
-  camera?: Pick<Camera, 'streamUrl' | 'liveUrl' | 'hlsUrl' | 'webRtcUrl'> | null,
-  streaming?: Pick<CameraStreamingResponse, 'liveUrl' | 'hlsUrl' | 'webRtcUrl'> | null
+  camera?: Pick<Camera, 'streamUrl' | 'preferredLiveUrl' | 'liveUrl' | 'hlsUrl' | 'webRtcUrl'> | null,
+  streaming?: Pick<CameraStreamingResponse, 'preferredLiveUrl' | 'liveUrl' | 'hlsUrl' | 'webRtcUrl'> | null
 ) {
-  return (
-    resolvePlayableVideoUrl(streaming?.liveUrl) ||
-    resolvePlayableVideoUrl(camera?.liveUrl) ||
-    resolvePlayableVideoUrl(streaming?.hlsUrl) ||
-    resolvePlayableVideoUrl(camera?.hlsUrl) ||
-    resolvePlayableVideoUrl(camera?.streamUrl) ||
-    null
-  );
+  const candidates = [
+    streaming?.preferredLiveUrl,
+    camera?.preferredLiveUrl,
+    streaming?.liveUrl,
+    camera?.liveUrl,
+    streaming?.hlsUrl,
+    camera?.hlsUrl,
+    camera?.streamUrl,
+  ];
+
+  for (const candidate of candidates) {
+    const resolved = resolvePlayableVideoUrl(candidate);
+    if (isBrowserPlayableVideoUrl(resolved)) return resolved;
+  }
+
+  return null;
 }
 
 export function getPreferredWebRtcUrl(
@@ -100,15 +108,38 @@ export function getPreferredSnapshotUrl(
 export function getCameraMediaAvailabilityLabels(
   camera?: Pick<
     Camera,
-    'streamUrl' | 'liveUrl' | 'hlsUrl' | 'webRtcUrl' | 'snapshotUrl' | 'thumbnailUrl' | 'imageStreamUrl' | 'lastSeen'
+    | 'streamUrl'
+    | 'preferredLiveUrl'
+    | 'liveUrl'
+    | 'hlsUrl'
+    | 'webRtcUrl'
+    | 'snapshotUrl'
+    | 'thumbnailUrl'
+    | 'imageStreamUrl'
+    | 'vmsStreamingUrl'
+    | 'lastSeen'
   > | null,
   streaming?: Pick<
     CameraStreamingResponse,
-    'liveUrl' | 'hlsUrl' | 'webRtcUrl' | 'snapshotUrl' | 'thumbnailUrl' | 'previewUrl' | 'imageStreamUrl' | 'mjpegUrl' | 'frameUrl'
+    | 'preferredLiveUrl'
+    | 'liveUrl'
+    | 'hlsUrl'
+    | 'webRtcUrl'
+    | 'snapshotUrl'
+    | 'thumbnailUrl'
+    | 'previewUrl'
+    | 'imageStreamUrl'
+    | 'mjpegUrl'
+    | 'frameUrl'
+    | 'vmsStreamingUrl'
+    | 'vmsStreamingUrls'
+    | 'transport'
   > | null
 ) {
   const labels: string[] = [];
-  if (getPreferredVideoStreamUrl(camera, streaming)) labels.push('ao vivo');
+  const videoStreamUrl = getPreferredVideoStreamUrl(camera, streaming);
+  if (isBrowserPlayableVideoUrl(videoStreamUrl)) labels.push('ao vivo');
+  if (isVmsNativeStreaming(camera, streaming)) labels.push('vms nativo');
   if (getPreferredWebRtcUrl(camera, streaming)) labels.push('webrtc');
   if (getPreferredImageStreamUrl(camera, streaming)) labels.push('preview');
   if (getPreferredSnapshotUrl(camera, streaming)) labels.push('snapshot');
@@ -119,6 +150,34 @@ export function getCameraMediaAvailabilityLabels(
 
 export function isRtspUrl(value?: string | null) {
   return String(value ?? '').trim().toLowerCase().startsWith('rtsp://');
+}
+
+export function isVmsNativeStreamUrl(value?: string | null) {
+  return String(value ?? '').trim().toLowerCase().startsWith('wss://');
+}
+
+export function getVmsNativeStreamUrl(
+  camera?: Pick<Camera, 'vmsStreamingUrl' | 'preferredLiveUrl' | 'liveUrl'> | null,
+  streaming?: Pick<CameraStreamingResponse, 'vmsStreamingUrl' | 'vmsStreamingUrls' | 'preferredLiveUrl' | 'liveUrl' | 'transport'> | null
+) {
+  const candidate =
+    streaming?.vmsStreamingUrls?.external ||
+    streaming?.vmsStreamingUrl ||
+    streaming?.preferredLiveUrl ||
+    streaming?.liveUrl ||
+    camera?.vmsStreamingUrl ||
+    camera?.preferredLiveUrl ||
+    camera?.liveUrl ||
+    null;
+
+  return isVmsNativeStreamUrl(candidate) ? candidate : null;
+}
+
+export function isVmsNativeStreaming(
+  camera?: Pick<Camera, 'vmsStreamingUrl' | 'preferredLiveUrl' | 'liveUrl'> | null,
+  streaming?: Pick<CameraStreamingResponse, 'vmsStreamingUrl' | 'vmsStreamingUrls' | 'preferredLiveUrl' | 'liveUrl' | 'transport'> | null
+) {
+  return String(streaming?.transport ?? '').toUpperCase() === 'VMS_NATIVE' || Boolean(getVmsNativeStreamUrl(camera, streaming));
 }
 
 export function isBrowserPlayableVideoUrl(value?: string | null) {
@@ -139,11 +198,11 @@ export function isBrowserPlayableVideoUrl(value?: string | null) {
 export function getCameraPreviewMode(
   camera?: Pick<
     Camera,
-    'streamUrl' | 'liveUrl' | 'hlsUrl' | 'webRtcUrl' | 'snapshotUrl' | 'thumbnailUrl' | 'imageStreamUrl'
+    'streamUrl' | 'preferredLiveUrl' | 'liveUrl' | 'hlsUrl' | 'webRtcUrl' | 'snapshotUrl' | 'thumbnailUrl' | 'imageStreamUrl'
   > | null,
   streaming?: Pick<
     CameraStreamingResponse,
-    'liveUrl' | 'hlsUrl' | 'webRtcUrl' | 'snapshotUrl' | 'thumbnailUrl' | 'previewUrl' | 'imageStreamUrl' | 'mjpegUrl' | 'frameUrl'
+    'preferredLiveUrl' | 'liveUrl' | 'hlsUrl' | 'webRtcUrl' | 'snapshotUrl' | 'thumbnailUrl' | 'previewUrl' | 'imageStreamUrl' | 'mjpegUrl' | 'frameUrl'
   > | null
 ) {
   const videoStreamUrl = getPreferredVideoStreamUrl(camera, streaming);
@@ -167,6 +226,7 @@ export function getCameraDiagnostics(
     | 'id'
     | 'name'
     | 'streamUrl'
+    | 'preferredLiveUrl'
     | 'liveUrl'
     | 'hlsUrl'
     | 'webRtcUrl'
@@ -179,7 +239,21 @@ export function getCameraDiagnostics(
   > | null,
   streaming?: Pick<
     CameraStreamingResponse,
-    'liveUrl' | 'hlsUrl' | 'webRtcUrl' | 'snapshotUrl' | 'thumbnailUrl' | 'previewUrl' | 'imageStreamUrl' | 'mjpegUrl' | 'frameUrl' | 'transport' | 'provider'
+    | 'preferredLiveUrl'
+    | 'liveUrl'
+    | 'hlsUrl'
+    | 'webRtcUrl'
+    | 'snapshotUrl'
+    | 'thumbnailUrl'
+    | 'previewUrl'
+    | 'imageStreamUrl'
+    | 'mjpegUrl'
+    | 'frameUrl'
+    | 'vmsStreamingUrl'
+    | 'vmsStreamingUrls'
+    | 'mediaRoute'
+    | 'transport'
+    | 'provider'
   > | null
 ): CameraDiagnostics {
   const videoStreamUrl = getPreferredVideoStreamUrl(camera, streaming);
@@ -190,18 +264,29 @@ export function getCameraDiagnostics(
   const previewMode = getCameraPreviewMode(camera, streaming);
   const hasRtsp = isRtspUrl(rawRtspUrl);
   const hasBrowserVideo = isBrowserPlayableVideoUrl(videoStreamUrl) && !hasRtsp;
+  const hasVmsNative = isVmsNativeStreaming(camera, streaming);
   const previewReady = previewMode !== 'none';
 
   const items: CameraDiagnosticItem[] = [
     {
-      label: 'HLS/live',
+      label: 'Vídeo ao vivo',
       ok: hasBrowserVideo,
-      detail: hasBrowserVideo ? 'Disponível para vídeo ao vivo.' : 'Não informado.',
+      detail: hasBrowserVideo ? 'Disponível para o navegador.' : 'HLS/WebRTC reproduzível não informado.',
+    },
+    {
+      label: 'Rota VMS externa',
+      ok: Boolean(streaming?.vmsStreamingUrls?.external),
+      detail: streaming?.vmsStreamingUrls?.external ? 'Endereço externo recebido da API.' : 'Endereço externo não informado.',
+    },
+    {
+      label: 'VMS nativo',
+      ok: hasVmsNative,
+      detail: hasVmsNative ? 'Recebido como WebSocket nativo do VMS; precisa de player/protocolo próprio.' : 'Não informado.',
     },
     {
       label: 'MJPEG/frame',
       ok: Boolean(imageStreamUrl),
-      detail: imageStreamUrl ? 'Disponível para visualização alternativa.' : 'Não informado.',
+      detail: imageStreamUrl ? 'Disponível como preview em frames.' : 'Não informado.',
     },
     {
       label: 'Snapshot',
@@ -230,11 +315,14 @@ export function getCameraDiagnostics(
         previewMode === 'video-stream'
           ? 'Vídeo ao vivo disponível.'
           : previewMode === 'image-stream'
-            ? 'Visualização alternativa disponível.'
+            ? 'Preview em frames disponível.'
             : 'Imagem atual disponível para consulta.',
-      recommendation: 'A câmera já possui uma fonte de imagem utilizável.',
+      recommendation:
+        previewMode === 'image-stream' && hasVmsNative
+          ? 'A API já envia rota externa do VMS, mas ainda falta HLS/WebRTC ou player VMS nativo para vídeo contínuo.'
+          : 'A câmera já possui uma fonte de imagem utilizável.',
       backendMessage:
-        'Para o vídeo principal, mantenha uma fonte compatível com o navegador. Conexões auxiliares podem continuar como apoio.',
+        'Para vídeo contínuo no navegador, mantenha uma fonte compatível como HLS ou WebRTC. O WebSocket nativo do VMS exige player/protocolo próprio.',
       items,
     };
   }
@@ -248,6 +336,19 @@ export function getCameraDiagnostics(
       recommendation: 'Adicione também uma fonte de vídeo compatível para a visualização principal.',
       backendMessage:
         'A câmera informou apenas WebRTC. Para reprodução principal nesta tela, mantenha também uma fonte compatível com o navegador.',
+      items,
+    };
+  }
+
+  if (hasVmsNative) {
+    return {
+      previewReady,
+      previewMode,
+      severity: 'warning',
+      summary: 'VMS nativo recebido, mas sem vídeo compatível com o navegador.',
+      recommendation: 'Usar HLS/WebRTC ou integrar o player/protocolo nativo do VMS.',
+      backendMessage:
+        'A API retornou WebSocket nativo do VMS. Sem HLS, WebRTC ou SDK compatível, o front só consegue exibir preview em frames.',
       items,
     };
   }

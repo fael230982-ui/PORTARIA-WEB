@@ -1,7 +1,14 @@
 import { api } from '@/lib/axios';
 import { normalizeCamera } from '@/features/cameras/camera-normalizers';
 import type { Camera } from '@/types/camera';
-import type { VmsCameraImportPayload, VmsExistingCamera, VmsExistingCameraLookupResponse, VmsServer, VmsServerPayload } from '@/types/vms-server';
+import type {
+  VmsCameraImportPayload,
+  VmsExistingCamera,
+  VmsExistingCameraLookupResponse,
+  VmsServer,
+  VmsServerDeleteImpact,
+  VmsServerPayload,
+} from '@/types/vms-server';
 
 type VmsServerListResponse =
   | VmsServer[]
@@ -47,6 +54,11 @@ export const vmsServersService = {
 
   async remove(id: string) {
     await api.delete(`/integrations/vms/servers/${id}`);
+  },
+
+  async getDeleteImpact(id: string) {
+    const { data } = await api.get<VmsServerDeleteImpact>(`/integrations/vms/servers/${id}/delete-impact`);
+    return data;
   },
 
   async listExistingCameras(serverId: string): Promise<VmsExistingCameraLookupResponse> {

@@ -1,4 +1,4 @@
-export type VmsServerStatus = 'ONLINE' | 'OFFLINE' | 'MAINTENANCE';
+export type VmsServerStatus = 'ONLINE' | 'OFFLINE';
 export type VmsServerVendor = 'INCORESOFT' | 'DGUARD' | 'DIGIFORT' | 'INTELBRAS_MONUV' | string;
 export type VmsServerAuthType = 'API_TOKEN' | 'BASIC' | 'NONE' | string;
 
@@ -13,6 +13,14 @@ export type VmsServer = {
   name: string;
   vendor?: VmsServerVendor | null;
   baseUrl?: string | null;
+  internalScheme?: string | null;
+  internalIp?: string | null;
+  internalPort?: number | null;
+  internalBaseUrl?: string | null;
+  externalScheme?: string | null;
+  externalIp?: string | null;
+  externalPort?: number | null;
+  externalBaseUrl?: string | null;
   authType?: VmsServerAuthType | null;
   verifySsl?: boolean | null;
   timeoutSeconds?: number | null;
@@ -25,11 +33,26 @@ export type VmsServerPayload = {
   name: string;
   vendor?: VmsServerVendor | null;
   baseUrl?: string | null;
+  internalScheme?: string | null;
+  internalIp?: string | null;
+  internalPort?: number | null;
+  externalScheme?: string | null;
+  externalIp?: string | null;
+  externalPort?: number | null;
   apiToken?: string | null;
   authType?: VmsServerAuthType | null;
   verifySsl?: boolean | null;
   timeoutSeconds?: number | null;
   status?: VmsServerStatus | null;
+};
+
+export type VmsServerDeleteImpact = {
+  serverId: string;
+  serverName: string;
+  linkedCameraCount: number;
+  requiresConfirmation?: boolean | null;
+  requiredConfirmationText: string;
+  message: string;
 };
 
 export type VmsExistingCamera = {

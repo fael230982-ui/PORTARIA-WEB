@@ -13,7 +13,6 @@ import type {
   CamerasListResponse,
   CameraStreamingResponse,
 } from '@/types/camera';
-import type { BackgroundJob } from '@/types/job';
 
 type CamerasListParams = {
   status?: string;
@@ -66,11 +65,6 @@ export const camerasService = {
     };
   },
 
-  async createAsync(payload: CameraCreateRequest): Promise<BackgroundJob> {
-    const { data } = await api.post<BackgroundJob>('/cameras/async', payload);
-    return data;
-  },
-
   async update(id: string, payload: CameraUpdateRequest): Promise<Camera> {
     try {
       const { data } = await api.patch<Camera>(`/cameras/${id}`, payload);
@@ -95,8 +89,10 @@ export const camerasService = {
     await api.delete(`/cameras/${id}`);
   },
 
-  async getStreaming(id: string): Promise<CameraStreamingResponse> {
-    const { data } = await api.get<CameraStreamingResponse>(`/cameras/${id}/streaming`);
+  async getStreaming(id: string, mediaRoute: 'internal' | 'external' = 'external'): Promise<CameraStreamingResponse> {
+    const { data } = await api.get<CameraStreamingResponse>(`/cameras/${id}/streaming`, {
+      params: { mediaRoute },
+    });
     return normalizeCameraStreamingResponse(data);
   },
 

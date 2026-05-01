@@ -1,6 +1,6 @@
 'use client';
 
-import { Camera } from 'lucide-react';
+import { Cctv } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { CameraSnapshot } from '@/components/camera-snapshot';
 import { useAuth } from '@/hooks/use-auth';
@@ -12,6 +12,7 @@ import {
   getPreferredVideoStreamUrl,
   getPreferredWebRtcUrl,
   isRtspUrl,
+  isVmsNativeStreaming,
 } from '@/features/cameras/camera-media';
 import type { Camera as CameraRecord } from '@/types/camera';
 
@@ -49,25 +50,18 @@ export function CameraFeed({
   const webRtcUrl = getPreferredWebRtcUrl(camera, streamingData);
   const imageStreamUrl = getPreferredImageStreamUrl(camera, streamingData);
   const snapshotUrl = getPreferredSnapshotUrl(camera, streamingData);
+  const hasVmsNative = isVmsNativeStreaming(camera, streamingData);
   const hasOnlyRtsp = Boolean(camera?.streamUrl) && isRtspUrl(camera?.streamUrl) && !videoStreamUrl && !imageStreamUrl && !snapshotUrl;
   const hasOnlyWebRtc = Boolean(webRtcUrl) && !videoStreamUrl && !imageStreamUrl && !snapshotUrl;
   const mediaKey = `${camera?.id ?? 'none'}|${videoStreamUrl ?? ''}|${imageStreamUrl ?? ''}|${snapshotUrl ?? ''}`;
   const [failedVideoMediaKey, setFailedVideoMediaKey] = useState<string | null>(null);
   const [failedImageMediaKey, setFailedImageMediaKey] = useState<string | null>(null);
-  const [loadedImageMediaKey, setLoadedImageMediaKey] = useState<string | null>(null);
-  const [imageRefreshTick, setImageRefreshTick] = useState(0);
   const videoError = failedVideoMediaKey === mediaKey;
   const imageError = failedImageMediaKey === mediaKey;
   const shouldUseVideo = previewMode === 'video-stream' && Boolean(videoStreamUrl) && !videoError;
   const shouldUseImageStream = Boolean(imageStreamUrl) && !imageError && (previewMode === 'image-stream' || videoError);
   const shouldUseSnapshot = previewMode === 'snapshot' || Boolean(snapshotUrl && (videoError || imageError));
   const cookieSecure = typeof window !== 'undefined' && window.location.protocol === 'https:' ? '; Secure' : '';
-
-  function withRefreshParam(url: string) {
-    if (url.startsWith('data:') || url.startsWith('blob:')) return url;
-    const separator = url.includes('?') ? '&' : '?';
-    return `${url}${separator}_=${imageRefreshTick}`;
-  }
 
   useEffect(() => {
     if (typeof document === 'undefined') return;
@@ -86,34 +80,13 @@ export function CameraFeed({
   }, [cookieSecure, token, user?.role, user?.selectedUnitId]);
 
   useEffect(() => {
-    if (!shouldUseImageStream || !imageStreamUrl) return;
-
-    const timeoutId = window.setTimeout(() => {
-      setFailedImageMediaKey((current) => current ?? mediaKey);
-    }, 6000);
-
-    if (loadedImageMediaKey === mediaKey) {
-      window.clearTimeout(timeoutId);
-    }
-
-    return () => window.clearTimeout(timeoutId);
-  }, [imageStreamUrl, loadedImageMediaKey, mediaKey, shouldUseImageStream]);
-
-  useEffect(() => {
-    if (!shouldUseImageStream || !imageStreamUrl || refreshMs <= 0) return;
-    const timerId = window.setInterval(() => {
-      setImageRefreshTick((current) => current + 1);
-    }, refreshMs);
-    return () => window.clearInterval(timerId);
-  }, [imageStreamUrl, refreshMs, shouldUseImageStream]);
-
-  useEffect(() => {
     const video = videoRef.current;
     if (!shouldUseVideo || !videoStreamUrl || !video) return;
 
     const isHls = videoStreamUrl.toLowerCase().split('?')[0].endsWith('.m3u8');
     console.info('[camera-feed] URL recebida da API', {
       cameraId: camera?.id,
+      preferredLiveUrl: camera?.preferredLiveUrl ?? streamingData?.preferredLiveUrl ?? null,
       liveUrl: camera?.liveUrl ?? streamingData?.liveUrl ?? null,
       hlsUrl: camera?.hlsUrl ?? streamingData?.hlsUrl ?? null,
       resolvedVideoUrl: videoStreamUrl,
@@ -134,6 +107,8 @@ export function CameraFeed({
       loadSource: (source: string) => void;
       attachMedia: (media: HTMLMediaElement) => void;
       on: (event: string, callback: (...args: any[]) => void) => void;
+      startLoad?: () => void;
+      recoverMediaError?: () => void;
     } | null = null;
 
     import('hls.js')
@@ -159,6 +134,16 @@ export function CameraFeed({
         hlsInstance.on(Hls.Events.ERROR, (_event, data) => {
           console.error('[camera-feed] player error', { cameraId: camera?.id, url: videoStreamUrl, data });
           if (data?.fatal) {
+            if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+              hlsInstance?.startLoad?.();
+              return;
+            }
+
+            if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+              hlsInstance?.recoverMediaError?.();
+              return;
+            }
+
             setFailedVideoMediaKey(mediaKey);
           }
         });
@@ -182,8 +167,7 @@ export function CameraFeed({
       const playResult = video.play();
       if (playResult && typeof playResult.catch === 'function') {
         playResult.catch((error) => {
-          console.error('[camera-feed] erro real ao reproduzir video', { cameraId: camera?.id, url: videoStreamUrl, error });
-          setFailedVideoMediaKey((current) => current ?? mediaKey);
+          console.warn('[camera-feed] autoplay aguardando interação do navegador', { cameraId: camera?.id, url: videoStreamUrl, error });
         });
       }
     };
@@ -206,13 +190,15 @@ export function CameraFeed({
   const currentModeLabel = shouldUseVideo
     ? 'Ao vivo'
     : shouldUseImageStream
-      ? 'Preview'
+      ? hasVmsNative
+        ? 'Preview em frames'
+        : 'Preview'
       : shouldUseSnapshot
         ? 'Snapshot'
         : 'Sem imagem';
 
   const modeBadge = showModeBadge ? (
-    <span className="absolute right-3 top-3 z-10 rounded-full border border-white/15 bg-black/70 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-white shadow-lg backdrop-blur">
+    <span className="pointer-events-none absolute right-3 top-3 z-10 rounded-full border border-white/15 bg-black/70 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-white shadow-lg backdrop-blur">
       {currentModeLabel}
     </span>
   ) : null;
@@ -221,7 +207,7 @@ export function CameraFeed({
     return (
       <div className={`flex items-center justify-center text-slate-600 ${className}`}>
         <div className="text-center">
-          <Camera className="mx-auto mb-4 h-14 w-14 opacity-30" />
+          <Cctv className="mx-auto mb-4 h-14 w-14 opacity-30" />
           <p className="text-sm text-slate-400">{emptyLabel}</p>
           <p className="mt-1 text-xs text-slate-500">{emptyHint}</p>
         </div>
@@ -243,7 +229,11 @@ export function CameraFeed({
           playsInline
           preload="auto"
           controls={controls}
-          onError={() => setFailedVideoMediaKey(mediaKey)}
+          onError={() => {
+            if (!videoStreamUrl.toLowerCase().split('?')[0].endsWith('.m3u8')) {
+              setFailedVideoMediaKey(mediaKey);
+            }
+          }}
         />
       </div>
     );
@@ -253,12 +243,16 @@ export function CameraFeed({
     return (
       <div className={`relative h-full w-full overflow-hidden ${className}`.trim()}>
         {modeBadge}
+        {hasVmsNative && !compactErrors ? (
+          <div className="pointer-events-none absolute bottom-3 left-3 z-10 max-w-[calc(100%-1.5rem)] rounded-xl border border-amber-400/25 bg-black/70 px-3 py-2 text-xs text-amber-100 shadow-lg backdrop-blur">
+            Preview em frames. A API retornou VMS nativo, mas ainda não enviou HLS/WebRTC para vídeo ao vivo no navegador.
+          </div>
+        ) : null}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={withRefreshParam(imageStreamUrl)}
+          src={imageStreamUrl}
           alt={camera.name}
           className={imageClassName}
-          onLoad={() => setLoadedImageMediaKey(mediaKey)}
           onError={() => setFailedImageMediaKey(mediaKey)}
         />
       </div>
@@ -284,7 +278,7 @@ export function CameraFeed({
   return (
     <div className={`flex items-center justify-center text-slate-600 ${className}`}>
       <div className="text-center">
-        <Camera className="mx-auto mb-4 h-14 w-14 opacity-30" />
+        <Cctv className="mx-auto mb-4 h-14 w-14 opacity-30" />
         <p className="text-sm text-slate-400">{hasOnlyRtsp ? 'Câmera cadastrada, mas sem imagem no navegador' : emptyLabel}</p>
         <p className="mt-1 text-xs text-slate-500">{emptyHint}</p>
         {hasOnlyRtsp ? (

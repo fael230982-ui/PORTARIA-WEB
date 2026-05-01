@@ -3,12 +3,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  Camera,
+  Cctv,
   RefreshCw,
   Plus,
   Search,
   Eye,
-  CameraOff,
   Radio,
   ScanFace,
   Filter,
@@ -175,12 +174,12 @@ function getCameraDeviceUsageLabel(deviceUsageType: CameraDeviceUsageType | stri
 }
 
 function getCameraUnitLabel(
-  camera: Pick<CameraRecord, 'unitId'>,
+  camera: Pick<CameraRecord, 'unitId' | 'unitName'>,
   units: Array<{ id: string; label: string; location: string }>
 ) {
   if (!camera.unitId) return 'Área comum do condomínio';
 
-  return units.find((unit) => unit.id === camera.unitId)?.location || 'Unidade não identificada';
+  return camera.unitName?.trim() || units.find((unit) => unit.id === camera.unitId)?.location || 'Unidade não identificada';
 }
 
 function buildLocalCameraDraft(form: CameraFormData, job?: BackgroundJob | null): LocalCameraDraft {
@@ -307,6 +306,14 @@ function getDiagnosticBadgeClass(severity: 'ok' | 'warning' | 'error') {
 function humanizeCameraBackendMessage(message: string) {
   const normalized = message.toLowerCase();
 
+  if (normalized.includes('streamurl inválida') && normalized.includes('porta ausente')) {
+    return 'O VMS retornou a URL RTSP da câmera sem porta. O backend precisa normalizar essa URL, por exemplo usando a porta padrão 554, durante a importação da câmera existente.';
+  }
+
+  if (normalized.includes('cadastro direto de câmera foi desativado')) {
+    return 'O backend não aceita mais cadastro direto de câmera VMS. Escolha uma câmera existente do servidor VMS para importar pelo fluxo oficial.';
+  }
+
   if (
     normalized.includes('createcamerausecase.__init__') ||
     normalized.includes('device_repository') ||
@@ -324,18 +331,19 @@ function humanizeCameraBackendMessage(message: string) {
 
 function getCameraErrorMessage(error: unknown, fallback: string) {
   const maybeApiError = error as {
-    response: {
-      status: number;
-      data: {
-        detail: unknown;
-        message: string;
+    response?: {
+      status?: number;
+      data?: {
+        detail?: unknown;
+        message?: string;
       };
     };
-    message: string;
+    message?: string;
   };
 
-  const detail = maybeApiError.response.data.detail;
-  const message = maybeApiError.response.data.message;
+  const status = maybeApiError.response?.status;
+  const detail = maybeApiError.response?.data?.detail;
+  const message = maybeApiError.response?.data?.message;
 
   if (Array.isArray(detail) && detail.length > 0) {
     const readableDetails = detail
@@ -373,19 +381,19 @@ function getCameraErrorMessage(error: unknown, fallback: string) {
     return 'O uso do dispositivo só pode ser informado para Câmera IA e Dispositivo Facial.';
   }
 
-  if (maybeApiError.response.status === 500) {
+  if (status === 500) {
     return 'Ocorreu um erro interno ao cadastrar a câmera. Se a URL for RTSP, confirme se a visualização foi preparada para uso no navegador.';
   }
 
-  if (maybeApiError.response.status === 503) {
-    return 'O servidor de câmeras está indisponível no momento. Tente novamente em instantes.';
+  if (status === 503) {
+    return 'O servidor de câmeras está temporariamente indisponível. Aguarde alguns instantes e atualize a lista novamente.';
   }
 
-  if (maybeApiError.response.status === 502) {
-    return 'O serviço de câmeras não respondeu corretamente agora. Tente novamente em instantes.';
+  if (status === 502) {
+    return 'O backend/VMS retornou falha ao processar esta operação de câmera. A alteração não foi confirmada; tente novamente ou solicite ao backend a verificação do log dessa câmera.';
   }
 
-  if (maybeApiError.response.status === 400) {
+  if (status === 400) {
     return 'Os dados da câmera não foram aceitos. Verifique nome, unidade e URL informada.';
   }
 
@@ -412,6 +420,8 @@ function getCameraRequestUrl(path: string) {
 function logCameraCreateDiagnostics(params: {
   mode: 'reaproveitar-camera-vms' | 'fallback-criar-camera-vms' | 'cadastro-camera';
   payload: CameraCreateRequest;
+  requestPath?: string;
+  importPayload?: unknown;
   vmsServerId: string | null;
   user: { email?: string | null; role?: string | null } | null;
   authorizationPreview: string | null;
@@ -419,7 +429,7 @@ function logCameraCreateDiagnostics(params: {
   error?: unknown;
 }) {
   const timestamp = new Date().toISOString();
-  const requestUrl = getCameraRequestUrl('/cameras');
+  const requestUrl = getCameraRequestUrl(params.requestPath ?? '/cameras');
   const groupedTitle = `[camera-vms] ${params.mode} ${timestamp}`;
   const axiosError = params.error as {
     response?: { status?: number; data?: unknown; headers?: unknown };
@@ -439,6 +449,9 @@ function logCameraCreateDiagnostics(params: {
   console.info('Usuário logado', params.user);
   console.info('Token usado na chamada', params.authorizationPreview);
   console.info('Payload final enviado', params.payload);
+  if (params.importPayload) {
+    console.info('Payload de importação VMS enviado', params.importPayload);
+  }
   console.info('Payload usa camelCase', true);
   console.info('deviceType enviado', params.payload.deviceType);
   console.info('Campos VMS enviados', {
@@ -455,9 +468,20 @@ function logCameraCreateDiagnostics(params: {
   console.info('Response body completo', responseBody);
   console.info('Response headers principais', toPlainHeaders(responseHeaders));
   if (axiosError?.message) {
-    console.error('Mensagem bruta do erro', axiosError.message);
+    console.warn('Mensagem bruta do erro', axiosError.message);
   }
   console.groupEnd();
+}
+
+function buildVmsCameraImportPayload(payload: CameraCreateRequest) {
+  return {
+    cameraId: payload.vmsDeviceItemId as number,
+    recordingServerId: payload.vmsRecordingServerId ?? null,
+    name: payload.name ?? null,
+    location: payload.location ?? null,
+    unitId: payload.unitId ?? null,
+    residentVisible: false,
+  };
 }
 
 function cameraToFormData(camera: CameraRecord): CameraFormData {
@@ -983,6 +1007,7 @@ export default function AdminCamerasPage() {
     status: 'all',
     media: 'all',
   });
+  const [showFilters, setShowFilters] = useState(true);
   const [openCreate, setOpenCreate] = useState(false);
   const [openEdit, setOpenEdit] = useState(false);
   const [openView, setOpenView] = useState(false);
@@ -1310,13 +1335,13 @@ export default function AdminCamerasPage() {
         (filters.media === 'rtsp-only' && isRtspOnly);
       const searchOk =
         !search ||
-        [camera.name, camera.location, camera.streamUrl, camera.snapshotUrl]
+        [camera.name, camera.location, camera.streamUrl, camera.snapshotUrl, getCameraUnitLabel(camera, unitOptions)]
           .filter(Boolean)
           .some((value) => normalizeString(value).includes(search));
 
       return scopeOk && statusOk && mediaOk && searchOk;
     });
-  }, [accessibleUnitIds, activeUnitId, filters, isAdminScope, visibleCameras]);
+  }, [accessibleUnitIds, activeUnitId, filters, isAdminScope, unitOptions, visibleCameras]);
 
   const stats = useMemo(() => {
     const total = filteredCameras.length;
@@ -1328,6 +1353,10 @@ export default function AdminCamerasPage() {
 
     return { total, online, offline, withSnapshot, withoutPreview, rtspOnly };
   }, [filteredCameras]);
+  const hasActiveFilters = Boolean(
+    filters.search.trim() || filters.status !== 'all' || filters.media !== 'all' || activeUnitId
+  );
+  const hiddenByFiltersCount = Math.max(visibleCameras.length - filteredCameras.length, 0);
 
   async function handleCreateCamera(form: CameraFormData) {
     setSaving(true);
@@ -1343,8 +1372,6 @@ export default function AdminCamerasPage() {
       }
 
       const payload = buildCameraPayload(form);
-      const isRtspCamera = isRtspStreamUrl(form.streamUrl);
-      const shouldUseAsyncRtsp = isRtspCamera && !form.faceEngineServerId.trim() && !form.vmsServerId.trim();
       const authState = useAuthStore.getState();
       const authorizationPreview = authState.token ? `${authState.token.slice(0, 12)}...` : null;
       const createMode: 'reaproveitar-camera-vms' | 'fallback-criar-camera-vms' | 'cadastro-camera' =
@@ -1354,34 +1381,23 @@ export default function AdminCamerasPage() {
             ? 'fallback-criar-camera-vms'
             : 'cadastro-camera';
 
-      if (shouldUseAsyncRtsp) {
-        const job = await camerasService.createAsync(payload);
-        const localDraft = buildLocalCameraDraft(form, job);
-        setOpenCreate(false);
-        setPendingRtspJob(job);
-        setLastRtspJob(job);
-        setLocalDraftCameras((current) => [localDraft, ...current.filter((draft) => draft.localJobId !== job.id)]);
-        setActionMessage(
-          `Cadastro RTSP enviado para processamento em background. Job ${job.id} com status ${job.status}. O sistema vai acompanhar automaticamente até a câmera aparecer na lista.`
-        );
-        return;
-      }
-
-      const createResponse =
+      const importPayload =
         createMode === 'reaproveitar-camera-vms' && payload.vmsServerId && payload.vmsDeviceItemId != null
-          ? await vmsServersService.importExistingCameraDetailed(payload.vmsServerId, {
-              cameraId: payload.vmsDeviceItemId,
-              recordingServerId: payload.vmsRecordingServerId ?? null,
-              name: payload.name ?? null,
-              location: payload.location ?? null,
-              unitId: payload.unitId ?? null,
-              residentVisible: false,
-            })
+          ? buildVmsCameraImportPayload(payload)
+          : null;
+      const createResponse =
+        importPayload && payload.vmsServerId
+          ? await vmsServersService.importExistingCameraDetailed(payload.vmsServerId, importPayload)
           : await camerasService.createDetailed(payload);
       const createdCamera = createResponse.camera;
       logCameraCreateDiagnostics({
         mode: createMode,
         payload,
+        requestPath:
+          importPayload && payload.vmsServerId
+            ? `/integrations/vms/servers/${payload.vmsServerId}/cameras/import`
+            : '/cameras',
+        importPayload,
         vmsServerId: payload.vmsServerId ?? null,
         user: authState.user
           ? {
@@ -1423,6 +1439,14 @@ export default function AdminCamerasPage() {
               ? 'fallback-criar-camera-vms'
               : 'cadastro-camera',
         payload: buildCameraPayload(form),
+        requestPath:
+          form.vmsServerId.trim() && form.streamExternalId.trim() && form.vmsDeviceId.trim() && form.vmsDeviceItemId.trim()
+            ? `/integrations/vms/servers/${form.vmsServerId.trim()}/cameras/import`
+            : '/cameras',
+        importPayload:
+          form.vmsServerId.trim() && form.streamExternalId.trim() && form.vmsDeviceId.trim() && form.vmsDeviceItemId.trim()
+            ? buildVmsCameraImportPayload(buildCameraPayload(form))
+            : null,
         vmsServerId: form.vmsServerId.trim() || null,
         user: authState.user
           ? {
@@ -1586,9 +1610,9 @@ export default function AdminCamerasPage() {
       </section>
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <StatCard title="Total" value={isLoading ? '...' : String(stats.total)} icon={Camera} hint="Câmeras registradas" />
+        <StatCard title="Total" value={isLoading ? '...' : String(stats.total)} icon={Cctv} hint="Câmeras registradas" />
         <StatCard title="Online" value={isLoading ? '...' : String(stats.online)} icon={Radio} hint="Operando agora" />
-        <StatCard title="Offline" value={isLoading ? '...' : String(stats.offline)} icon={CameraOff} hint="Indisponíveis" />
+        <StatCard title="Offline" value={isLoading ? '...' : String(stats.offline)} icon={Cctv} hint="Indisponíveis" />
         <StatCard title="Com preview" value={isLoading ? '...' : String(stats.withSnapshot)} icon={ScanFace} hint="Snapshot ou image stream" />
       </section>
       <section className="grid gap-4 md:grid-cols-2">
@@ -1619,45 +1643,47 @@ export default function AdminCamerasPage() {
         </div>
       ) : null}
 
-      <section className="rounded-3xl border border-white/10 bg-white/5 p-5 backdrop-blur">
-        <div className="grid gap-3 lg:grid-cols-[1.4fr_0.7fr_0.7fr_auto]">
-          <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3">
-            <Search className="h-4 w-4 text-slate-400" />
-            <Input
-              value={filters.search}
-              onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))}
-              placeholder="Buscar por nome, localização, stream ou snapshot..."
-              className="border-0 bg-transparent p-0 text-white shadow-none placeholder:text-slate-500 focus-visible:ring-0"
-            />
-          </label>
-          <label className="rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3">
-            <select
-              value={filters.status}
-              onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
-              className="w-full bg-transparent text-sm outline-none"
-            >
-              <option value="all">Todos os status</option>
-              <option value="ONLINE">Online</option>
-              <option value="OFFLINE">Offline</option>
-            </select>
-          </label>
-          <label className="rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3">
-            <select
-              value={filters.media}
-              onChange={(e) => setFilters((prev) => ({ ...prev, media: e.target.value as Filters['media'] }))}
-              className="w-full bg-transparent text-sm outline-none"
-            >
-              <option value="all">Todos os previews</option>
-              <option value="with-preview">Com preview</option>
-              <option value="without-preview">Sem preview</option>
-              <option value="rtsp-only">RTSP sem conversão</option>
-            </select>
-          </label>
-          <button type="button" onClick={() => setFilters({ search: '', status: 'all', media: 'all' })} className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-white transition hover:bg-white/15">
-            Limpar filtros
-          </button>
-        </div>
-      </section>
+      {showFilters ? (
+        <section className="rounded-3xl border border-white/10 bg-white/5 p-5 backdrop-blur">
+          <div className="grid gap-3 lg:grid-cols-[1.4fr_0.7fr_0.7fr_auto]">
+            <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3">
+              <Search className="h-4 w-4 text-slate-400" />
+              <Input
+                value={filters.search}
+                onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))}
+                placeholder="Buscar por nome, localização, unidade, stream ou snapshot..."
+                className="border-0 bg-transparent p-0 text-white shadow-none placeholder:text-slate-500 focus-visible:ring-0"
+              />
+            </label>
+            <label className="rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3">
+              <select
+                value={filters.status}
+                onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
+                className="w-full bg-transparent text-sm outline-none"
+              >
+                <option value="all">Todos os status</option>
+                <option value="ONLINE">Online</option>
+                <option value="OFFLINE">Offline</option>
+              </select>
+            </label>
+            <label className="rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3">
+              <select
+                value={filters.media}
+                onChange={(e) => setFilters((prev) => ({ ...prev, media: e.target.value as Filters['media'] }))}
+                className="w-full bg-transparent text-sm outline-none"
+              >
+                <option value="all">Todos os previews</option>
+                <option value="with-preview">Com preview</option>
+                <option value="without-preview">Sem preview</option>
+                <option value="rtsp-only">RTSP sem conversão</option>
+              </select>
+            </label>
+            <button type="button" onClick={() => setFilters({ search: '', status: 'all', media: 'all' })} className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-white transition hover:bg-white/15">
+              Limpar filtros
+            </button>
+          </div>
+        </section>
+      ) : null}
 
       {actionMessage ? (
         <TimedAlert tone="info" onClose={() => setActionMessage(null)} className="rounded-3xl p-5">
@@ -1726,15 +1752,30 @@ export default function AdminCamerasPage() {
           <div>
             <h2 className="text-lg font-semibold">Lista de câmeras</h2>
             <p className="text-sm text-slate-400">
-              {filteredCameras.length} registro(s) na tela
-              {!usingSnapshot ? ` • ${cameras.length} confirmado(s) pelo servidor` : ''}
+              {filteredCameras.length} exibida(s)
+              {hasActiveFilters && hiddenByFiltersCount > 0 ? ` • ${hiddenByFiltersCount} oculta(s) por filtro` : ''}
+              {!usingSnapshot ? ` • ${cameras.length} cadastrada(s) no servidor` : ''}
             </p>
           </div>
-          <Filter className="h-5 w-5 text-slate-400" />
+          <button
+            type="button"
+            onClick={() => setShowFilters((current) => !current)}
+            className={`inline-flex items-center gap-2 rounded-2xl border px-3 py-2 text-sm transition ${
+              showFilters
+                ? 'border-cyan-400/30 bg-cyan-400/10 text-cyan-100'
+                : 'border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'
+            }`}
+          >
+            <Filter className="h-4 w-4" />
+            {showFilters ? 'Ocultar filtros' : 'Mostrar filtros'}
+          </button>
         </div>
 
         <div className="divide-y divide-white/10">
-          {filteredCameras.map((camera) => (
+          {filteredCameras.map((camera) => {
+            const cameraUnitLabel = getCameraUnitLabel(camera, unitOptions);
+
+            return (
             <div
               key={camera.id}
               className={`grid gap-4 px-5 py-4 lg:grid-cols-[1.3fr_1fr_0.7fr_auto] lg:items-center ${
@@ -1829,13 +1870,15 @@ export default function AdminCamerasPage() {
                 </Button>
 
                 {camera.unitId ? (
-                  <Button
-                    variant="outline"
+                  <button
+                    type="button"
                     onClick={() => { router.push(`/admin/unidades?unitId=${encodeURIComponent(camera.unitId ?? '')}`); }}
-                    className="border-white/10 bg-white/5 text-white hover:bg-white/10"
+                    className="inline-flex max-w-56 items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-left text-xs font-medium text-emerald-100 transition hover:bg-emerald-500/20"
+                    title={cameraUnitLabel}
                   >
-                    Unidade
-                  </Button>
+                    <MapPin className="h-4 w-4 shrink-0" />
+                    <span className="truncate">{cameraUnitLabel}</span>
+                  </button>
                 ) : (
                   <Badge className="border-cyan-500/20 bg-cyan-500/10 text-cyan-100">
                     Área comum
@@ -1852,7 +1895,8 @@ export default function AdminCamerasPage() {
                 </Button>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       </section>
 
