@@ -1,14 +1,20 @@
 # Validação OpenAPI - Portaria Web - 01/05/2026
 
-Fonte consultada:
+Fonte principal consultada:
 
 - `https://sapinhoprod.v8seguranca.com.br/openapi.json`
+
+Observação de versão:
+
+- Este documento usa o OpenAPI online atual como contrato válido da API em produção.
+- A referência local `src/api/API Sapinho V5.6.txt` foi usada somente como histórico de comparação, porque era o arquivo mais recente salvo no repositório no momento da validação.
+- Portanto, quando houver divergência entre a V5.6 local e o OpenAPI online atual, prevalece o OpenAPI online atual.
 
 Escopo:
 
 - Apenas Portaria Web.
 - Não foram alterados App-Morador, Guarita ou Backend.
-- Comparação principal contra a última versão local documentada em `src/api/API Sapinho V5.6.txt`.
+- Comparação histórica contra a última versão local documentada em `src/api/API Sapinho V5.6.txt`.
 
 ## Resumo
 
@@ -25,7 +31,7 @@ Foram aplicados apenas ajustes compatíveis com o contrato atual:
 - A lista de servidores VMS é exibida em ordem alfabética.
 - A chamada legada `/api/v1/cameras/async` foi removida do fluxo do front, pois não existe mais no contrato público atual.
 
-## Novidades encontradas em relação à V5.6 local
+## Diferenças encontradas em relação à V5.6 local
 
 Rotas adicionadas no contrato atual:
 
