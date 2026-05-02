@@ -48,6 +48,7 @@ import { getPersonById, uploadPersonPhoto, syncPersonFace } from '@/services/peo
 import { camerasService } from '@/services/cameras.service';
 import { ensureResidenceUnit } from '@/services/residence.service';
 import { accessGroupsService } from '@/services/access-groups.service';
+import { devicesService } from '@/services/devices.service';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -56,6 +57,7 @@ import type { Person, PersonCategory } from '@/types/person';
 import type { Unit } from '@/types/condominium';
 import type { Report } from '@/types/report';
 import type { AccessGroup } from '@/types/access-group';
+import type { Device } from '@/types/device';
 
 type Filters = {
   search: string;
@@ -122,6 +124,16 @@ function getFriendlyDuplicateDocumentMessage() {
 
 function getFriendlyFaceSyncMessage() {
   return 'Morador salvo, mas a sincronização facial não foi concluída. Verifique a integração de face e tente sincronizar novamente.';
+}
+
+function getFaceSyncWarningMessage(error: unknown) {
+  const rawMessage = getErrorMessage(error, getFriendlyFaceSyncMessage()).trim();
+
+  if (!rawMessage || rawMessage === getFriendlyFaceSyncMessage() || rawMessage.includes('Request failed with status code')) {
+    return getFriendlyFaceSyncMessage();
+  }
+
+  return `${getFriendlyFaceSyncMessage()} Detalhe: ${rawMessage}`;
 }
 
 function getFriendlyPhotoUploadMessage() {
@@ -615,6 +627,8 @@ export default function MoradoresPage() {
   const [peopleImportRows, setPeopleImportRows] = useState<PersonImportRow[]>([]);
   const [peopleImportMessage, setPeopleImportMessage] = useState<string | null>(null);
   const [accessGroups, setAccessGroups] = useState<AccessGroup[]>([]);
+  const [devices, setDevices] = useState<Device[]>([]);
+  const [faceSyncOverrides, setFaceSyncOverrides] = useState<Record<string, Partial<MoradorRow>>>({});
   const [snapshotCache, setSnapshotCache] = useState<MoradoresSnapshotCache>(() => readMoradoresSnapshot(null));
   const snapshotSignatureRef = useRef(
     getMoradoresSnapshotSignature({ moradores: [], appAccessEntries: [], accessSummaryEntries: [], cachedAt: null })
@@ -643,22 +657,25 @@ export default function MoradoresPage() {
     return condominiums.find((item) => item.id === user.condominiumId) ?? null;
   }, [condominiums, user?.condominiumId]);
 
-  const moradores = useMemo(
-    () =>
-      peopleData
-        ? normalizePeople(
-            peopleData,
-            {
-              condominiums,
-              streets,
-              units,
-            }
-          )
-        : !isOnline
-          ? snapshotCache.moradores
-          : [],
-    [condominiums, isOnline, peopleData, snapshotCache.moradores, streets, units]
-  );
+  const moradores = useMemo(() => {
+    const baseRows = peopleData
+      ? normalizePeople(
+          peopleData,
+          {
+            condominiums,
+            streets,
+            units,
+          }
+        )
+      : !isOnline
+        ? snapshotCache.moradores
+        : [];
+
+    return baseRows.map((row) => ({
+      ...row,
+      ...(faceSyncOverrides[row.id] ?? {}),
+    }));
+  }, [condominiums, faceSyncOverrides, isOnline, peopleData, snapshotCache.moradores, streets, units]);
 
   const appAccessByResidentId = useMemo(() => {
     const map = new Map<string, { id: string; email: string }>();
@@ -697,6 +714,25 @@ export default function MoradoresPage() {
     return accessGroups.filter((group) => !group.condominiumId || group.condominiumId === user.condominiumId);
   }, [accessGroups, user?.condominiumId]);
   const accessGroupNameById = useMemo(() => new Map(scopedAccessGroups.map((group) => [group.id, group.name])), [scopedAccessGroups]);
+  const deviceNameById = useMemo(() => new Map(devices.map((device) => [device.id, device.name])), [devices]);
+  const accessGroupDeviceNamesByPersonId = useMemo(() => {
+    const map = new Map<string, string[]>();
+
+    for (const group of scopedAccessGroups) {
+      const deviceNames = Array.from(new Set([...(group.deviceIds ?? []), ...(group.cameraIds ?? [])]))
+        .map((deviceId) => deviceNameById.get(deviceId))
+        .filter((name): name is string => Boolean(name));
+
+      if (!deviceNames.length) continue;
+
+      for (const personId of group.personIds ?? []) {
+        const current = map.get(personId) ?? [];
+        map.set(personId, Array.from(new Set([...current, ...deviceNames])));
+      }
+    }
+
+    return map;
+  }, [deviceNameById, scopedAccessGroups]);
   const accessSummaryByPerson = useMemo(() => {
     const summaries = new Map<string, PersonAccessSummary>();
 
@@ -771,20 +807,25 @@ export default function MoradoresPage() {
   }
 
   const handleRefresh = async () => {
-    const [, , nextAccessGroups] = await Promise.all([
+    const [, , nextAccessGroups, nextDevices] = await Promise.all([
       refetchPeople(),
       refetchResidenceCatalog(),
       accessGroupsService.list().catch(() => []),
+      devicesService.list({ condominiumId: user?.condominiumId ?? undefined }).catch(() => []),
     ]);
     setAccessGroups(nextAccessGroups);
+    setDevices(nextDevices);
   };
 
   useEffect(() => {
     if (!user) return;
-    void accessGroupsService
-      .list()
-      .then((groups) => setAccessGroups(groups))
-      .catch(() => setAccessGroups([]));
+    void Promise.all([
+      accessGroupsService.list().catch(() => []),
+      devicesService.list({ condominiumId: user.condominiumId ?? undefined }).catch(() => []),
+    ]).then(([groups, deviceList]) => {
+      setAccessGroups(groups);
+      setDevices(deviceList);
+    });
   }, [user]);
 
   const downloadPeopleTemplate = () => {
@@ -990,7 +1031,25 @@ export default function MoradoresPage() {
     }
 
     try {
-      await syncPersonFace(personId);
+      const syncResult = await syncPersonFace(personId);
+      const faceListId = syncResult.faceListId ?? null;
+      const faceListItemId = syncResult.faceListItemId ?? null;
+
+      if (faceListId || faceListItemId) {
+        setFaceSyncOverrides((current) => ({
+          ...current,
+          [personId]: {
+            faceListId,
+            faceListItemId,
+            hasFacialCredential: true,
+            faceStatus: 'FACE_SYNCED',
+            faceListSyncStatus: 'SYNCED',
+            faceErrorMessage: null,
+            faceListSyncError: null,
+          },
+        }));
+      }
+
       return null;
     } catch (error) {
       const axiosError =
@@ -1001,10 +1060,12 @@ export default function MoradoresPage() {
             })
           : undefined;
 
-      console.error('[moradores:face-sync] failed', {
+      const message = getFaceSyncWarningMessage(error);
+
+      console.warn('[moradores:face-sync] failed', {
         personId,
         photoUrl,
-        message: getErrorMessage(error, getFriendlyFaceSyncMessage()),
+        message,
         status: axiosError?.response?.status,
         responseData: serializeForLog(axiosError?.response?.data),
         responseHeaders: serializeForLog(axiosError?.response?.headers),
@@ -1012,9 +1073,8 @@ export default function MoradoresPage() {
           method: axiosError?.config?.method,
           url: axiosError?.config?.url,
         }),
-        error,
       });
-      return getFriendlyFaceSyncMessage();
+      return message;
     }
   }
 
@@ -1794,6 +1854,7 @@ export default function MoradoresPage() {
                 .map((groupId) => accessGroupNameById.get(groupId))
                 .filter((name): name is string => Boolean(name));
               const orphanAccessGroupCount = Math.max((selectedMorador.accessGroupIds?.length ?? 0) - validAccessGroupNames.length, 0);
+              const linkedDeviceNames = accessGroupDeviceNamesByPersonId.get(selectedMorador.id) ?? [];
               return (
                 <div
                   className={`rounded-2xl border px-4 py-3 text-sm ${
@@ -1814,6 +1875,9 @@ export default function MoradoresPage() {
                     <span>Credencial facial: {selectedMorador.hasFacialCredential ? 'sim' : 'não'}</span>
                     <span>Lista facial: {selectedMorador.faceListId ?? 'não vinculada'}</span>
                     <span>Item na lista: {selectedMorador.faceListItemId ?? 'não vinculado'}</span>
+                    <span className="md:col-span-2">
+                      Equipamentos vinculados aos grupos: {linkedDeviceNames.length ? linkedDeviceNames.join(', ') : 'nenhum equipamento facial localizado'}
+                    </span>
                   </div>
                 </div>
               );

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Building2, Camera, Car, Eye, Home, Package, Pencil, Plus, RefreshCw, Users } from 'lucide-react';
+import { Building2, Cctv, Car, Eye, Home, Package, Pencil, Plus, RefreshCw, Users } from 'lucide-react';
 import { maskDocument, maskEmail, maskPhone } from '@/features/legal/data-masking';
 import { getApiErrorMessage } from '@/features/http/api-error';
 import { getStructureTypeLabel } from '@/features/people/morador-normalizers';
@@ -1146,7 +1146,7 @@ export default function AdminUnidadesPage() {
               </div>
               <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-3">
                 <p className="flex items-center gap-2 text-xs uppercase tracking-[0.16em] text-slate-500">
-                  <Camera className="h-4 w-4 text-emerald-200" />
+                  <Cctv className="h-4 w-4 text-emerald-200" />
                   Câmeras
                 </p>
                 <p className="mt-2 text-center text-xl font-semibold tabular-nums text-white">{selectedUnitCameras.length}</p>
@@ -1241,7 +1241,7 @@ export default function AdminUnidadesPage() {
               <section className="rounded-2xl border border-white/10 bg-slate-950/40 p-4">
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <h3 className="flex items-center gap-2 text-sm font-semibold text-white">
-                    <Camera className="h-4 w-4 text-emerald-200" />
+                    <Cctv className="h-4 w-4 text-emerald-200" />
                     Câmeras
                   </h3>
                   <span className="rounded-full bg-white/10 px-2.5 py-1 text-xs text-slate-300">{selectedUnitCameras.length}</span>
