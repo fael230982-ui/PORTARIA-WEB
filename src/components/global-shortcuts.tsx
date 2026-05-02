@@ -7,7 +7,6 @@ import { Keyboard, X } from 'lucide-react';
 const shortcutHelp = [
   { keys: 'Ctrl + M', label: 'Abrir Moradores' },
   { keys: 'Ctrl + E', label: 'Abrir Encomendas' },
-  { keys: 'Ctrl + B', label: 'Busca rápida' },
 ];
 
 const shortcutRoutes: Record<string, string> = {
