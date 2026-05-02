@@ -4601,7 +4601,7 @@ export default function OperacaoPage() {
     } catch {
       // Se o storage estiver bloqueado, abre o monitor normalmente.
     }
-    window.open('/operacao/cameras', 'operacao-cameras-monitor', getCameraMonitorWindowFeatures());
+    window.open(`/operacao/cameras?manual=${Date.now()}`, 'operacao-cameras-monitor', getCameraMonitorWindowFeatures());
   }
 
   function openCameraMonitorForAlert(alert: Alert) {
