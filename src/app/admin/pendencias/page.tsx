@@ -1,18 +1,20 @@
 'use client';
 
 import Link from 'next/link';
-import { AlertTriangle, CameraOff, Car, Clock3, Home, Package, RefreshCw, ScanFace } from 'lucide-react';
+import { AlertTriangle, Cctv, Car, ChevronRight, Clock3, Home, Package, RefreshCw, ScanFace } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { ComponentType } from 'react';
-import { useProtectedRoute } from '@/hooks/use-protected-route';
-import { useAllDeliveries } from '@/hooks/use-deliveries';
+import { normalizeDeliveryStatus } from '@/features/deliveries/delivery-normalizers';
 import { useCameras } from '@/hooks/use-cameras';
+import { useAllDeliveries } from '@/hooks/use-deliveries';
 import { useAllPeople } from '@/hooks/use-people';
+import { useProtectedRoute } from '@/hooks/use-protected-route';
 import { useResidenceCatalog } from '@/hooks/use-residence-catalog';
 import { useVehicles } from '@/hooks/use-vehicles';
-import { normalizeDeliveryStatus } from '@/features/deliveries/delivery-normalizers';
 import type { Unit } from '@/types/condominium';
 import type { Person } from '@/types/person';
+
+type Tone = 'neutral' | 'warning' | 'danger' | 'success';
 
 function normalize(value: unknown) {
   return String(value ?? '')
@@ -41,6 +43,20 @@ function hoursSince(value?: string | null) {
   return Math.max(0, Math.floor((Date.now() - time) / 3_600_000));
 }
 
+function getToneClass(tone: Tone) {
+  if (tone === 'danger') return 'border-red-500/30 bg-red-500/10 text-red-100';
+  if (tone === 'warning') return 'border-amber-500/30 bg-amber-500/10 text-amber-100';
+  if (tone === 'success') return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-100';
+  return 'border-white/10 bg-white/5 text-white';
+}
+
+function getItemToneClass(tone: Tone) {
+  if (tone === 'danger') return 'border-red-500/25 bg-red-500/10 text-red-50';
+  if (tone === 'warning') return 'border-amber-500/25 bg-amber-500/10 text-amber-50';
+  if (tone === 'success') return 'border-emerald-500/25 bg-emerald-500/10 text-emerald-50';
+  return 'border-white/10 bg-slate-950/45 text-slate-100';
+}
+
 function StatCard({
   title,
   value,
@@ -52,26 +68,21 @@ function StatCard({
   value: number;
   description: string;
   icon: ComponentType<{ className?: string }>;
-  tone?: 'neutral' | 'warning' | 'danger' | 'success';
+  tone?: Tone;
 }) {
-  const toneClass =
-    tone === 'danger'
-      ? 'border-red-500/30 bg-red-500/10 text-red-100'
-      : tone === 'warning'
-        ? 'border-amber-500/30 bg-amber-500/10 text-amber-100'
-        : tone === 'success'
-          ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-100'
-          : 'border-white/10 bg-white/5 text-white';
-
   return (
-    <div className={`rounded-3xl border p-5 ${toneClass}`}>
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-sm opacity-80">{title}</p>
-          <p className="mt-2 text-center text-3xl font-semibold tabular-nums">{value}</p>
-          <p className="mt-2 text-xs opacity-75">{description}</p>
+    <div className={`rounded-2xl border p-4 ${getToneClass(tone)}`}>
+      <div className="flex h-full min-h-[116px] flex-col justify-between gap-4">
+        <div className="flex items-start justify-between gap-3">
+          <p className="max-w-[11rem] text-xs font-semibold uppercase tracking-[0.16em] opacity-80">{title}</p>
+          <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-black/15">
+            <Icon className="h-4 w-4 opacity-85" />
+          </span>
         </div>
-        <Icon className="h-5 w-5 opacity-80" />
+        <div>
+          <p className="text-center text-3xl font-semibold leading-none tabular-nums">{value}</p>
+          <p className="mt-2 min-h-[32px] text-xs leading-relaxed opacity-75">{description}</p>
+        </div>
       </div>
     </div>
   );
@@ -79,34 +90,51 @@ function StatCard({
 
 function PendingList({
   title,
+  subtitle,
   items,
   empty,
 }: {
   title: string;
-  items: Array<{ id: string; title: string; detail: string; href?: string; tone?: 'warning' | 'danger' | 'neutral' }>;
+  subtitle: string;
+  items: Array<{ id: string; title: string; detail: string; href?: string; tone?: Tone; meta?: string }>;
   empty: string;
 }) {
   return (
-    <section className="rounded-3xl border border-white/10 bg-white/5 p-5">
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold text-white">{title}</h2>
-        <span className="rounded-full bg-white/10 px-3 py-1 text-xs text-slate-300">{items.length}</span>
+    <section className="rounded-3xl border border-white/10 bg-white/5 p-4">
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="text-base font-semibold text-white">{title}</h2>
+          <p className="mt-1 text-xs leading-relaxed text-slate-400">{subtitle}</p>
+        </div>
+        <span className="inline-flex min-w-10 justify-center rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-slate-200">
+          {items.length}
+        </span>
       </div>
+
       {items.length === 0 ? (
         <p className="rounded-2xl border border-dashed border-white/10 p-4 text-sm text-slate-400">{empty}</p>
       ) : (
         <div className="space-y-2">
           {items.slice(0, 8).map((item) => {
             const content = (
-              <div className={`rounded-2xl border px-4 py-3 text-sm transition ${
-                item.tone === 'danger'
-                  ? 'border-red-500/25 bg-red-500/10 text-red-50'
-                  : item.tone === 'warning'
-                    ? 'border-amber-500/25 bg-amber-500/10 text-amber-50'
-                    : 'border-white/10 bg-slate-950/45 text-slate-100'
-              }`}>
-                <p className="font-medium">{item.title}</p>
-                <p className="mt-1 text-xs opacity-75">{item.detail}</p>
+              <div className={`grid gap-3 rounded-2xl border px-4 py-3 text-sm transition sm:grid-cols-[1fr_auto] sm:items-center ${getItemToneClass(item.tone ?? 'neutral')}`}>
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="truncate font-medium">{item.title}</p>
+                    {item.meta ? (
+                      <span className="rounded-full border border-white/10 bg-black/15 px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] opacity-80">
+                        {item.meta}
+                      </span>
+                    ) : null}
+                  </div>
+                  <p className="mt-1 line-clamp-2 text-xs leading-relaxed opacity-75">{item.detail}</p>
+                </div>
+                {item.href ? (
+                  <span className="inline-flex items-center gap-1 justify-self-start text-xs font-semibold uppercase tracking-[0.14em] opacity-85 sm:justify-self-end">
+                    Abrir
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </span>
+                ) : null}
               </div>
             );
 
@@ -161,20 +189,24 @@ export default function AdminPendenciasPage() {
   );
 
   if (isChecking) {
-    return <div className="flex min-h-[60vh] items-center justify-center rounded-3xl border border-white/10 bg-white/5 text-white">Carregando pendências...</div>;
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center rounded-3xl border border-white/10 bg-white/5 text-white">
+        Carregando pendências...
+      </div>
+    );
   }
 
   if (!canAccess || !user) return null;
 
   return (
-    <div className="space-y-6 text-white">
+    <div className="space-y-5 text-white">
       <section className="rounded-3xl border border-white/10 bg-white/5 p-5">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0">
             <p className="text-xs uppercase tracking-[0.22em] text-slate-400">Operação</p>
             <h1 className="mt-2 text-2xl font-semibold">Pendências da portaria</h1>
-            <p className="mt-2 max-w-2xl text-sm text-slate-400 text-justify">
-              Aqui ficam reunidos os pontos que exigem revisão manual: encomendas atrasadas, câmeras offline, pessoas com cadastro incompleto, unidades sem morador e veículos pendentes.
+            <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-400">
+              Visão consolidada dos itens que precisam de revisão: encomendas atrasadas, câmeras, cadastros incompletos, unidades e veículos.
             </p>
           </div>
           <button
@@ -186,7 +218,7 @@ export default function AdminPendenciasPage() {
               void refetchVehicles();
               void refetchCatalog();
             }}
-            className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-white transition hover:bg-white/15"
+            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/15"
           >
             <RefreshCw className="h-4 w-4" />
             Atualizar tudo
@@ -194,34 +226,37 @@ export default function AdminPendenciasPage() {
         </div>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <StatCard title="Encomendas 24h+" value={delayed24.length} description="Aguardam reforço de aviso" icon={Package} tone={delayed24.length ? 'warning' : 'success'} />
-        <StatCard title="Encomendas 48h+" value={delayed48.length} description="Prioridade alta para retirada" icon={Clock3} tone={delayed48.length ? 'danger' : 'success'} />
-        <StatCard title="Câmeras offline" value={offlineCameras.length} description="Precisam de verificação" icon={CameraOff} tone={offlineCameras.length ? 'danger' : 'success'} />
-        <StatCard title="Pessoas sem foto" value={peopleWithoutPhoto.length} description="Cadastro de imagem incompleto" icon={ScanFace} tone={peopleWithoutPhoto.length ? 'warning' : 'success'} />
-      </section>
-
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <StatCard title="Permanência vencida" value={overduePeople.length} description="Visitantes/prestadores ativos fora do prazo" icon={AlertTriangle} tone={overduePeople.length ? 'danger' : 'success'} />
-        <StatCard title="Unidades sem morador" value={unitsWithoutResidents.length} description="Cadastro residencial incompleto" icon={Home} tone={unitsWithoutResidents.length ? 'warning' : 'success'} />
-        <StatCard title="Veículos pendentes" value={invalidVehicles.length} description="Bloqueados ou sem unidade" icon={Car} tone={invalidVehicles.length ? 'warning' : 'success'} />
-        <StatCard title="Câmeras sem imagem" value={camerasWithoutImage.length} description="Sem imagem de visualização" icon={CameraOff} tone={camerasWithoutImage.length ? 'warning' : 'success'} />
+      <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <StatCard title="Encomendas 24h+" value={delayed24.length} description="Aguardam reforço de aviso ao morador." icon={Package} tone={delayed24.length ? 'warning' : 'success'} />
+        <StatCard title="Encomendas 48h+" value={delayed48.length} description="Prioridade alta para retirada." icon={Clock3} tone={delayed48.length ? 'danger' : 'success'} />
+        <StatCard title="Câmeras offline" value={offlineCameras.length} description="Precisam de verificação técnica." icon={Cctv} tone={offlineCameras.length ? 'danger' : 'success'} />
+        <StatCard title="Pessoas sem foto" value={peopleWithoutPhoto.length} description="Cadastro facial ou imagem incompleto." icon={ScanFace} tone={peopleWithoutPhoto.length ? 'warning' : 'success'} />
+        <StatCard title="Permanência vencida" value={overduePeople.length} description="Visitantes ou prestadores fora do prazo." icon={AlertTriangle} tone={overduePeople.length ? 'danger' : 'success'} />
+        <StatCard title="Unidades sem morador" value={unitsWithoutResidents.length} description="Estrutura sem residente vinculado." icon={Home} tone={unitsWithoutResidents.length ? 'warning' : 'success'} />
+        <StatCard title="Veículos pendentes" value={invalidVehicles.length} description="Bloqueados ou sem unidade vinculada." icon={Car} tone={invalidVehicles.length ? 'warning' : 'success'} />
+        <StatCard title="Câmeras sem imagem" value={camerasWithoutImage.length} description="Sem snapshot ou stream de imagem." icon={Cctv} tone={camerasWithoutImage.length ? 'warning' : 'success'} />
       </section>
 
       <section className="grid gap-4 xl:grid-cols-2">
         <PendingList
           title="Encomendas atrasadas"
+          subtitle="Itens que exigem contato ou acompanhamento de retirada."
           empty="Nenhuma encomenda acima de 24h."
-          items={delayed24.map((delivery) => ({
-            id: delivery.id,
-            title: delivery.deliveryCompany || 'Encomenda',
-            detail: `${hoursSince(delivery.receivedAt)}h aguardando retirada`,
-            href: `/admin/encomendas/${encodeURIComponent(delivery.id)}`,
-            tone: hoursSince(delivery.receivedAt) >= 48 ? 'danger' : 'warning',
-          }))}
+          items={delayed24.map((delivery) => {
+            const hours = hoursSince(delivery.receivedAt);
+            return {
+              id: delivery.id,
+              title: delivery.deliveryCompany || 'Encomenda',
+              detail: `${hours}h aguardando retirada`,
+              meta: hours >= 48 ? '48h+' : '24h+',
+              href: `/admin/encomendas/${encodeURIComponent(delivery.id)}`,
+              tone: hours >= 48 ? 'danger' : 'warning',
+            };
+          })}
         />
         <PendingList
           title="Câmeras com atenção"
+          subtitle="Equipamentos offline ou sem imagem para visualização."
           empty="Nenhuma pendência de câmera encontrada."
           items={[...offlineCameras, ...camerasWithoutImage]
             .filter((camera, index, list) => list.findIndex((item) => item.id === camera.id) === index)
@@ -229,31 +264,39 @@ export default function AdminPendenciasPage() {
               id: camera.id,
               title: camera.name || 'Câmera',
               detail: [camera.status, camera.location, camera.snapshotUrl || camera.imageStreamUrl ? null : 'sem imagem'].filter(Boolean).join(' | '),
+              meta: camera.status === 'OFFLINE' ? 'offline' : 'imagem',
               href: '/admin/cameras',
               tone: camera.status === 'OFFLINE' ? 'danger' : 'warning',
             }))}
         />
         <PendingList
           title="Pessoas para revisar"
+          subtitle="Cadastros sem foto ou com permanência vencida."
           empty="Nenhuma pessoa com pendência prioritária."
           items={[...overduePeople, ...peopleWithoutPhoto]
             .filter((person, index, list) => list.findIndex((item) => item.id === person.id) === index)
-            .map((person) => ({
-              id: person.id,
-              title: person.name,
-              detail: [person.endDate && new Date(person.endDate).getTime() < referenceNow ? 'permanência vencida' : null, person.photoUrl ? null : 'sem foto'].filter(Boolean).join(' | '),
-              href: '/admin/moradores',
-              tone: person.endDate && new Date(person.endDate).getTime() < referenceNow ? 'danger' : 'warning',
-            }))}
+            .map((person) => {
+              const expired = Boolean(person.endDate && new Date(person.endDate).getTime() < referenceNow);
+              return {
+                id: person.id,
+                title: person.name,
+                detail: [expired ? 'permanência vencida' : null, person.photoUrl ? null : 'sem foto'].filter(Boolean).join(' | '),
+                meta: expired ? 'prazo' : 'foto',
+                href: '/admin/moradores',
+                tone: expired ? 'danger' : 'warning',
+              };
+            })}
         />
         <PendingList
           title="Unidades e veículos"
+          subtitle="Vínculos cadastrais que precisam de conferência."
           empty="Nenhuma unidade ou veículo pendente."
           items={[
             ...unitsWithoutResidents.slice(0, 8).map((unit) => ({
               id: `unit-${unit.id}`,
               title: formatUnit(unit),
               detail: 'sem morador residente vinculado',
+              meta: 'unidade',
               href: `/admin/unidades?unitId=${encodeURIComponent(unit.id)}`,
               tone: 'warning' as const,
             })),
@@ -261,6 +304,7 @@ export default function AdminPendenciasPage() {
               id: `vehicle-${vehicle.id}`,
               title: vehicle.plate,
               detail: [vehicle.status === 'bloqueado' ? 'bloqueado' : null, !vehicle.unitId ? 'sem unidade' : null].filter(Boolean).join(' | '),
+              meta: 'veículo',
               href: '/admin/veiculos',
               tone: vehicle.status === 'bloqueado' ? 'danger' as const : 'warning' as const,
             })),

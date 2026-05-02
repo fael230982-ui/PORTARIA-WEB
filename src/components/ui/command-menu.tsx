@@ -2,9 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Search, Users, AlertTriangle, Camera } from "lucide-react";
-import { mockPeople, mockAlerts, mockCameras } from "@/services/mock-data";
-import type { Person, Alert, Camera as CameraType } from "@/types";
+import { AlertTriangle, Cctv, Search, Users } from "lucide-react";
+import { mockAlerts, mockCameras, mockPeople } from "@/services/mock-data";
+import type { Alert, Camera as CameraType, Person } from "@/types";
 
 interface SearchResult {
   id: string;
@@ -21,84 +21,84 @@ export function CommandMenu() {
   const router = useRouter();
 
   const results = useMemo<SearchResult[]>(() => {
-    if (query.length < 2) {
-      return [];
-    }
+    if (query.length < 2) return [];
 
     const lowerQ = query.toLowerCase();
 
-    // Pessoas
     const peopleResults = mockPeople
-      .filter((p: Person) => p.name?.toLowerCase().includes(lowerQ) || p.unitId?.toLowerCase().includes(lowerQ))
+      .filter((person: Person) => person.name?.toLowerCase().includes(lowerQ) || person.unitId?.toLowerCase().includes(lowerQ))
       .slice(0, 3)
-      .map((p: Person) => ({
-        id: `person-${p.id}`,
-        title: p.name || 'Pessoa sem nome',
-        description: `${p.categoryLabel || 'N/A'} • ${p.unit?.label ? [p.unit.condominium?.name, p.unit.structure?.label, p.unit.label].filter(Boolean).join(' / ') : p.unitId ? `Unidade não resolvida (${p.unitId})` : 'Sem unidade vinculada'}`,
-        type: 'person' as const,
+      .map((person: Person) => ({
+        id: `person-${person.id}`,
+        title: person.name || "Pessoa sem nome",
+        description: `${person.categoryLabel || "N/A"} • ${
+          person.unit?.label
+            ? [person.unit.condominium?.name, person.unit.structure?.label, person.unit.label].filter(Boolean).join(" / ")
+            : person.unitId
+              ? `Unidade não resolvida (${person.unitId})`
+              : "Sem unidade vinculada"
+        }`,
+        type: "person" as const,
         icon: Users,
         action: () => {
-          router.push('/people');
+          router.push("/admin/moradores");
           setOpen(false);
-        }
+        },
       }));
 
-    // Alertas
     const alertResults = mockAlerts
-      .filter((a: Alert) => a.title?.toLowerCase().includes(lowerQ) || a.location?.toLowerCase().includes(lowerQ))
+      .filter((alert: Alert) => alert.title?.toLowerCase().includes(lowerQ) || alert.location?.toLowerCase().includes(lowerQ))
       .slice(0, 3)
-      .map((a: Alert) => ({
-        id: `alert-${a.id}`,
-        title: a.title || 'Alerta sem título',
-        description: `${a.location || 'N/A'} • Há pouco`,
-        type: 'alert' as const,
+      .map((alert: Alert) => ({
+        id: `alert-${alert.id}`,
+        title: alert.title || "Alerta sem título",
+        description: `${alert.location || "N/A"} • Há pouco`,
+        type: "alert" as const,
         icon: AlertTriangle,
         action: () => {
-          router.push('/alerts');
+          router.push("/admin/alertas");
           setOpen(false);
-        }
+        },
       }));
 
-    // Câmeras (agora busca ID também: "cam")
     const cameraResults = mockCameras
-      .filter((c: CameraType) => 
-        c.name?.toLowerCase().includes(lowerQ) || 
-        c.location?.toLowerCase().includes(lowerQ) || 
-        c.id?.toLowerCase().includes(lowerQ)
+      .filter((camera: CameraType) =>
+        camera.name?.toLowerCase().includes(lowerQ) ||
+        camera.location?.toLowerCase().includes(lowerQ) ||
+        camera.id?.toLowerCase().includes(lowerQ)
       )
       .slice(0, 3)
-      .map((c: CameraType) => ({
-        id: `camera-${c.id}`,
-        title: c.name || 'Câmera sem nome',
-        description: `${c.location || 'N/A'} • ${c.status || 'Desconhecido'}`,
-        type: 'camera' as const,
-        icon: Camera,
+      .map((camera: CameraType) => ({
+        id: `camera-${camera.id}`,
+        title: camera.name || "Câmera sem nome",
+        description: `${camera.location || "N/A"} • ${camera.status || "Desconhecido"}`,
+        type: "camera" as const,
+        icon: Cctv,
         action: () => {
-          router.push('/cameras');
+          router.push("/admin/cameras");
           setOpen(false);
-        }
+        },
       }));
 
     return [...peopleResults, ...alertResults, ...cameraResults];
   }, [query, router]);
 
   useEffect(() => {
-    const down = (e: KeyboardEvent) => {
-      if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
-        e.preventDefault();
-        e.stopPropagation();
-        setOpen((prevOpen) => {
-          if (prevOpen) {
-            setQuery("");
-          }
-          return !prevOpen;
+    const down = (event: KeyboardEvent) => {
+      if (event.key.toLowerCase() === "b" && (event.metaKey || event.ctrlKey)) {
+        event.preventDefault();
+        event.stopPropagation();
+        setOpen((current) => {
+          if (current) setQuery("");
+          return !current;
         });
       }
-      if (e.key === "Escape") {
+      if (event.key === "Escape") {
         setOpen(false);
         setQuery("");
       }
     };
+
     document.addEventListener("keydown", down);
     return () => document.removeEventListener("keydown", down);
   }, []);
@@ -107,32 +107,32 @@ export function CommandMenu() {
 
   return (
     <>
-      <div 
-        className="fixed inset-0 z-[99] bg-black/60 backdrop-blur-sm" 
+      <div
+        className="fixed inset-0 z-[99] bg-black/60 backdrop-blur-sm"
         onClick={() => setOpen(false)}
       />
-      <div className="fixed inset-0 z-[100] flex items-start justify-center pt-[15vh] p-4">
+      <div className="fixed inset-0 z-[100] flex items-start justify-center p-4 pt-[15vh]">
         <div className="w-full max-w-xl rounded-2xl border border-white/10 bg-slate-900/95 shadow-2xl backdrop-blur-xl">
           <div className="flex items-center gap-3 border-b border-white/10 p-4">
-            <Search className="text-slate-400 h-5 w-5 shrink-0" />
-            <input 
+            <Search className="h-5 w-5 shrink-0 text-slate-400" />
+            <input
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Buscar pessoas, câmeras, alertas... (Ctrl+K)"
-              className="flex-1 bg-transparent text-white placeholder:text-slate-500 outline-none text-lg"
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Buscar pessoas, câmeras, alertas... (Ctrl+B)"
+              className="flex-1 bg-transparent text-lg text-white outline-none placeholder:text-slate-500"
               autoFocus
             />
           </div>
-          
+
           <div className="max-h-96 overflow-y-auto">
             {query.length < 2 ? (
               <div className="p-8 text-center text-slate-500">
-                <Users className="mx-auto h-12 w-12 mb-4 text-slate-600" />
+                <Users className="mx-auto mb-4 h-12 w-12 text-slate-600" />
                 <p className="text-sm">Digite para buscar pessoas, câmeras ou alertas</p>
               </div>
             ) : results.length === 0 ? (
               <div className="p-8 text-center text-slate-500">
-                <Search className="mx-auto h-12 w-12 mb-4 text-slate-600" />
+                <Search className="mx-auto mb-4 h-12 w-12 text-slate-600" />
                 <p className="text-sm">Nenhum resultado encontrado</p>
               </div>
             ) : (
@@ -140,12 +140,12 @@ export function CommandMenu() {
                 <button
                   key={result.id}
                   onClick={result.action}
-                  className="flex w-full items-center gap-4 p-4 hover:bg-white/5 focus:bg-white/10 transition-colors border-b border-white/5 last:border-b-0"
+                  className="flex w-full items-center gap-4 border-b border-white/5 p-4 transition-colors last:border-b-0 hover:bg-white/5 focus:bg-white/10"
                 >
-                  <result.icon className="h-5 w-5 text-slate-400 flex-shrink-0" />
+                  <result.icon className="h-5 w-5 flex-shrink-0 text-slate-400" />
                   <div className="min-w-0 flex-1 text-left">
-                    <p className="text-white font-medium truncate">{result.title}</p>
-                    <p className="text-sm text-slate-500 truncate">{result.description}</p>
+                    <p className="truncate font-medium text-white">{result.title}</p>
+                    <p className="truncate text-sm text-slate-500">{result.description}</p>
                   </div>
                 </button>
               ))
@@ -156,4 +156,3 @@ export function CommandMenu() {
     </>
   );
 }
-
