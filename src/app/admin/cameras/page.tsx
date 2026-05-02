@@ -1117,6 +1117,7 @@ export default function AdminCamerasPage() {
   const [profileError, setProfileError] = useState<string | null>(null);
   const [editingProfile, setEditingProfile] = useState<string | null>(null);
   const [editingProfileValue, setEditingProfileValue] = useState('');
+  const [cameraProfileOverrides, setCameraProfileOverrides] = useState<Record<string, string>>({});
   const [faceEngineServers, setFaceEngineServers] = useState<FaceEngineServer[]>([]);
   const [vmsServers, setVmsServers] = useState<VmsServer[]>([]);
   const [pendingRtspJob, setPendingRtspJob] = useState<BackgroundJob | null>(null);
@@ -1320,8 +1321,15 @@ export default function AdminCamerasPage() {
       (draft) => !baseCameras.some((camera) => cameraMatchesDraft(camera, draft))
     );
 
-    return [...unmatchedDrafts, ...baseCameras];
-  }, [cameras, localDraftCameras, snapshotCameras, usingSnapshot]);
+    return [...unmatchedDrafts, ...baseCameras].map((camera) =>
+      cameraProfileOverrides[camera.id]
+        ? {
+            ...camera,
+            location: cameraProfileOverrides[camera.id],
+          }
+        : camera
+    );
+  }, [cameraProfileOverrides, cameras, localDraftCameras, snapshotCameras, usingSnapshot]);
   const isAdminScope = user?.role === 'ADMIN';
   const accessibleUnits = useMemo(() => {
     if (!isAdminScope) {
@@ -1372,6 +1380,25 @@ export default function AdminCamerasPage() {
     window.localStorage.setItem(CAMERAS_SNAPSHOT_STORAGE_KEY, JSON.stringify(payload));
     setSnapshotCameras(cameras);
     setSnapshotUpdatedAt(payload.updatedAt);
+  }, [cameras]);
+
+  useEffect(() => {
+    if (cameras.length === 0) return;
+
+    setCameraProfileOverrides((current) => {
+      const next = { ...current };
+      let changed = false;
+
+      cameras.forEach((camera) => {
+        const override = next[camera.id];
+        if (override && normalizeString(camera.location) === normalizeString(override)) {
+          delete next[camera.id];
+          changed = true;
+        }
+      });
+
+      return changed ? next : current;
+    });
   }, [cameras]);
 
   useEffect(() => {
@@ -1554,12 +1581,17 @@ export default function AdminCamerasPage() {
     try {
       await Promise.all(
         camerasToUpdate.map((camera) =>
-          camerasService.update(camera.id, {
-            ...buildCameraPayload(cameraToFormData(camera)),
-            location: nextProfile,
-          })
+          camerasService.update(camera.id, { location: nextProfile })
         )
       );
+
+      setCameraProfileOverrides((current) => {
+        const next = { ...current };
+        camerasToUpdate.forEach((camera) => {
+          next[camera.id] = nextProfile;
+        });
+        return next;
+      });
 
       setCustomCameraProfiles((current) =>
         Array.from(
