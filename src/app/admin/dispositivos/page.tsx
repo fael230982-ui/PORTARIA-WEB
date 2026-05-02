@@ -406,6 +406,15 @@ function isCameraOnlyDevice(device: Device) {
   return device.type === 'CAMERA';
 }
 
+function compareDevices(left: Device, right: Device) {
+  return (
+    String(left.name ?? '').localeCompare(String(right.name ?? ''), 'pt-BR', { numeric: true, sensitivity: 'base' }) ||
+    String(left.vendor ?? '').localeCompare(String(right.vendor ?? ''), 'pt-BR', { numeric: true, sensitivity: 'base' }) ||
+    String(left.model ?? '').localeCompare(String(right.model ?? ''), 'pt-BR', { numeric: true, sensitivity: 'base' }) ||
+    String(left.id ?? '').localeCompare(String(right.id ?? ''), 'pt-BR')
+  );
+}
+
 function getDeviceVisual(device: Device): { Icon: LucideIcon; className: string; label: string } {
   const deviceType = String(device.type ?? '');
   const deviceModel = String(device.model ?? '').toUpperCase();
@@ -666,7 +675,7 @@ export default function AdminDevicesPage() {
 
   const filteredDevices = useMemo(() => {
     const normalized = search.trim().toLowerCase();
-    if (!normalized) return devices;
+    if (!normalized) return [...devices].sort(compareDevices);
     return devices.filter((device) =>
       [
         device.name,
@@ -682,7 +691,7 @@ export default function AdminDevicesPage() {
       ]
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(normalized))
-    );
+    ).sort(compareDevices);
   }, [devices, search, unitOptions]);
 
   const onlineCount = devices.filter((device) => device.status === 'ONLINE').length;

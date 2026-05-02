@@ -3299,7 +3299,7 @@ export default function OperacaoPage() {
       condominiumName,
     });
     setShiftNotes('');
-    setPageMessage({ tone: 'success', text: 'Turno iniciado. O resumo sera consolidado no encerramento.' });
+    setPageMessage({ tone: 'success', text: 'Turno iniciado. O resumo será consolidado no encerramento.' });
   }
 
   function queueOfflineDrafts(drafts: OfflineOperationDraft[], message: string) {
@@ -7405,7 +7405,7 @@ export default function OperacaoPage() {
                         {!residentWhatsAppCanSend
                           ? 'Cadastre um telefone no morador para liberar o envio por WhatsApp.'
                           : residentWhatsAppReady
-                            ? 'WhatsApp conectado. A mensagem sera enviada no mesmo historico da conversa.'
+                            ? 'WhatsApp conectado. A mensagem será enviada no mesmo histórico da conversa.'
                             : 'Conecte o WhatsApp da unidade para liberar esse envio.'}
                       </div>
                     ) : null}

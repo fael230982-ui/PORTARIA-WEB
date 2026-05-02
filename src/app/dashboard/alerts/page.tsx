@@ -7,7 +7,7 @@ export default function AlertsPage() {
   return (
     <PageContainer
       title="Alertas"
-      description="Veja os avisos e ocorrencias mais recentes da sua unidade."
+      description="Veja os avisos e ocorrências mais recentes da sua unidade."
     >
       <AlertsPanel
         title="Avisos recentes"

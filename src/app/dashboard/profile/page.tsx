@@ -126,7 +126,7 @@ function getResidentFaceStatusLabel(status?: FaceStatus | string | null) {
     case 'FACE_PENDING_SYNC':
       return 'Foto aguardando processamento';
     case 'FACE_ERROR':
-      return 'Foto precisa de nova conferencia';
+      return 'Foto precisa de nova conferência';
     case 'PHOTO_ONLY':
       return 'Foto cadastrada, mas ainda sem processamento';
     case 'NO_PHOTO':
@@ -346,7 +346,7 @@ export default function ProfilePage() {
 
         <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-slate-300">
           <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Privacidade</p>
-          <h2 className="mt-2 text-lg font-semibold text-white">Consentimento e historico</h2>
+          <h2 className="mt-2 text-lg font-semibold text-white">Consentimento e histórico</h2>
           <p className="mt-2 text-sm text-slate-400 text-justify">
             Aqui você acompanha o aceite atual e os registros mais recentes de privacidade da sua conta.
           </p>

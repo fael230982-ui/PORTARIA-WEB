@@ -182,6 +182,14 @@ function getCameraUnitLabel(
   return camera.unitName?.trim() || units.find((unit) => unit.id === camera.unitId)?.location || 'Unidade não identificada';
 }
 
+function compareCameraRecords(left: CameraRecord, right: CameraRecord) {
+  return (
+    String(left.name ?? '').localeCompare(String(right.name ?? ''), 'pt-BR', { numeric: true, sensitivity: 'base' }) ||
+    String(left.location ?? '').localeCompare(String(right.location ?? ''), 'pt-BR', { numeric: true, sensitivity: 'base' }) ||
+    String(left.id ?? '').localeCompare(String(right.id ?? ''), 'pt-BR')
+  );
+}
+
 function buildLocalCameraDraft(form: CameraFormData, job?: BackgroundJob | null): LocalCameraDraft {
   const now = new Date().toISOString();
 
@@ -1340,7 +1348,7 @@ export default function AdminCamerasPage() {
           .some((value) => normalizeString(value).includes(search));
 
       return scopeOk && statusOk && mediaOk && searchOk;
-    });
+    }).sort(compareCameraRecords);
   }, [accessibleUnitIds, activeUnitId, filters, isAdminScope, unitOptions, visibleCameras]);
 
   const stats = useMemo(() => {
@@ -1805,7 +1813,7 @@ export default function AdminCamerasPage() {
                 {camera.imageStreamUrl ? (
                   <span className="inline-flex items-center gap-2">
                     <Radio className="h-4 w-4 text-slate-400" />
-                    Image stream configurado
+                    Stream de imagem configurado
                   </span>
                 ) : camera.snapshotUrl ? (
                   <span className="inline-flex items-center gap-2">
@@ -2026,8 +2034,8 @@ export default function AdminCamerasPage() {
             <div className="rounded-2xl border border-white/10 bg-white/5 p-4 md:col-span-2">
               <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Conectividade</p>
               <div className="mt-3 space-y-2 text-sm text-slate-300">
-                <p>Image Stream URL: {selectedCamera.imageStreamUrl || 'Não configurado'}</p>
-                <p>Stream URL: {selectedCamera.streamUrl || 'Não configurado'}</p>
+                <p>URL do stream de imagem: {selectedCamera.imageStreamUrl || 'Não configurado'}</p>
+                <p>URL do stream: {selectedCamera.streamUrl || 'Não configurado'}</p>
                 <p>Snapshot URL: {selectedCamera.snapshotUrl || 'Não configurado'}</p>
                 <p>Stream External ID: {selectedCamera.streamExternalId || 'Não informado'}</p>
                 <p>VMS Device ID: {selectedCamera.vmsDeviceId ?? 'Não informado'}</p>
