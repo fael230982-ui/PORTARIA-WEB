@@ -26,7 +26,11 @@ function normalize(value: unknown) {
 
 function formatUnit(unit?: Unit | null) {
   if (!unit) return 'Unidade não identificada';
-  return [unit.condominium?.name, unit.structure?.label, unit.label].filter(Boolean).join(' / ') || unit.label;
+  return [unit.structure?.label, unit.label].filter(Boolean).join(' / ') || unit.label;
+}
+
+function compareText(left?: string | null, right?: string | null) {
+  return String(left ?? '').localeCompare(String(right ?? ''), 'pt-BR', { numeric: true, sensitivity: 'base' });
 }
 
 function personBelongsToUnit(person: Person, unit: Unit) {
@@ -117,12 +121,12 @@ function PendingList({
         <div className="space-y-2">
           {items.slice(0, 8).map((item) => {
             const content = (
-              <div className={`grid gap-3 rounded-2xl border px-4 py-3 text-sm transition sm:grid-cols-[1fr_auto] sm:items-center ${getItemToneClass(item.tone ?? 'neutral')}`}>
+              <div className={`grid gap-3 rounded-2xl border px-4 py-3 text-sm transition sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center ${getItemToneClass(item.tone ?? 'neutral')}`}>
                 <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
                     <p className="truncate font-medium">{item.title}</p>
                     {item.meta ? (
-                      <span className="rounded-full border border-white/10 bg-black/15 px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] opacity-80">
+                      <span className="w-fit rounded-full border border-white/10 bg-black/15 px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] opacity-80 sm:justify-self-end">
                         {item.meta}
                       </span>
                     ) : null}
@@ -242,17 +246,20 @@ export default function AdminPendenciasPage() {
           title="Encomendas atrasadas"
           subtitle="Itens que exigem contato ou acompanhamento de retirada."
           empty="Nenhuma encomenda acima de 24h."
-          items={delayed24.map((delivery) => {
-            const hours = hoursSince(delivery.receivedAt);
-            return {
-              id: delivery.id,
-              title: delivery.deliveryCompany || 'Encomenda',
-              detail: `${hours}h aguardando retirada`,
-              meta: hours >= 48 ? '48h+' : '24h+',
-              href: `/admin/encomendas/${encodeURIComponent(delivery.id)}`,
-              tone: hours >= 48 ? 'danger' : 'warning',
-            };
-          })}
+          items={delayed24
+            .map((delivery) => {
+              const hours = hoursSince(delivery.receivedAt);
+              return {
+                id: delivery.id,
+                title: delivery.deliveryCompany || 'Encomenda',
+                detail: `${hours}h aguardando retirada`,
+                meta: hours >= 48 ? '48h+' : '24h+',
+                href: `/admin/encomendas/${encodeURIComponent(delivery.id)}`,
+                tone: hours >= 48 ? 'danger' as const : 'warning' as const,
+                sortHours: hours,
+              };
+            })
+            .sort((left, right) => right.sortHours - left.sortHours)}
         />
         <PendingList
           title="Câmeras com atenção"
@@ -260,6 +267,7 @@ export default function AdminPendenciasPage() {
           empty="Nenhuma pendência de câmera encontrada."
           items={[...offlineCameras, ...camerasWithoutImage]
             .filter((camera, index, list) => list.findIndex((item) => item.id === camera.id) === index)
+            .sort((left, right) => Number(right.status === 'OFFLINE') - Number(left.status === 'OFFLINE') || compareText(left.name, right.name))
             .map((camera) => ({
               id: camera.id,
               title: camera.name || 'Câmera',
@@ -275,6 +283,11 @@ export default function AdminPendenciasPage() {
           empty="Nenhuma pessoa com pendência prioritária."
           items={[...overduePeople, ...peopleWithoutPhoto]
             .filter((person, index, list) => list.findIndex((item) => item.id === person.id) === index)
+            .sort((left, right) => {
+              const leftExpired = Boolean(left.endDate && new Date(left.endDate).getTime() < referenceNow);
+              const rightExpired = Boolean(right.endDate && new Date(right.endDate).getTime() < referenceNow);
+              return Number(rightExpired) - Number(leftExpired) || compareText(left.name, right.name);
+            })
             .map((person) => {
               const expired = Boolean(person.endDate && new Date(person.endDate).getTime() < referenceNow);
               return {
@@ -299,7 +312,7 @@ export default function AdminPendenciasPage() {
               meta: 'unidade',
               href: `/admin/unidades?unitId=${encodeURIComponent(unit.id)}`,
               tone: 'warning' as const,
-            })),
+            })).sort((left, right) => compareText(left.title, right.title)),
             ...invalidVehicles.slice(0, 8).map((vehicle) => ({
               id: `vehicle-${vehicle.id}`,
               title: vehicle.plate,
@@ -307,7 +320,7 @@ export default function AdminPendenciasPage() {
               meta: 'veículo',
               href: '/admin/veiculos',
               tone: vehicle.status === 'bloqueado' ? 'danger' as const : 'warning' as const,
-            })),
+            })).sort((left, right) => compareText(left.title, right.title)),
           ]}
         />
       </section>
