@@ -94,7 +94,7 @@ export function CameraFeed({
       vmsStreamingUrl: camera?.vmsStreamingUrl ?? streamingData?.vmsStreamingUrl ?? null,
       vmsStreamingUrls: streamingData?.vmsStreamingUrls ?? null,
       playback: streamingData?.playback ?? camera?.playback ?? null,
-      nativePlayerPayload: nativePayload,
+      nativePlayerPayload: streamingData?.playback?.nativePlayerPayload ?? camera?.playback?.nativePlayerPayload ?? null,
       resolvedVideoUrl: videoStreamUrl,
       using: isHls ? 'hls' : 'video',
     });

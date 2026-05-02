@@ -161,11 +161,11 @@ function getCameraTone(status: CameraRecord['status']) {
 
 function getMediaLabel(camera: CameraRecord) {
   const videoUrl = getPreferredVideoStreamUrl(camera);
-  if (isBrowserPlayableVideoUrl(videoUrl)) return 'ao vivo';
+  if (isBrowserPlayableVideoUrl(videoUrl)) return 'Ao vivo';
   if (String(videoUrl ?? '').toLowerCase().startsWith('wss://')) return 'VMS nativo';
-  if (getPreferredImageStreamUrl(camera)) return 'preview';
-  if (getPreferredSnapshotUrl(camera)) return 'snapshot';
-  return 'sem imagem';
+  if (getPreferredImageStreamUrl(camera)) return 'Frames';
+  if (getPreferredSnapshotUrl(camera)) return 'Snapshot';
+  return 'Sem imagem';
 }
 
 export default function OperacaoCâmerasPage() {
@@ -316,7 +316,7 @@ export default function OperacaoCâmerasPage() {
     [filteredCâmeras]
   );
   const noMediaCount = useMemo(
-    () => filteredCâmeras.filter((camera) => getMediaLabel(camera) === 'sem imagem').length,
+    () => filteredCâmeras.filter((camera) => getMediaLabel(camera) === 'Sem imagem').length,
     [filteredCâmeras]
   );
 
@@ -357,7 +357,7 @@ export default function OperacaoCâmerasPage() {
         if (bankFilter === 'unassigned') return !assignedIds.has(camera.id);
         if (bankFilter === 'assigned') return assignedIds.has(camera.id);
         if (bankFilter === 'online') return camera.status === 'ONLINE';
-        if (bankFilter === 'no_media') return getMediaLabel(camera) === 'sem imagem';
+        if (bankFilter === 'no_media') return getMediaLabel(camera) === 'Sem imagem';
         return true;
       })
       .sort((a, b) => {
