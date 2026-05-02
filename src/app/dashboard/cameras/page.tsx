@@ -23,6 +23,18 @@ function compareResidentCameras(left: Camera, right: Camera) {
   return String(left.name ?? '').localeCompare(String(right.name ?? ''), 'pt-BR', { numeric: true, sensitivity: 'base' });
 }
 
+function normalizeString(value: unknown) {
+  return String(value ?? '')
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
+function normalizeCameraProfile(value: unknown) {
+  return String(value ?? '').trim().replace(/\s+/g, ' ').toUpperCase();
+}
+
 export default function CamerasPage() {
   const { user } = useAuth();
   const activeUnitId = user?.selectedUnitId ?? user?.unitId ?? null;
@@ -35,14 +47,16 @@ export default function CamerasPage() {
   const cameras = useMemo(() => [...(data?.data ?? [])].sort(compareResidentCameras), [data?.data]);
   const profileOptions = useMemo(() => {
     const profiles = cameras
-      .map((camera) => camera.location?.trim())
-      .filter((profile): profile is string => Boolean(profile));
+      .map((camera) => normalizeCameraProfile(camera.location))
+      .filter(Boolean);
 
     return Array.from(new Set(profiles)).sort((left, right) =>
       left.localeCompare(right, 'pt-BR', { numeric: true, sensitivity: 'base' })
     );
   }, [cameras]);
-  const visibleCameras = selectedProfile ? cameras.filter((camera) => camera.location?.trim() === selectedProfile) : cameras;
+  const visibleCameras = selectedProfile
+    ? cameras.filter((camera) => normalizeString(camera.location) === normalizeString(selectedProfile))
+    : cameras;
 
   return (
     <PageContainer title="Câmeras" description="Veja as câmeras da sua unidade e das áreas comuns do condomínio.">

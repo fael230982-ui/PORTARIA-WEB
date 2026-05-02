@@ -131,7 +131,15 @@ function readStoredAutoRotateSettings() {
 }
 
 function normalizeString(value: unknown) {
-  return String(value ?? '').trim().toLowerCase();
+  return String(value ?? '')
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
+function normalizeCameraProfile(value: unknown) {
+  return String(value ?? '').trim().replace(/\s+/g, ' ').toUpperCase();
 }
 
 function getGridClass(layout: CameraLayout) {
@@ -291,8 +299,8 @@ export default function OperacaoCâmerasPage() {
   const cameras = useMemo(() => camerasData?.data ?? [], [camerasData]);
   const profileOptions = useMemo(() => {
     const profiles = cameras
-      .map((camera) => camera.location?.trim())
-      .filter((profile): profile is string => Boolean(profile));
+      .map((camera) => normalizeCameraProfile(camera.location))
+      .filter(Boolean);
 
     return Array.from(new Set(profiles)).sort((left, right) =>
       left.localeCompare(right, 'pt-BR', { numeric: true, sensitivity: 'base' })
