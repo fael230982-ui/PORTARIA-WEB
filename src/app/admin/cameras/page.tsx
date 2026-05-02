@@ -1855,6 +1855,8 @@ export default function AdminCamerasPage() {
               variant="outline"
               onClick={() => {
                 setProfileError(null);
+                setProfileSearch('');
+                cancelEditProfile();
                 setOpenProfiles(true);
               }}
               className="inline-flex items-center gap-2 border-cyan-400/20 bg-cyan-400/10 text-cyan-50 hover:bg-cyan-400/15"
@@ -1991,6 +1993,7 @@ export default function AdminCamerasPage() {
         description="Padronize os perfis usados para agrupar câmeras na visualização."
         onClose={() => {
           setOpenProfiles(false);
+          setProfileSearch('');
           cancelEditProfile();
         }}
         maxWidth="lg"
