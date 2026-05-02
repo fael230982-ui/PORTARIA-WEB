@@ -131,10 +131,9 @@ export function CameraFeed({
         hlsInstance.loadSource(videoStreamUrl);
         hlsInstance.attachMedia(video);
         hlsInstance.on(Hls.Events.ERROR, (_event, data) => {
-          console.error('[camera-feed] player error', { cameraId: camera?.id, url: videoStreamUrl, data });
           if (data?.fatal) {
             if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
-              hlsInstance?.startLoad?.();
+              setFailedVideoMediaKey(mediaKey);
               return;
             }
 
@@ -147,8 +146,7 @@ export function CameraFeed({
           }
         });
       })
-      .catch((error) => {
-        console.error('[camera-feed] erro ao inicializar hls.js', { cameraId: camera?.id, url: videoStreamUrl, error });
+      .catch(() => {
         setFailedVideoMediaKey(mediaKey);
       });
 
@@ -165,9 +163,7 @@ export function CameraFeed({
     const tryPlay = () => {
       const playResult = video.play();
       if (playResult && typeof playResult.catch === 'function') {
-        playResult.catch((error) => {
-          console.warn('[camera-feed] autoplay aguardando interação do navegador', { cameraId: camera?.id, url: videoStreamUrl, error });
-        });
+        playResult.catch(() => undefined);
       }
     };
 
@@ -229,10 +225,6 @@ export function CameraFeed({
           preload="auto"
           controls={controls}
           onError={() => {
-            console.warn('[camera-feed] vídeo principal indisponível; alternando para snapshot', {
-              cameraId: camera.id,
-              url: videoStreamUrl,
-            });
             setFailedVideoMediaKey(mediaKey);
           }}
         />
