@@ -3,11 +3,12 @@ import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import {
+  AlertTriangle,
   Bell,
   DoorClosed,
   DoorOpen,
   Building2,
-  Camera as CameraIcon,
+  Cctv,
   Delete,
   Grid3X3,
   LifeBuoy,
@@ -33,6 +34,7 @@ import { usePeople } from '@/hooks/use-people';
 import { useUnitResidents } from '@/hooks/use-people';
 import { useResidenceCatalog } from '@/hooks/use-residence-catalog';
 import { useOfflineOperationQueue } from '@/hooks/use-offline-operation-queue';
+import { useOperationEvents } from '@/hooks/use-operation-events';
 import { CrudModal } from '@/components/admin/CrudModal';
 import { CameraFeed } from '@/components/camera-feed';
 import { CameraPlayer } from '@/components/operacao/camera-player';
@@ -110,12 +112,40 @@ import type { Camera } from '@/types/camera';
 import type { Unit } from '@/types/condominium';
 import type { Delivery, DeliveryPayload } from '@/types/delivery';
 import type { Device, DeviceDoorStatus } from '@/types/device';
-import type { OperationAction, OperationMessage, OperationPhotoSearchResponse, OperationShiftChange } from '@/types/operation';
+import type { OperationAction, OperationEvent, OperationMessage, OperationPhotoSearchResponse, OperationShiftChange } from '@/types/operation';
 import type { Person, PersonCategory } from '@/types/person';
 import type { Report, ShiftHandoverReportMetadata } from '@/types/report';
 import type { Vehicle } from '@/types/vehicle';
 
 const allowedRoles = ['OPERADOR', 'GERENTE', 'ADMIN', 'MASTER', 'CENTRAL'] as const;
+const CAMERA_ALERT_FOCUS_STORAGE_KEY = 'operation-camera-alert-focus';
+const DEVICE_ALERT_CAMERAS_STORAGE_KEY = 'admin-device-alert-cameras';
+const CAMERA_MONITOR_WINDOW_STORAGE_KEY = 'operation-camera-monitor-window';
+
+function getCameraMonitorWindowFeatures() {
+  const fallback = { width: 1680, height: 960 };
+  const parts = ['noopener', 'noreferrer'];
+
+  if (typeof window === 'undefined') {
+    return [...parts, `width=${fallback.width}`, `height=${fallback.height}`].join(',');
+  }
+
+  try {
+    const raw = window.localStorage.getItem(CAMERA_MONITOR_WINDOW_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) as { left?: number; top?: number; width?: number; height?: number } : null;
+    const width = Number.isFinite(parsed?.width) ? Math.max(640, Math.round(parsed?.width ?? fallback.width)) : fallback.width;
+    const height = Number.isFinite(parsed?.height) ? Math.max(480, Math.round(parsed?.height ?? fallback.height)) : fallback.height;
+    const left = Number.isFinite(parsed?.left) ? Math.round(parsed?.left ?? 0) : null;
+    const top = Number.isFinite(parsed?.top) ? Math.round(parsed?.top ?? 0) : null;
+
+    parts.push(`width=${width}`, `height=${height}`);
+    if (left !== null) parts.push(`left=${left}`);
+    if (top !== null) parts.push(`top=${top}`);
+    return parts.join(',');
+  } catch {
+    return [...parts, `width=${fallback.width}`, `height=${fallback.height}`].join(',');
+  }
+}
 
 const operationalModules: Array<{
   label: string;
@@ -933,6 +963,7 @@ function OperationalPersonSummaryCard({
   accessSummary,
   highlighted = false,
   revealSensitive = false,
+  unitLabel,
 }: {
   person: Person;
   now: Date;
@@ -943,11 +974,13 @@ function OperationalPersonSummaryCard({
   } | null;
   highlighted?: boolean;
   revealSensitive?: boolean;
+  unitLabel?: string | null;
 }) {
   const scheduleState = getScheduleState(person, now);
   const faceReadiness = getFaceReadiness(person);
   const resolvedUnitLabel =
-    [person.unit?.condominium?.name, person.unit?.structure?.label, person.unit?.label]
+    unitLabel?.trim() ||
+    [getCompleteUnitLabel(person.unit, person.unitName ?? person.unitId)]
       .filter(Boolean)
       .join(' / ') || (person.unitId ? 'Unidade não identificada' : 'Não informada');
   const hasUnresolvedUnit = isUnresolvedUnitLabel(resolvedUnitLabel);
@@ -1219,9 +1252,297 @@ function appendUnitContext(baseText: string, unitLabel?: string | null) {
   return `${baseText} - ${unitLabel}`;
 }
 
+function getOperationEventPayloadString(event: OperationEvent, ...keys: string[]) {
+  for (const key of keys) {
+    const value = event.payload?.[key];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return null;
+}
+
+type AlertMediaItem = {
+  key: string;
+  cameraId?: string | null;
+  cameraName?: string | null;
+  snapshotUrl?: string | null;
+  liveUrl?: string | null;
+  replayUrl?: string | null;
+};
+
+type CameraAlertFocusPayload = {
+  id: string;
+  title: string;
+  timestamp: string;
+  cameraIds: string[];
+  media: AlertMediaItem[];
+};
+
+function getObjectString(source: Record<string, unknown> | null | undefined, ...keys: string[]) {
+  if (!source) return null;
+  for (const key of keys) {
+    const value = source[key];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return null;
+}
+
+function readDeviceAlertCameraMap() {
+  if (typeof window === 'undefined') return {} as Record<string, string[]>;
+  try {
+    const raw = window.localStorage.getItem(DEVICE_ALERT_CAMERAS_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    return Object.fromEntries(
+      Object.entries(parsed as Record<string, unknown>).map(([deviceId, cameraIds]) => [
+        deviceId,
+        Array.isArray(cameraIds) ? cameraIds.filter((id): id is string => typeof id === 'string') : [],
+      ])
+    );
+  } catch {
+    return {};
+  }
+}
+
+function getAlertMediaItems(alert?: Alert | null): AlertMediaItem[] {
+  if (!alert) return [];
+
+  const payload = alert.payload && typeof alert.payload === 'object' ? alert.payload : {};
+  const items: AlertMediaItem[] = [];
+
+  const addItem = (item: Omit<AlertMediaItem, 'key'> & { key?: string | null }) => {
+    if (!item.snapshotUrl && !item.liveUrl && !item.replayUrl && !item.cameraId) return;
+    const key = item.key || item.cameraId || item.snapshotUrl || item.liveUrl || item.replayUrl || `media-${items.length}`;
+    if (items.some((current) => current.key === key)) return;
+    items.push({ ...item, key });
+  };
+
+  alert.cameras?.forEach((camera, index) => {
+    addItem({
+      key: camera.id ?? camera.cameraId ?? `alert-camera-${index}`,
+      cameraId: camera.cameraId ?? camera.id ?? null,
+      cameraName: camera.cameraName ?? camera.name ?? camera.label ?? null,
+      snapshotUrl: camera.snapshotUrl ?? camera.imageUrl ?? camera.thumbnailUrl ?? null,
+      liveUrl: camera.liveUrl ?? camera.hlsUrl ?? camera.preferredLiveUrl ?? null,
+      replayUrl: camera.replayUrl ?? null,
+    });
+  });
+
+  addItem({
+    key: alert.cameraId ?? alert.snapshotUrl ?? alert.replayUrl ?? null,
+    cameraId: alert.cameraId ?? getObjectString(payload, 'cameraId', 'camera_id'),
+    cameraName: getObjectString(payload, 'cameraName', 'camera_name'),
+    snapshotUrl: alert.snapshotUrl ?? alert.imageUrl ?? alert.thumbnailUrl ?? alert.photoUrl ?? getObjectString(payload, 'snapshotUrl', 'snapshot_url', 'imageUrl', 'image_url'),
+    liveUrl: getObjectString(payload, 'liveUrl', 'live_url', 'hlsUrl', 'hls_url'),
+    replayUrl: alert.replayUrl ?? getObjectString(payload, 'replayUrl', 'replay_url'),
+  });
+
+  const payloadArrays = ['cameras', 'cameraEvidence', 'cameraSnapshots', 'snapshots', 'replays', 'evidence'];
+  payloadArrays.forEach((key) => {
+    const value = payload[key];
+    if (!Array.isArray(value)) return;
+
+    value.forEach((entry, index) => {
+      if (!entry || typeof entry !== 'object') return;
+      const record = entry as Record<string, unknown>;
+      addItem({
+        key: getObjectString(record, 'id', 'cameraId', 'camera_id') ?? `${key}-${index}`,
+        cameraId: getObjectString(record, 'cameraId', 'camera_id', 'id'),
+        cameraName: getObjectString(record, 'cameraName', 'camera_name', 'name', 'label'),
+        snapshotUrl: getObjectString(record, 'snapshotUrl', 'snapshot_url', 'imageUrl', 'image_url', 'thumbnailUrl', 'thumbnail_url'),
+        liveUrl: getObjectString(record, 'liveUrl', 'live_url', 'hlsUrl', 'hls_url', 'preferredLiveUrl', 'preferred_live_url'),
+        replayUrl: getObjectString(record, 'replayUrl', 'replay_url', 'url'),
+      });
+    });
+  });
+
+  const cameraIds = payload.cameraIds ?? payload.camera_ids;
+  if (Array.isArray(cameraIds)) {
+    cameraIds.forEach((cameraId, index) => {
+      if (typeof cameraId !== 'string' || !cameraId.trim()) return;
+      addItem({ key: `camera-${cameraId}`, cameraId, cameraName: `Câmera ${index + 1}` });
+    });
+  }
+
+  const deviceId = getObjectString(payload, 'deviceId', 'device_id') ?? getObjectString(payload, 'sourceDeviceId', 'source_device_id');
+  const mappedCameraIds = deviceId ? readDeviceAlertCameraMap()[deviceId] ?? [] : [];
+  mappedCameraIds.forEach((cameraId, index) => {
+    addItem({ key: `device-${deviceId}-camera-${cameraId}`, cameraId, cameraName: `Câmera vinculada ${index + 1}` });
+  });
+
+  return items;
+}
+
+function buildCameraAlertFocusPayload(alert: Alert): CameraAlertFocusPayload | null {
+  const media = getAlertMediaItems(alert);
+  const cameraIds = Array.from(
+    new Set(
+      [
+        alert.cameraId,
+        ...media.map((item) => item.cameraId),
+      ]
+        .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+    )
+  );
+
+  if (!cameraIds.length && !media.length) return null;
+
+  return {
+    id: alert.id,
+    title: alert.title || 'Ocorrência',
+    timestamp: new Date().toISOString(),
+    cameraIds,
+    media,
+  };
+}
+
+function operationEventToAlert(event: OperationEvent): Alert | null {
+  const eventType = String(event.eventType ?? event.type ?? '').toUpperCase();
+  const entityType = String(event.entityType ?? '').toUpperCase();
+  const trigger = getOperationEventPayloadString(event, 'trigger', 'eventTrigger', 'event_type', 'eventType');
+  const normalizedTrigger = String(trigger ?? '').toUpperCase();
+  const isAlertEvent =
+    entityType === 'ALERT' ||
+    eventType.includes('ALERT') ||
+    eventType.includes('DANGER') ||
+    eventType.includes('DOOR') ||
+    normalizedTrigger.includes('CONTROL_ID_DOOR');
+
+  if (!isAlertEvent) return null;
+
+  const title =
+    event.title ||
+    getOperationEventPayloadString(event, 'title') ||
+    (normalizedTrigger.includes('FORCED_OPEN') ? 'Arrombamento detectado no Control iD' : 'Alerta operacional');
+  const description =
+    event.body ||
+    getOperationEventPayloadString(event, 'description', 'message', 'body') ||
+    trigger ||
+    null;
+  const critical =
+    eventType.includes('DANGER') ||
+    eventType.includes('PANIC') ||
+    eventType.includes('FORCED') ||
+    normalizedTrigger.includes('FORCED') ||
+    normalizeText(title).includes('arrombamento');
+
+  return {
+    id: String(event.entityId ?? event.eventId ?? event.id),
+    alertId: String(event.eventId ?? event.id),
+    title,
+    description,
+    type: critical ? 'DANGER' : 'INFO',
+    status: 'UNREAD',
+    severity: critical ? 'CRITICAL' : 'INFO',
+    timestamp: String(event.occurredAt ?? event.timestamp ?? event.createdAt ?? new Date().toISOString()),
+    cameraId: event.cameraId ?? getOperationEventPayloadString(event, 'cameraId', 'camera_id'),
+    personId: getOperationEventPayloadString(event, 'personId', 'person_id'),
+    snapshotUrl: getOperationEventPayloadString(event, 'snapshotUrl', 'snapshot_url'),
+    imageUrl: getOperationEventPayloadString(event, 'imageUrl', 'image_url'),
+    replayUrl: getOperationEventPayloadString(event, 'replayUrl', 'replay_url'),
+    location: getOperationEventPayloadString(event, 'location', 'deviceName', 'doorName'),
+    readAt: null,
+    workflow: null,
+    payload: {
+      ...event.payload,
+      deviceId: getOperationEventPayloadString(event, 'deviceId', 'device_id') ?? event.entityId ?? null,
+    },
+  };
+}
+
+function playAlertSound() {
+  if (typeof window === 'undefined') return;
+
+  try {
+    const AudioContextConstructor = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextConstructor) return;
+
+    const audioContext = new AudioContextConstructor();
+    const gain = audioContext.createGain();
+    gain.gain.setValueAtTime(0.001, audioContext.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.18, audioContext.currentTime + 0.03);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.7);
+    gain.connect(audioContext.destination);
+
+    [0, 0.18, 0.36].forEach((offset) => {
+      const oscillator = audioContext.createOscillator();
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(880, audioContext.currentTime + offset);
+      oscillator.connect(gain);
+      oscillator.start(audioContext.currentTime + offset);
+      oscillator.stop(audioContext.currentTime + offset + 0.12);
+    });
+
+    window.setTimeout(() => {
+      void audioContext.close();
+    }, 900);
+  } catch {
+    // Browsers can block audio before the first user interaction. The modal still calls attention visually.
+  }
+}
+
+function playMessageSound() {
+  if (typeof window === 'undefined') return;
+
+  try {
+    const AudioContextConstructor = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextConstructor) return;
+
+    const audioContext = new AudioContextConstructor();
+    const gain = audioContext.createGain();
+    gain.gain.setValueAtTime(0.001, audioContext.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.12, audioContext.currentTime + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.35);
+    gain.connect(audioContext.destination);
+
+    [0, 0.16].forEach((offset) => {
+      const oscillator = audioContext.createOscillator();
+      oscillator.type = 'triangle';
+      oscillator.frequency.setValueAtTime(660, audioContext.currentTime + offset);
+      oscillator.connect(gain);
+      oscillator.start(audioContext.currentTime + offset);
+      oscillator.stop(audioContext.currentTime + offset + 0.09);
+    });
+
+    window.setTimeout(() => {
+      void audioContext.close();
+    }, 550);
+  } catch {
+    // O navegador pode bloquear audio antes da primeira interacao; o destaque visual permanece.
+  }
+}
+
 function isUnresolvedUnitLabel(label?: string | null) {
   const normalized = normalizeText(label);
   return normalized.includes('unidade não resolvida');
+}
+
+function getCompleteUnitLabel(unit?: Unit | null, fallback?: string | null) {
+  const structureLabel = unit?.structure?.label?.trim() || unit?.structureLabel?.trim() || '';
+  const rawStructureType = unit?.structure?.type || unit?.structureType || (structureLabel ? 'STREET' : null);
+  const structureTypeLabel =
+    rawStructureType === 'BLOCK'
+      ? 'BLOCO'
+      : rawStructureType === 'QUAD'
+        ? 'QUADRA'
+        : rawStructureType === 'LOT'
+          ? 'LOTE'
+          : rawStructureType === 'STREET'
+            ? 'RUA'
+            : '';
+  const unitLabel = unit?.label?.trim() || fallback?.trim() || '';
+  const condominiumName = unit?.condominium?.name?.trim() || unit?.condominiumName?.trim() || '';
+  const legacyReference = unit?.legacyUnitId?.trim() || '';
+
+  if (structureLabel && unitLabel) {
+    return `${[structureTypeLabel, structureLabel].filter(Boolean).join(' ')} - ${unitLabel}`;
+  }
+
+  if (legacyReference && legacyReference !== unitLabel) {
+    return legacyReference;
+  }
+
+  return unitLabel || fallback?.trim() || condominiumName;
 }
 
 function isTechnicalIdentifier(value?: string | null) {
@@ -1495,7 +1816,8 @@ export default function OperacaoPage() {
   const { user, canAccess, isChecking } = useProtectedRoute({
     allowedRoles: [...allowedRoles],
   });
-  const { data: alertsData, isLoading: alertsLoading, error: alertsError, refetch: refetchAlerts } = useAlerts({ limit: 8 });
+  const { events: operationEvents } = useOperationEvents(Boolean(user));
+  const { data: alertsData, isLoading: alertsLoading, error: alertsError, refetch: refetchAlerts } = useAlerts({ limit: 30, refetchInterval: 5000 });
   const { data: camerasData, isLoading: camerasLoading, error: camerasError, refetch: refetchCameras } = useCameras();
   const { data: peopleData, isLoading: peopleLoading, error: peopleError, refetch: refetchPeople } = usePeople({ limit: 100 });
   const { data: reportsData, refetch: refetchReports } = useReports(Boolean(user));
@@ -1514,6 +1836,7 @@ export default function OperacaoPage() {
   const [photoSearchCameraId, setPhotoSearchCameraId] = useState('');
   const [cameraFocusPulse, setCameraFocusPulse] = useState(false);
   const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
+  const [attentionAlert, setAttentionAlert] = useState<Alert | null>(null);
   const [openQuickPerson, setOpenQuickPerson] = useState(false);
   const [openQuickPersonTypeModal, setOpenQuickPersonTypeModal] = useState(false);
   const [openOccurrence, setOpenOccurrence] = useState(false);
@@ -1588,7 +1911,11 @@ export default function OperacaoPage() {
   const [inboxMessagesLoading, setInboxMessagesLoading] = useState(false);
   const [inboxMessagesError, setInboxMessagesError] = useState<string | null>(null);
   const [inboxMessagesMode, setInboxMessagesMode] = useState<'unit' | 'empty'>('empty');
+  const [highlightedInboxMessageIds, setHighlightedInboxMessageIds] = useState<string[]>([]);
   const [brokenAlertImageUrls, setBrokenAlertImageUrls] = useState<Record<string, boolean>>({});
+  const knownAlertIdsRef = useRef<Set<string> | null>(null);
+  const knownInboxMessageIdsRef = useRef<Set<string> | null>(null);
+  const inboxMessagesRef = useRef<OperationMessage[]>([]);
   const [photoSearchPanel, setPhotoSearchPanel] = useState<PhotoSearchPanelState>(initialPhotoSearchPanelState);
   const [activeShift, setActiveShift] = useState<ActiveShiftDraft | null>(null);
   const [openShiftCloseModal, setOpenShiftCloseModal] = useState(false);
@@ -1659,6 +1986,37 @@ export default function OperacaoPage() {
   const residentWhatsAppQrCodeImage = residentWhatsAppConnection?.qrCodeImageDataUrl?.trim() || null;
   const residentWhatsAppPairingCode = residentWhatsAppConnection?.pairingCode?.trim() || null;
   const residentWhatsAppCanSend = Boolean(selectedResidentPerson?.id || residentPhone);
+
+  useEffect(() => {
+    inboxMessagesRef.current = inboxMessages;
+  }, [inboxMessages]);
+
+  useEffect(() => {
+    const incomingUnreadIds = new Set(
+      inboxMessages
+        .filter((message) => (message.direction === 'INBOUND' || message.direction === 'RESIDENT_TO_PORTARIA') && !message.readAt)
+        .map((message) => message.id)
+    );
+
+    if (!knownInboxMessageIdsRef.current) {
+      knownInboxMessageIdsRef.current = incomingUnreadIds;
+      return;
+    }
+
+    const newMessageIds = [...incomingUnreadIds].filter((id) => !knownInboxMessageIdsRef.current?.has(id));
+    knownInboxMessageIdsRef.current = incomingUnreadIds;
+
+    if (!newMessageIds.length) return;
+
+    playMessageSound();
+    setHighlightedInboxMessageIds((current) => Array.from(new Set([...newMessageIds, ...current])));
+
+    const timeoutId = window.setTimeout(() => {
+      setHighlightedInboxMessageIds((current) => current.filter((id) => !newMessageIds.includes(id)));
+    }, 8000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [inboxMessages]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 1000);
@@ -1901,7 +2259,7 @@ export default function OperacaoPage() {
       new Map(
         scopedUnits.map((unit) => [
           unit.id,
-          [unit.condominium?.name, unit.structure?.label, unit.label].filter(Boolean).join(' / '),
+          getCompleteUnitLabel(unit, unit.label),
         ])
       ),
     [scopedUnits]
@@ -1912,9 +2270,7 @@ export default function OperacaoPage() {
         .map((unit) => ({
           id: unit.id,
           label:
-            [unit.condominium?.name, unit.structure?.label, unit.label]
-              .filter(Boolean)
-              .join(' / ') || unit.legacyUnitId || '',
+            getCompleteUnitLabel(unit, unit.label) || unit.legacyUnitId || '',
         }))
         .filter((unit) => Boolean(unit.label));
 
@@ -1926,8 +2282,8 @@ export default function OperacaoPage() {
       people.forEach((person) => {
         if (!person.unitId) return;
         const fallbackLabel =
-          person.unitName?.trim() ||
-          [person.unit?.condominium?.name, person.unit?.structure?.label, person.unit?.label].filter(Boolean).join(' / ');
+          getCompleteUnitLabel(person.unit, person.unitName ?? person.unitId) ||
+          person.unitName?.trim();
         const label = [fallbackLabel].find(
           (value) => Boolean(value) && !String(value).includes('Unidade não resolvida')
         );
@@ -1942,10 +2298,7 @@ export default function OperacaoPage() {
       return effectiveUnits
         .map((unit) => ({
           id: unit.id,
-          label:
-            [unit.condominium?.name, unit.structure?.label, unit.label]
-              .filter(Boolean)
-              .join(' / ') || unit.legacyUnitId || '',
+          label: getCompleteUnitLabel(unit, unit.label) || unit.legacyUnitId || '',
         }))
         .filter((unit) => Boolean(unit.label));
     },
@@ -2200,6 +2553,12 @@ export default function OperacaoPage() {
           // Mantem o erro original da inbox, que e o endpoint canonico para a portaria.
         }
       }
+      if (inboxMessagesRef.current.length > 0) {
+        setInboxMessagesMode('unit');
+        setInboxMessagesError(null);
+        return;
+      }
+
       setInboxMessagesError(error instanceof Error ? error.message : 'Não foi possível atualizar as mensagens agora.');
     } finally {
       setInboxMessagesLoading(false);
@@ -2268,10 +2627,43 @@ export default function OperacaoPage() {
     };
   }, [primaryRemoteOpenDevice]);
 
-  const alerts = useMemo(
-    () => (alertsData?.data?.length ? alertsData.data : !isOnline ? snapshotCache.alerts : alertsData?.data ?? []),
-    [alertsData?.data, isOnline, snapshotCache.alerts]
+  const liveOperationAlerts = useMemo(
+    () => operationEvents.map(operationEventToAlert).filter((alert): alert is Alert => Boolean(alert)),
+    [operationEvents]
   );
+  const alerts = useMemo(() => {
+    const baseAlerts = alertsData?.data?.length ? alertsData.data : !isOnline ? snapshotCache.alerts : alertsData?.data ?? [];
+    const unique = new Map<string, Alert>();
+
+    [...liveOperationAlerts, ...baseAlerts].forEach((alert) => {
+      if (!unique.has(alert.id)) {
+        unique.set(alert.id, alert);
+      }
+    });
+
+    return Array.from(unique.values()).sort(
+      (left, right) => new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime()
+    );
+  }, [alertsData?.data, isOnline, liveOperationAlerts, snapshotCache.alerts]);
+  useEffect(() => {
+    if (!alerts.length) return;
+
+    const currentIds = new Set(alerts.map((alert) => alert.id));
+    if (!knownAlertIdsRef.current) {
+      knownAlertIdsRef.current = currentIds;
+      return;
+    }
+
+    const newAlert = alerts.find((alert) => !knownAlertIdsRef.current?.has(alert.id) && alert.status === 'UNREAD');
+    knownAlertIdsRef.current = currentIds;
+
+    if (!newAlert) return;
+    setAttentionAlert(newAlert);
+    playAlertSound();
+    if (getAlertMediaItems(newAlert).length || newAlert.cameraId) {
+      openCameraMonitorForAlert(newAlert);
+    }
+  }, [alerts]);
   const selectedOperationUnit = useMemo(
     () => (selectedOperationUnitId ? accessibleUnitsMap.get(selectedOperationUnitId) ?? null : null),
     [accessibleUnitsMap, selectedOperationUnitId]
@@ -2650,6 +3042,7 @@ export default function OperacaoPage() {
     [alertWorkflowStore, selectedAlert]
   );
   const selectedAlertReplayUrl = useMemo(() => getAlertReplayUrl(selectedAlert), [selectedAlert]);
+  const selectedAlertMediaItems = useMemo(() => getAlertMediaItems(selectedAlert), [selectedAlert]);
   const selectedAlertAccessSummary = useMemo(
     () => (selectedAlert?.personId ? accessSummaryByPerson.get(selectedAlert.personId) ?? null : null),
     [accessSummaryByPerson, selectedAlert]
@@ -3350,6 +3743,7 @@ export default function OperacaoPage() {
 
   async function handleResolveSelectedAlert() {
     if (!selectedAlert) return;
+    const alertToResolve = selectedAlert;
     const resolutionValue = `${alertResolutionPreset} ${alertResolutionText}`.trim();
     if (!resolutionValue) {
       setAlertResolutionError('Preencha a resolução antes de encerrar a ocorrência.');
@@ -3359,20 +3753,27 @@ export default function OperacaoPage() {
     }
     setAlertUpdating(true);
     setPageMessage(null);
+    setAlertResolutionError(null);
+    const resolutionNote = alertResolutionText.trim() || alertResolutionPreset || null;
     try {
-      await updateAlertWorkflow(selectedAlert.id, {
-        workflowStatus: 'RESOLVED',
-        resolutionNote: alertResolutionText.trim() || alertResolutionPreset || null,
-        resolutionPreset: alertResolutionPreset || null,
-      });
-      await updateAlertStatus(selectedAlert.id, 'READ');
-      setSelectedAlert((current) => (current ? { ...current, status: 'READ' } : current));
-      resolveAlertWorkflow(selectedAlert, {
+      await Promise.allSettled([
+        updateAlertWorkflow(alertToResolve.id, {
+          workflowStatus: 'RESOLVED',
+          resolutionNote,
+          resolutionPreset: alertResolutionPreset || null,
+        }),
+        updateAlertStatus(alertToResolve.id, 'READ'),
+      ]);
+      resolveAlertWorkflow(alertToResolve, {
         actorName: user?.name ?? null,
-        note: alertResolutionText.trim() || alertResolutionPreset || null,
+        note: resolutionNote,
         preset: alertResolutionPreset || null,
       });
-      setPageMessage({ tone: 'success', text: 'Ocorrencia resolvida.' });
+      setSelectedAlert(null);
+      setAttentionAlert((current) => (current?.id === alertToResolve.id ? null : current));
+      setAlertResolutionPreset('');
+      setAlertResolutionText('');
+      setPageMessage({ tone: 'success', text: 'Ocorrência resolvida.' });
       await refetchAlerts();
     } catch (error) {
       setPageMessage({ tone: 'error', text: getErrorMessage(error, 'Não foi possível atualizar o evento.') });
@@ -4172,7 +4573,28 @@ export default function OperacaoPage() {
   }
 
   function openCameraMonitor() {
-    window.open('/operacao/cameras', 'operacao-cameras-monitor', 'noopener,noreferrer,width=1680,height=960');
+    window.open('/operacao/cameras', 'operacao-cameras-monitor', getCameraMonitorWindowFeatures());
+  }
+
+  function openCameraMonitorForAlert(alert: Alert) {
+    const focusPayload = buildCameraAlertFocusPayload(alert);
+    const searchParams = new URLSearchParams();
+
+    if (focusPayload) {
+      try {
+        window.localStorage.setItem(CAMERA_ALERT_FOCUS_STORAGE_KEY, JSON.stringify(focusPayload));
+      } catch {
+        // If storage is blocked, the monitor still opens normally.
+      }
+
+      if (focusPayload.cameraIds.length) {
+        searchParams.set('cameraIds', focusPayload.cameraIds.join(','));
+      }
+      searchParams.set('alertId', alert.id);
+    }
+
+    const query = searchParams.toString();
+    window.open(`/operacao/cameras${query ? `?${query}` : ''}`, 'operacao-cameras-monitor', getCameraMonitorWindowFeatures());
   }
 
   async function handleConfirmLogout() {
@@ -4326,6 +4748,75 @@ export default function OperacaoPage() {
           </div>
         ) : null}
 
+        {attentionAlert ? (
+          <div className="fixed inset-0 z-[140] flex items-center justify-center bg-red-950/55 p-4 backdrop-blur-sm">
+            <section className="w-full max-w-lg overflow-hidden rounded-[32px] border border-red-300/30 bg-slate-950 text-white shadow-[0_30px_100px_rgba(127,29,29,0.45)]">
+              <div className="border-b border-red-300/20 bg-red-500/15 px-5 py-4">
+                <div className="flex items-start gap-3">
+                  <span className="inline-flex h-11 w-11 shrink-0 animate-pulse items-center justify-center rounded-2xl border border-red-300/30 bg-red-500/20">
+                    <AlertTriangle className="h-6 w-6 text-red-100" />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold uppercase tracking-[0.22em] text-red-100">Novo alerta</p>
+                    <h2 className="mt-1 text-xl font-semibold">{attentionAlert.title || 'Ocorrência recebida'}</h2>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-4 p-5">
+                <p className="text-sm leading-relaxed text-slate-300">
+                  {attentionAlert.description || 'Uma nova ocorrência foi registrada e precisa de atenção da portaria.'}
+                </p>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                    <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Tipo</p>
+                    <p className="mt-1 text-sm font-semibold">{getAlertTypeLabel(attentionAlert.type)}</p>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                    <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Prioridade</p>
+                    <p className="mt-1 text-sm font-semibold">{getAlertSeverityRank(attentionAlert) >= 3 ? 'Crítica' : 'Atenção'}</p>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                    <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">Hora</p>
+                    <p className="mt-1 text-sm font-semibold">{formatOptionalDateTime(attentionAlert.timestamp)}</p>
+                  </div>
+                </div>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Button
+                    type="button"
+                    className="flex-1 bg-red-500 text-white hover:bg-red-400"
+                    onClick={() => {
+                      setSelectedAlert(attentionAlert);
+                      setAttentionAlert(null);
+                    }}
+                  >
+                    Atender ocorrência
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="flex-1 border-white/10 bg-white/5 text-white hover:bg-white/10"
+                    onClick={() => {
+                      setOpenAlertsModal(true);
+                      setAttentionAlert(null);
+                    }}
+                  >
+                    Ver fila de alertas
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="text-slate-300 hover:bg-white/10 hover:text-white"
+                    onClick={() => setAttentionAlert(null)}
+                  >
+                    Fechar
+                  </Button>
+                </div>
+              </div>
+            </section>
+          </div>
+        ) : null}
+
         {!isOnline || offlinePendingCount || offlineFailedCount ? (
           <div className={`rounded-2xl border px-4 py-3 text-sm ${!isOnline ? 'border-amber-500/30 bg-amber-500/10 text-amber-100' : offlineFailedCount ? 'border-red-500/30 bg-red-500/10 text-red-100' : `${brandClasses.softAccentPanel} text-white`}`}>
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -4460,7 +4951,7 @@ export default function OperacaoPage() {
                 ) : (
                   <div className="flex h-full items-center justify-center bg-slate-950/80">
                     <div className="text-center">
-                      <CameraIcon className="mx-auto mb-4 h-16 w-16 opacity-20" />
+                      <Cctv className="mx-auto mb-4 h-16 w-16 opacity-20" />
                       <p className="text-sm text-slate-300">Nenhum preview disponível</p>
                       <p className="mt-1 text-xs text-slate-500">
                         {camerasLoading
@@ -4882,6 +5373,7 @@ export default function OperacaoPage() {
                           latestAccessAction={latestAccessByPerson.get(person.id)?.action}
                           accessSummary={accessSummaryByPerson.get(person.id)}
                           highlighted={selectedSearchPerson?.id === person.id}
+                          unitLabel={getPersonUnitLabel(person, accessibleUnitsMap)}
                         />
                       </button>
                     )) : null}
@@ -4929,17 +5421,22 @@ export default function OperacaoPage() {
                     ) : (
                       recentInboxMessages.map((message) => {
                         const messageUnitLabel =
+                          (message.unitId ? getCompleteUnitLabel(accessibleUnitsMap.get(message.unitId), message.unitLabel) : null) ??
                           message.unitLabel ??
-                          (message.unitId ? accessibleUnitsMap.get(message.unitId)?.label ?? null : null) ??
                           'Unidade não identificada';
                         const incoming = message.direction === 'INBOUND' || message.direction === 'RESIDENT_TO_PORTARIA';
+                        const highlighted = highlightedInboxMessageIds.includes(message.id);
 
                         return (
                           <button
                             key={message.id}
                             type="button"
                             onClick={() => openResidentConversationFromMessage(message)}
-                            className="w-full rounded-2xl border border-white/10 bg-white/5 p-3 text-left transition hover:bg-white/10"
+                            className={`w-full rounded-2xl border p-3 text-left transition hover:bg-white/10 ${
+                              highlighted
+                                ? 'animate-pulse border-amber-300/70 bg-amber-400/15 shadow-[0_0_0_1px_rgba(251,191,36,0.22),0_0_28px_rgba(251,191,36,0.16)]'
+                                : 'border-white/10 bg-white/5'
+                            }`}
                           >
                             <div className="flex items-center justify-between gap-3">
                               <div className="flex items-center gap-2">
@@ -6005,6 +6502,7 @@ export default function OperacaoPage() {
                         now={now}
                         latestAccessAction={latestAccess?.action}
                         accessSummary={accessSummaryByPerson.get(person.id)}
+                        unitLabel={getPersonUnitLabel(person, accessibleUnitsMap)}
                       />
                       <div className="mt-3 flex flex-wrap justify-end gap-2">
                         <Button
@@ -6255,6 +6753,17 @@ export default function OperacaoPage() {
                           selectedEntryPerson.unit ??
                           null,
                       }}
+                      unitLabel={getPersonUnitLabel(
+                        {
+                          ...selectedEntryPerson,
+                          unitId: entryForm.unitId || selectedEntryPerson.unitId,
+                          unit:
+                            (entryForm.unitId ? accessibleUnitsMap.get(entryForm.unitId) : null) ??
+                            selectedEntryPerson.unit ??
+                            null,
+                        },
+                        accessibleUnitsMap
+                      )}
                       now={now}
                       latestAccessAction={latestAccessByPerson.get(selectedEntryPerson.id)?.action}
                       accessSummary={accessSummaryByPerson.get(selectedEntryPerson.id)}
@@ -6394,6 +6903,7 @@ export default function OperacaoPage() {
                       latestAccessAction={latestAccessByPerson.get(selectedExitPerson.id)?.action}
                       accessSummary={accessSummaryByPerson.get(selectedExitPerson.id)}
                       highlighted
+                      unitLabel={getPersonUnitLabel(selectedExitPerson, accessibleUnitsMap)}
                     />
                   ))}
                 </div>
@@ -6500,7 +7010,7 @@ export default function OperacaoPage() {
                   <option value="">Selecione a unidade</option>
                   {effectiveUnits.map((unit) => (
                     <option key={`occurrence-unit-${unit.id}`} value={unit.id}>
-                      {[unit.structure?.label, unit.label].filter(Boolean).join(' / ')}
+                      {getCompleteUnitLabel(unit, unit.label)}
                     </option>
                   ))}
                 </select>
@@ -6588,6 +7098,7 @@ export default function OperacaoPage() {
                     latestAccessAction={latestAccess?.action}
                     accessSummary={accessSummary}
                     highlighted
+                    unitLabel={getPersonUnitLabel(selectedSearchPerson, accessibleUnitsMap)}
                   />
 
                   <div className="flex flex-wrap gap-3">
@@ -6678,6 +7189,7 @@ export default function OperacaoPage() {
                 accessSummary={accessSummaryByPerson.get(selectedResidentPerson.id)}
                 highlighted
                 revealSensitive
+                unitLabel={getPersonUnitLabel(selectedResidentPerson, accessibleUnitsMap)}
               />
 
               <div className={`rounded-2xl border p-4 ${brandClasses.softAccentPanel}`}>
@@ -6917,7 +7429,69 @@ export default function OperacaoPage() {
                 </div>
               ) : null}
 
-              {selectedAlertImageUrl && !selectedAlertImageUnavailable ? (
+              {selectedAlertMediaItems.length > 0 ? (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-medium text-white">Evidências de câmera</p>
+                      <p className="mt-1 text-xs text-slate-400">Snapshot do evento e replay de pré-alarme quando enviados pelo backend.</p>
+                    </div>
+                    <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-200">
+                      {selectedAlertMediaItems.length} câmera(s)
+                    </span>
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {selectedAlertMediaItems.map((media) => {
+                      const mediaSnapshotUnavailable = Boolean(media.snapshotUrl && brokenAlertImageUrls[media.snapshotUrl]);
+                      return (
+                        <div key={media.key} className="overflow-hidden rounded-2xl border border-white/10 bg-black/20">
+                          <div className="flex items-center justify-between gap-3 border-b border-white/10 bg-white/5 px-3 py-2">
+                            <span className="truncate text-xs font-medium text-white">{media.cameraName || 'Câmera do alerta'}</span>
+                            {media.cameraId ? <span className="text-[10px] uppercase tracking-[0.14em] text-slate-500">vinculada</span> : null}
+                          </div>
+                          {media.snapshotUrl && !mediaSnapshotUnavailable ? (
+                            <img
+                              src={media.snapshotUrl}
+                              alt={media.cameraName || selectedAlert.title || 'Snapshot do alerta'}
+                              className="h-56 w-full object-cover"
+                              onError={() => markAlertImageAsUnavailable(media.snapshotUrl)}
+                            />
+                          ) : (
+                            <div className="flex h-40 items-center justify-center p-4 text-center text-sm text-slate-300">
+                              {mediaSnapshotUnavailable ? 'Snapshot indisponível no momento.' : 'Snapshot não enviado para esta câmera.'}
+                            </div>
+                          )}
+                          <div className="flex flex-wrap gap-2 p-3">
+                            {media.replayUrl ? (
+                              <a
+                                href={media.replayUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className={`inline-flex items-center rounded-xl border px-3 py-2 text-xs font-medium transition ${brandClasses.softAccent}`}
+                              >
+                                Ver replay
+                              </a>
+                            ) : null}
+                            {media.cameraId ? (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="border-white/10 bg-white/5 text-xs text-white hover:bg-white/10"
+                                onClick={() => {
+                                  openCameraMonitorForAlert(selectedAlert);
+                                  setSelectedAlert(null);
+                                }}
+                              >
+                                Abrir no monitor externo
+                              </Button>
+                            ) : null}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : selectedAlertImageUrl && !selectedAlertImageUnavailable ? (
                 <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/20">
                   <img
                     src={selectedAlertImageUrl}
@@ -6950,10 +7524,11 @@ export default function OperacaoPage() {
                         variant="outline"
                         className="border-white/10 bg-white/5 text-white hover:bg-white/10"
                         onClick={() => {
-                          focusCameraOnMonitor(selectedAlert.cameraId, true);
+                          openCameraMonitorForAlert(selectedAlert);
+                          setSelectedAlert(null);
                         }}
                       >
-                        Focar câmera associada
+                        Abrir monitor externo
                       </Button>
                     ) : null}
                   </div>
@@ -7029,8 +7604,15 @@ export default function OperacaoPage() {
 
               <div className="flex flex-wrap justify-end gap-3">
                 {selectedAlert.cameraId ? (
-                  <Button variant="outline" className="border-white/10 bg-white/5 text-white hover:bg-white/10" onClick={() => focusCameraOnMonitor(selectedAlert.cameraId, true)}>
-                    Focar câmera
+                  <Button
+                    variant="outline"
+                    className="border-white/10 bg-white/5 text-white hover:bg-white/10"
+                    onClick={() => {
+                      openCameraMonitorForAlert(selectedAlert);
+                      setSelectedAlert(null);
+                    }}
+                  >
+                    Abrir monitor externo
                   </Button>
                 ) : null}
                 {selectedAlertPerson ? (

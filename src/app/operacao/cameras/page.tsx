@@ -1,8 +1,7 @@
 ﻿'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { ArrowLeft, Camera, Maximize2, Minimize2, Play, RefreshCw, Search, Square, X } from 'lucide-react';
+import { Cctv, Maximize2, Minimize2, Play, RefreshCw, Save, Search, Square, X } from 'lucide-react';
 import { CameraFeed } from '@/components/camera-feed';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -10,12 +9,15 @@ import {
   getPreferredImageStreamUrl,
   getPreferredSnapshotUrl,
   getPreferredVideoStreamUrl,
+  isBrowserPlayableVideoUrl,
 } from '@/features/cameras/camera-media';
 import { useCameras } from '@/hooks/use-cameras';
 import { useProtectedRoute } from '@/hooks/use-protected-route';
 import type { Camera as CameraRecord } from '@/types/camera';
 
 const allowedRoles = ['OPERADOR', 'CENTRAL', 'MASTER'] as const;
+const CAMERA_ALERT_FOCUS_STORAGE_KEY = 'operation-camera-alert-focus';
+const CAMERA_MONITOR_WINDOW_STORAGE_KEY = 'operation-camera-monitor-window';
 const layoutOptions = [1, 4, 9, 16] as const;
 type CameraLayout = (typeof layoutOptions)[number];
 type BankFilter = 'all' | 'unassigned' | 'assigned' | 'online' | 'no_media';
@@ -26,6 +28,32 @@ type CameraPreset = {
   layout: CameraLayout;
   slots: Array<string | null>;
 };
+
+type CameraAlertFocusPayload = {
+  id: string;
+  title?: string;
+  timestamp?: string;
+  cameraIds?: string[];
+};
+
+function readAlertFocusPayload(): CameraAlertFocusPayload | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(CAMERA_ALERT_FOCUS_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as CameraAlertFocusPayload;
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function getLayoutForCameraCount(count: number): CameraLayout {
+  if (count <= 1) return 1;
+  if (count <= 4) return 4;
+  if (count <= 9) return 9;
+  return 16;
+}
 
 function readStoredLayout(): CameraLayout {
   if (typeof window === 'undefined') return 4;
@@ -121,14 +149,15 @@ function getCameraTone(status: CameraRecord['status']) {
 }
 
 function getMediaLabel(camera: CameraRecord) {
-  if (getPreferredVideoStreamUrl(camera)) return 'ao vivo';
+  const videoUrl = getPreferredVideoStreamUrl(camera);
+  if (isBrowserPlayableVideoUrl(videoUrl)) return 'ao vivo';
+  if (String(videoUrl ?? '').toLowerCase().startsWith('wss://')) return 'VMS nativo';
   if (getPreferredImageStreamUrl(camera)) return 'preview';
   if (getPreferredSnapshotUrl(camera)) return 'snapshot';
   return 'sem imagem';
 }
 
 export default function OperacaoCâmerasPage() {
-  const router = useRouter();
   const { user, canAccess, isChecking } = useProtectedRoute({
     allowedRoles: [...allowedRoles],
   });
@@ -147,10 +176,42 @@ export default function OperacaoCâmerasPage() {
   const [autoRotateEnabled, setAutoRotateEnabled] = useState(readStoredAutoRotateSettings().enabled);
   const [autoRotateMode, setAutoRotateMode] = useState<AutoRotateMode>(readStoredAutoRotateSettings().mode);
   const [autoRotateSeconds, setAutoRotateSeconds] = useState(readStoredAutoRotateSettings().seconds);
+  const [alertFocus, setAlertFocus] = useState<CameraAlertFocusPayload | null>(readAlertFocusPayload);
+  const [positionMessage, setPositionMessage] = useState<string | null>(null);
 
   useEffect(() => {
     window.localStorage.setItem('operation-camera-layout', String(layout));
   }, [layout]);
+
+  useEffect(() => {
+    const applyAlertFocus = (payload: CameraAlertFocusPayload | null) => {
+      const cameraIds = Array.isArray(payload?.cameraIds)
+        ? payload.cameraIds.filter((id): id is string => typeof id === 'string' && id.trim().length > 0)
+        : [];
+      if (!payload || !cameraIds.length) return;
+
+      const nextLayout = getLayoutForCameraCount(cameraIds.length);
+      setAlertFocus(payload);
+      setAutoRotateEnabled(false);
+      setFocusedCameraId(cameraIds.length === 1 ? cameraIds[0] : null);
+      setLayout(nextLayout);
+      setSelectedSlotIndex(null);
+      setSlotLayouts((current) => ({
+        ...current,
+        [String(nextLayout)]: Array.from({ length: nextLayout }, (_, index) => cameraIds[index] ?? null),
+      }));
+    };
+
+    applyAlertFocus(readAlertFocusPayload());
+
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key !== CAMERA_ALERT_FOCUS_STORAGE_KEY) return;
+      applyAlertFocus(readAlertFocusPayload());
+    };
+
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, []);
 
   useEffect(() => {
     window.localStorage.setItem('operation-camera-slots', JSON.stringify(slotLayouts));
@@ -309,6 +370,19 @@ export default function OperacaoCâmerasPage() {
     }
 
     await document.documentElement.requestFullscreen();
+  }
+
+  function saveCurrentWindowPlacement() {
+    const placement = {
+      left: window.screenX,
+      top: window.screenY,
+      width: window.outerWidth,
+      height: window.outerHeight,
+    };
+
+    window.localStorage.setItem(CAMERA_MONITOR_WINDOW_STORAGE_KEY, JSON.stringify(placement));
+    setPositionMessage('Posição salva para próximas aberturas.');
+    window.setTimeout(() => setPositionMessage(null), 3500);
   }
 
   function setSlotCamera(slotIndex: number, cameraId: string | null) {
@@ -487,11 +561,11 @@ export default function OperacaoCâmerasPage() {
         <div className="flex min-w-0 items-center gap-3">
           <Button
             variant="outline"
-            onClick={() => router.push('/operacao')}
+            onClick={() => window.close()}
             className="h-9 border-white/10 bg-white/5 px-3 text-white hover:bg-white/10"
           >
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Operação
+            <X className="mr-2 h-4 w-4" />
+            Fechar
           </Button>
 
           <div className="min-w-0">
@@ -500,6 +574,14 @@ export default function OperacaoCâmerasPage() {
               {isLoading ? 'Carregando...' : `${onlineCount}/${filteredCâmeras.length} online`}
               {focusedCamera ? ` | foco em ${focusedCamera.name}` : ` | ${layout} posições configuráveis`}
             </p>
+            {alertFocus ? (
+              <p className="mt-1 truncate text-xs font-semibold text-red-200">
+                Alerta em foco: {alertFocus.title || 'ocorrência'}.
+              </p>
+            ) : null}
+            {positionMessage ? (
+              <p className="mt-1 truncate text-xs font-semibold text-emerald-200">{positionMessage}</p>
+            ) : null}
           </div>
         </div>
 
@@ -542,6 +624,16 @@ export default function OperacaoCâmerasPage() {
           >
             <RefreshCw className={`mr-2 h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
             Atualizar
+          </Button>
+
+          <Button
+            variant="outline"
+            onClick={saveCurrentWindowPlacement}
+            className="h-9 border-emerald-300/25 bg-emerald-400/10 px-3 text-emerald-100 hover:bg-emerald-400/20"
+            title="Salva a posição e o tamanho atuais desta janela para as próximas aberturas."
+          >
+            <Save className="mr-2 h-4 w-4" />
+            Salvar posição
           </Button>
 
           <Button
@@ -604,7 +696,7 @@ export default function OperacaoCâmerasPage() {
           ) : slotCâmeras.length === 0 ? (
             <div className="col-span-full row-span-full flex items-center justify-center border border-white/10 bg-zinc-950 text-zinc-500">
               <div className="text-center">
-                <Camera className="mx-auto mb-3 h-12 w-12 opacity-40" />
+                <Cctv className="mx-auto mb-3 h-12 w-12 opacity-40" />
                 <p>Nenhuma câmera encontrada.</p>
               </div>
             </div>
@@ -694,7 +786,7 @@ export default function OperacaoCâmerasPage() {
                             <p className="mt-1 text-[10px] uppercase tracking-[0.14em] text-zinc-500">Arraste para trocar de posição</p>
                           ) : null}
                         </div>
-                        <div className="flex shrink-0 items-center gap-1.5">
+                        <div className="flex shrink-0 items-center gap-1.5" onClick={(event) => event.stopPropagation()}>
                           <Badge className={`border px-2 py-0.5 text-[10px] ${getCameraTone(camera.status)}`}>{camera.status}</Badge>
                           {activeLayout <= 4 ? (
                             <Badge className="border-white/15 bg-black/60 px-2 py-0.5 text-[10px] text-zinc-200">
