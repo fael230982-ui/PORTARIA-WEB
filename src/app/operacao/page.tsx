@@ -4596,6 +4596,11 @@ export default function OperacaoPage() {
   }
 
   function openCameraMonitor() {
+    try {
+      window.localStorage.removeItem(CAMERA_ALERT_FOCUS_STORAGE_KEY);
+    } catch {
+      // Se o storage estiver bloqueado, abre o monitor normalmente.
+    }
     window.open('/operacao/cameras', 'operacao-cameras-monitor', getCameraMonitorWindowFeatures());
   }
 

@@ -38,6 +38,12 @@ type CameraAlertFocusPayload = {
 
 function readAlertFocusPayload(): CameraAlertFocusPayload | null {
   if (typeof window === 'undefined') return null;
+  const params = new URLSearchParams(window.location.search);
+  if (!params.get('alertId') && !params.get('cameraIds')) {
+    window.localStorage.removeItem(CAMERA_ALERT_FOCUS_STORAGE_KEY);
+    return null;
+  }
+
   try {
     const raw = window.localStorage.getItem(CAMERA_ALERT_FOCUS_STORAGE_KEY);
     if (!raw) return null;
@@ -188,7 +194,11 @@ export default function OperacaoCâmerasPage() {
       const cameraIds = Array.isArray(payload?.cameraIds)
         ? payload.cameraIds.filter((id): id is string => typeof id === 'string' && id.trim().length > 0)
         : [];
-      if (!payload || !cameraIds.length) return;
+      if (!payload || !cameraIds.length) {
+        setAlertFocus(null);
+        setFocusedCameraId(null);
+        return;
+      }
 
       const nextLayout = getLayoutForCameraCount(cameraIds.length);
       setAlertFocus(payload);
