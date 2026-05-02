@@ -324,6 +324,12 @@ function sortOperationMessages(messages: OperationMessage[]) {
   });
 }
 
+const UNIT_CONVERSATION_PERSON_PREFIX = 'unit-conversation:';
+
+function isUnitConversationPerson(person: Person | null | undefined) {
+  return Boolean(person?.id?.startsWith(UNIT_CONVERSATION_PERSON_PREFIX));
+}
+
 type OperationSnapshotCache = {
   people: Person[];
   deliveries: Delivery[];
@@ -1953,6 +1959,7 @@ export default function OperacaoPage() {
   const cameraMonitorSectionRef = useRef<HTMLElement | null>(null);
   const alertResolutionTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const photoSearchInputRef = useRef<HTMLInputElement | null>(null);
+  const selectedResidentIsUnitConversation = isUnitConversationPerson(selectedResidentPerson);
   const selectedResidentUnitId = selectedResidentPerson?.unitId ?? selectedResidentPerson?.unit?.id ?? null;
   const {
     data: residentMessagesData,
@@ -1992,7 +1999,7 @@ export default function OperacaoPage() {
   const residentWhatsAppReady = residentWhatsAppState === 'open';
   const residentWhatsAppQrCodeImage = residentWhatsAppConnection?.qrCodeImageDataUrl?.trim() || null;
   const residentWhatsAppPairingCode = residentWhatsAppConnection?.pairingCode?.trim() || null;
-  const residentWhatsAppCanSend = Boolean(selectedResidentPerson?.id || residentPhone);
+  const residentWhatsAppCanSend = Boolean((selectedResidentPerson?.id && !selectedResidentIsUnitConversation) || residentPhone);
 
   useEffect(() => {
     inboxMessagesRef.current = inboxMessages;
@@ -4389,8 +4396,17 @@ export default function OperacaoPage() {
     }
 
     if (message.unitId) {
-      setResidentSearch(message.unitLabel ?? '');
-      openResidentsConsultation();
+      const unit = accessibleUnitsMap.get(message.unitId) ?? null;
+      const unitLabel = getCompleteUnitLabel(unit, message.unitLabel) ?? message.unitLabel ?? message.unitId;
+      setSelectedResidentPerson({
+        id: `${UNIT_CONVERSATION_PERSON_PREFIX}${message.unitId}`,
+        name: message.senderName?.trim() || 'Morador não identificado',
+        category: 'RESIDENT',
+        status: 'ACTIVE',
+        unitId: message.unitId,
+        unitName: unitLabel,
+        unit,
+      });
     }
   }
 
@@ -4417,8 +4433,8 @@ export default function OperacaoPage() {
     try {
       const payload = {
         unitId: selectedResidentUnitId,
-        personId: selectedResidentPerson?.id ?? null,
-        recipientPersonId: residentMessageChannel === 'WHATSAPP' ? selectedResidentPerson?.id ?? null : null,
+        personId: selectedResidentIsUnitConversation ? null : selectedResidentPerson?.id ?? null,
+        recipientPersonId: residentMessageChannel === 'WHATSAPP' && !selectedResidentIsUnitConversation ? selectedResidentPerson?.id ?? null : null,
         recipientPhone: residentMessageChannel === 'WHATSAPP' ? residentPhone : null,
         channel: residentMessageChannel,
         text,
@@ -7178,8 +7194,8 @@ export default function OperacaoPage() {
 
         <CrudModal
           open={Boolean(selectedResidentPerson)}
-          title="Detalhes do morador"
-          description="Consulta operacional do morador."
+          title={selectedResidentIsUnitConversation ? 'Mensagens da unidade' : 'Detalhes do morador'}
+          description={selectedResidentIsUnitConversation ? 'Conversa recebida sem morador identificado.' : 'Consulta operacional do morador.'}
           onClose={() => {
             setSelectedResidentPerson(null);
             setResidentMessageText('');
