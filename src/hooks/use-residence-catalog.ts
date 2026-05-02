@@ -9,6 +9,7 @@ import {
   getStreets,
   getUnits,
 } from '@/services/residence.service';
+import { operationService } from '@/services/operation.service';
 import type { Condominium, Unit } from '@/types/condominium';
 
 function parseStreetStructure(name: string | null | undefined) {
@@ -64,6 +65,32 @@ function buildSessionUnits(user: ReturnType<typeof useAuth>['user'], condominium
     })) as Unit[];
 }
 
+function mapOperationUnitsToDomain(units: Awaited<ReturnType<typeof operationService.listSearchableUnits>>): Unit[] {
+  return units.map((unit) => ({
+    id: unit.id,
+    label: unit.label,
+    condominiumId: unit.condominiumId ?? null,
+    condominiumName: unit.condominiumName ?? null,
+    condominium: unit.condominiumId
+      ? {
+          id: unit.condominiumId,
+          name: unit.condominiumName ?? 'Condomínio',
+        }
+      : null,
+    structureType: unit.structureLabel ? 'STREET' : null,
+    structureLabel: unit.structureLabel ?? null,
+    structure: unit.structureLabel
+      ? {
+          id: unit.streetId ?? null,
+          type: 'STREET',
+          label: unit.structureLabel,
+        }
+      : null,
+    streetId: unit.streetId ?? null,
+    legacyUnitId: unit.structureLabel ? `${unit.structureLabel}-${unit.label}` : unit.label,
+  }));
+}
+
 export function useResidenceCatalog(enabled = true, condominiumId?: string) {
   const { user } = useAuth();
   const isResident = user?.role === 'MORADOR';
@@ -104,11 +131,20 @@ export function useResidenceCatalog(enabled = true, condominiumId?: string) {
       {
         queryKey: ['units', useOperationCatalog ? 'operation' : condominiumId ?? 'all'],
         queryFn: async () => {
-          if (!useOperationCatalog) {
-            return getUnits(condominiumId ? { condominiumId } : undefined);
+          if (useOperationCatalog) {
+            return mapOperationUnitsToDomain(await operationService.listSearchableUnits());
           }
 
-          return [];
+          try {
+            return await getUnits(condominiumId ? { condominiumId } : undefined);
+          } catch (error) {
+            const status = (error as { response?: { status?: number } }).response?.status;
+            if (status && [500, 502, 503, 504].includes(status)) {
+              return mapOperationUnitsToDomain(await operationService.listSearchableUnits());
+            }
+
+            throw error;
+          }
         },
         enabled,
         staleTime: 5 * 60 * 1000,

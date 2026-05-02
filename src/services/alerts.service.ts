@@ -8,11 +8,17 @@ type GetAlertsParams = {
   limit?: number;
   status?: string;
   type?: string;
+  enabled?: boolean;
+  refetchInterval?: number | false;
 };
 
 export async function getAlerts(params?: GetAlertsParams): Promise<AlertsListResponse> {
   try {
-    const response = await api.get<AlertsListResponse>('/alerts', { params });
+    const { enabled: _enabled, refetchInterval: _refetchInterval, ...requestParams } = params ?? {};
+    if (typeof requestParams.limit === 'number') {
+      requestParams.limit = Math.min(Math.max(requestParams.limit, 1), 100);
+    }
+    const response = await api.get<AlertsListResponse>('/alerts', { params: requestParams });
     return normalizeAlertsListResponse(response.data);
   } catch (error) {
     const status = (error as { response?: { status?: number } })?.response?.status;

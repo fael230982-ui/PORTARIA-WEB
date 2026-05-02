@@ -22,6 +22,41 @@ type RawCatalogResponse =
       equipmentCatalog?: unknown;
     };
 
+const FALLBACK_EQUIPMENT_CATALOG: FaceEquipmentCatalogEntry[] = [
+  {
+    vendor: 'CONTROLID',
+    vendorLabel: 'Control ID',
+    model: 'IDFACE',
+    modelLabel: 'iDFace',
+    deviceType: 'FACIAL_DEVICE',
+    eventWebhookPath: '/api/v1/integrations/face/control-id/events',
+  },
+  {
+    vendor: 'CONTROLID',
+    vendorLabel: 'Control ID',
+    model: 'IDFACE_MAX',
+    modelLabel: 'iDFace Max',
+    deviceType: 'FACIAL_DEVICE',
+    eventWebhookPath: '/api/v1/integrations/face/control-id/events',
+  },
+  {
+    vendor: 'MAX_ROBOT',
+    vendorLabel: 'Max Robot',
+    model: 'CAMERA_IA',
+    modelLabel: 'Camera IA',
+    deviceType: 'CAMERA_IA',
+    eventWebhookPath: '/api/v1/integrations/devices/max-robot/camera-ia/events',
+  },
+  {
+    vendor: 'MAX_ROBOT',
+    vendorLabel: 'Max Robot',
+    model: 'IA_FACIAL',
+    modelLabel: 'IA Facial',
+    deviceType: 'FACIAL_DEVICE',
+    eventWebhookPath: '/api/v1/integrations/devices/max-robot/events',
+  },
+];
+
 function toText(value: unknown) {
   return String(value ?? '').trim();
 }
@@ -146,16 +181,22 @@ export const faceEquipmentCatalogService = {
   async list(): Promise<FaceEquipmentCatalogEntry[]> {
     try {
       const { data } = await api.get<RawCatalogResponse>('/devices/equipment-catalog');
-      return parseCatalog(data);
+      const entries = parseCatalog(data);
+      return entries.length ? entries : FALLBACK_EQUIPMENT_CATALOG;
     } catch (error) {
       const status = (error as { response?: { status?: number } }).response?.status;
 
       if (status && status !== 404 && status !== 405) {
-        throw error;
+        return FALLBACK_EQUIPMENT_CATALOG;
       }
 
-      const { data } = await api.get<RawCatalogResponse>('/integrations/face/equipment-catalog');
-      return parseCatalog(data);
+      try {
+        const { data } = await api.get<RawCatalogResponse>('/integrations/face/equipment-catalog');
+        const entries = parseCatalog(data);
+        return entries.length ? entries : FALLBACK_EQUIPMENT_CATALOG;
+      } catch {
+        return FALLBACK_EQUIPMENT_CATALOG;
+      }
     }
   },
 };

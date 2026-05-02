@@ -30,6 +30,8 @@ export type OperationUnitSearchResult = {
   label: string;
   condominiumId?: string | null;
   condominiumName?: string | null;
+  streetId?: string | null;
+  structureLabel?: string | null;
 };
 
 export type PersonAccessSummary = {

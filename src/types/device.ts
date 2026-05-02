@@ -35,6 +35,7 @@ export type Device = {
   model?: string | null;
   externalId?: string | null;
   externalUuid?: string | null;
+  vmsServerId?: string | null;
   host?: string | null;
   aiPort?: number | null;
   webPort?: number | null;
@@ -45,12 +46,14 @@ export type Device = {
   monitoringEnabled?: boolean;
   residentVisible?: boolean;
   remoteAccessConfig?: DeviceRemoteAccessConfig | null;
+  doorStatus?: DeviceDoorStatus | null;
   cameraEnabled?: boolean;
   deviceUsageType?: DeviceUsageType | null;
   unitId?: string | null;
   condominiumId?: string | null;
   accessGroupIds?: string[];
   accessGroupNames?: string[];
+  cameraIds?: string[];
   cameraId?: string | null;
   cameraName?: string | null;
 };
@@ -69,6 +72,7 @@ export type DevicePayload = {
   model?: string | null;
   externalId?: string | null;
   externalUuid?: string | null;
+  vmsServerId?: string | null;
   host?: string | null;
   aiPort?: number | null;
   webPort?: number | null;
@@ -84,6 +88,7 @@ export type DevicePayload = {
   unitId?: string | null;
   condominiumId?: string | null;
   accessGroupIds?: string[];
+  cameraIds?: string[];
   status?: DeviceStatus;
 };
 

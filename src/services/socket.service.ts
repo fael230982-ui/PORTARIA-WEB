@@ -45,29 +45,17 @@ class SocketService {
   private setupEventListeners(): void {
     if (!this.socket) return;
 
-    this.socket.on('alert', (data: AlertEvent) => {
-      console.log('Alert received:', data);
-    });
+    this.socket.on('alert', (_data: AlertEvent) => undefined);
 
-    this.socket.on('access-log', (data: AccessLogEvent) => {
-      console.log('Access log received:', data);
-    });
+    this.socket.on('access-log', (_data: AccessLogEvent) => undefined);
 
-    this.socket.on('connect', () => {
-      console.log('Connected to socket');
-    });
+    this.socket.on('connect', () => undefined);
 
-    this.socket.on('disconnect', () => {
-      console.log('Disconnected from socket');
-    });
+    this.socket.on('disconnect', () => undefined);
 
-    this.socket.on('reconnect_attempt', (attempt: number) => {
-      console.log(`Reconnection attempt ${attempt}`);
-    });
+    this.socket.on('reconnect_attempt', (_attempt: number) => undefined);
 
-    this.socket.on('reconnect_failed', () => {
-      console.log('Reconnection failed');
-    });
+    this.socket.on('reconnect_failed', () => undefined);
   }
 
   public connect(): void {

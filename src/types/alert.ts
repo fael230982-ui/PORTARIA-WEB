@@ -24,6 +24,22 @@ export type AlertWorkflow = {
   resolutionPreset?: string | null;
 };
 
+export type AlertCameraEvidence = {
+  id?: string | null;
+  cameraId?: string | null;
+  cameraName?: string | null;
+  name?: string | null;
+  label?: string | null;
+  snapshotUrl?: string | null;
+  imageUrl?: string | null;
+  thumbnailUrl?: string | null;
+  liveUrl?: string | null;
+  hlsUrl?: string | null;
+  preferredLiveUrl?: string | null;
+  replayUrl?: string | null;
+  replayCreateUrl?: string | null;
+};
+
 export type Alert = {
   id: string;
   alertId?: string | null;
@@ -40,6 +56,8 @@ export type Alert = {
   thumbnailUrl?: string | null;
   imageUrl?: string | null;
   replayUrl?: string | null;
+  replayCreateUrl?: string | null;
+  cameras?: AlertCameraEvidence[];
   location?: string | null;
   readAt?: string | null;
   workflow?: AlertWorkflow | null;

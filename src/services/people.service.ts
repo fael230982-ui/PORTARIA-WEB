@@ -116,6 +116,7 @@ export async function uploadPersonPhoto(photoBase64: string, fileName?: string |
   return response.data;
 }
 
-export async function syncPersonFace(id: string): Promise<void> {
-  await api.post(`/integrations/face/people/${id}/sync`);
+export async function syncPersonFace(id: string): Promise<Partial<Person>> {
+  const response = await api.post<Partial<Person>>(`/integrations/face/people/${id}/sync`);
+  return response.data;
 }

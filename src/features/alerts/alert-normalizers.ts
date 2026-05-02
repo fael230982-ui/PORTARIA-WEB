@@ -1,4 +1,4 @@
-import type { Alert, AlertSeverity, AlertStatus, AlertType, AlertsListResponse } from '@/types/alert';
+import type { Alert, AlertCameraEvidence, AlertSeverity, AlertStatus, AlertType, AlertsListResponse } from '@/types/alert';
 import { env } from '@/lib/env';
 
 type AlertApiShape = Partial<Alert> & {
@@ -13,6 +13,9 @@ type AlertApiShape = Partial<Alert> & {
   thumbnail_url?: string | null;
   image_url?: string | null;
   replay_url?: string | null;
+  replayCreateUrl?: string | null;
+  replay_create_url?: string | null;
+  cameras?: unknown;
   read_at?: string | null;
   workflow?: Alert['workflow'] | null;
 };
@@ -35,6 +38,9 @@ type RealTimeAlertPayload = Partial<Alert> & {
   thumbnail_url?: string | null;
   image_url?: string | null;
   replay_url?: string | null;
+  replayCreateUrl?: string | null;
+  replay_create_url?: string | null;
+  cameras?: unknown;
   read_at?: string | null;
 };
 
@@ -61,6 +67,10 @@ function normalizeAssetUrl(value: unknown) {
   }
 
   const proxyablePathPattern = /\/(media|uploads|files|storage)\//i;
+  if (/^wss?:\/\//i.test(normalized)) {
+    return normalized;
+  }
+
   if (/^https?:\/\//i.test(normalized)) {
     try {
       const url = new URL(normalized);
@@ -90,6 +100,33 @@ function normalizeReplayUrl(value: unknown, payload?: unknown) {
   const replay = (payload as { replayUrl?: unknown; replay_url?: unknown }).replayUrl
     ?? (payload as { replayUrl?: unknown; replay_url?: unknown }).replay_url;
   return normalizeString(replay);
+}
+
+function normalizeAlertCameraEvidence(value: unknown): AlertCameraEvidence[] {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((entry): AlertCameraEvidence | null => {
+      if (!entry || typeof entry !== 'object') return null;
+      const record = entry as Record<string, unknown>;
+
+      return {
+        id: normalizeString(record.id),
+        cameraId: normalizeString(record.cameraId) ?? normalizeString(record.camera_id) ?? normalizeString(record.id),
+        cameraName: normalizeString(record.cameraName) ?? normalizeString(record.camera_name),
+        name: normalizeString(record.name),
+        label: normalizeString(record.label),
+        snapshotUrl: normalizeAssetUrl(record.snapshotUrl) ?? normalizeAssetUrl(record.snapshot_url),
+        imageUrl: normalizeAssetUrl(record.imageUrl) ?? normalizeAssetUrl(record.image_url),
+        thumbnailUrl: normalizeAssetUrl(record.thumbnailUrl) ?? normalizeAssetUrl(record.thumbnail_url),
+        liveUrl: normalizeAssetUrl(record.liveUrl) ?? normalizeAssetUrl(record.live_url),
+        hlsUrl: normalizeAssetUrl(record.hlsUrl) ?? normalizeAssetUrl(record.hls_url),
+        preferredLiveUrl: normalizeAssetUrl(record.preferredLiveUrl) ?? normalizeAssetUrl(record.preferred_live_url),
+        replayUrl: normalizeReplayUrl(record.replayUrl ?? record.replay_url ?? record.url),
+        replayCreateUrl: normalizeAssetUrl(record.replayCreateUrl) ?? normalizeAssetUrl(record.replay_create_url),
+      };
+    })
+    .filter((item): item is AlertCameraEvidence => Boolean(item));
 }
 
 function normalizeAlertType(value: unknown): AlertType {
@@ -144,6 +181,8 @@ export function normalizeAlert(raw: AlertApiShape): Alert {
     thumbnailUrl: normalizeAssetUrl(raw.thumbnailUrl) ?? normalizeAssetUrl(raw.thumbnail_url),
     imageUrl: normalizeAssetUrl(raw.imageUrl) ?? normalizeAssetUrl(raw.image_url),
     replayUrl: normalizeReplayUrl(raw.replayUrl ?? raw.replay_url, raw.payload),
+    replayCreateUrl: normalizeAssetUrl(raw.replayCreateUrl) ?? normalizeAssetUrl(raw.replay_create_url),
+    cameras: normalizeAlertCameraEvidence(raw.cameras),
     location: normalizeString(raw.location),
     readAt: normalizeString(raw.readAt) ?? normalizeString(raw.read_at),
     workflow: raw.workflow ?? null,
@@ -184,6 +223,9 @@ export function normalizeRealtimeAlert(payload: RealTimeAlertPayload): Alert {
     image_url: payload.image_url,
     replayUrl: payload.replayUrl,
     replay_url: payload.replay_url,
+    replayCreateUrl: payload.replayCreateUrl,
+    replay_create_url: payload.replay_create_url,
+    cameras: payload.cameras,
     location: payload.location,
     readAt: payload.readAt,
     read_at: payload.read_at,
@@ -191,8 +233,9 @@ export function normalizeRealtimeAlert(payload: RealTimeAlertPayload): Alert {
   });
 }
 
-export function getAlertEvidenceUrl(alert?: Pick<Alert, 'snapshotUrl' | 'imageUrl' | 'thumbnailUrl' | 'photoUrl' | 'payload'> | null) {
+export function getAlertEvidenceUrl(alert?: Pick<Alert, 'snapshotUrl' | 'imageUrl' | 'thumbnailUrl' | 'photoUrl' | 'payload' | 'cameras'> | null) {
   if (!alert) return null;
+  const firstCameraEvidence = alert.cameras?.find((camera) => camera.snapshotUrl || camera.imageUrl || camera.thumbnailUrl);
   const payload = alert.payload && typeof alert.payload === 'object'
     ? alert.payload as {
         snapshotUrl?: unknown;
@@ -211,6 +254,9 @@ export function getAlertEvidenceUrl(alert?: Pick<Alert, 'snapshotUrl' | 'imageUr
     alert.imageUrl ||
     alert.thumbnailUrl ||
     alert.photoUrl ||
+    firstCameraEvidence?.snapshotUrl ||
+    firstCameraEvidence?.imageUrl ||
+    firstCameraEvidence?.thumbnailUrl ||
     normalizeAssetUrl(payload?.snapshotUrl) ||
     normalizeAssetUrl(payload?.snapshot_url) ||
     normalizeAssetUrl(payload?.imageUrl) ||
@@ -223,9 +269,9 @@ export function getAlertEvidenceUrl(alert?: Pick<Alert, 'snapshotUrl' | 'imageUr
   );
 }
 
-export function getAlertReplayUrl(alert?: Pick<Alert, 'replayUrl' | 'payload'> | null) {
+export function getAlertReplayUrl(alert?: Pick<Alert, 'replayUrl' | 'payload' | 'cameras'> | null) {
   if (!alert) return null;
-  return normalizeReplayUrl(alert.replayUrl, alert.payload);
+  return normalizeReplayUrl(alert.replayUrl, alert.payload) || alert.cameras?.find((camera) => camera.replayUrl)?.replayUrl || null;
 }
 
 export function getAlertEvidenceLabel(alert?: Pick<Alert, 'snapshotUrl' | 'imageUrl' | 'thumbnailUrl' | 'photoUrl'> | null) {

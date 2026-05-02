@@ -1,6 +1,6 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { camerasService } from '@/services/cameras.service';
 
 type UseCamerasParams = {
@@ -21,6 +21,7 @@ export function useCameras(params?: UseCamerasParams) {
     queryFn: () => camerasService.list(queryParams),
     enabled,
     staleTime: 5 * 60 * 1000,
-    retry: 1,
+    retry: 2,
+    placeholderData: keepPreviousData,
   });
 }

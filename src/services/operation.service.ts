@@ -409,6 +409,24 @@ export const operationService = {
     }
   },
 
+  async listSearchableUnits(limit = 100): Promise<OperationUnitSearchResult[]> {
+    const terms = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D'];
+    const results = await Promise.allSettled(
+      terms.map((term) => api.get<OperationUnitSearchResult[]>('/operation/units', { params: { q: term, limit } }))
+    );
+    const unitsById = new Map<string, OperationUnitSearchResult>();
+
+    for (const result of results) {
+      if (result.status !== 'fulfilled') continue;
+      const items = Array.isArray(result.value.data) ? result.value.data : [];
+      for (const unit of items) {
+        if (unit.id) unitsById.set(unit.id, unit);
+      }
+    }
+
+    return Array.from(unitsById.values());
+  },
+
   async sendHeartbeat(payload: OperationDeviceHeartbeatPayload): Promise<OperationDeviceHeartbeatResponse | null> {
     if (heartbeatEndpointUnavailable) return null;
 

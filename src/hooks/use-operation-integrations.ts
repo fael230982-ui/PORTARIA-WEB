@@ -1,6 +1,6 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { operationService, type OperationMessagesParams, type OperationSearchParams } from '@/services/operation.service';
 
 export function useOperationSearch(params: OperationSearchParams, enabled = false) {
@@ -9,7 +9,8 @@ export function useOperationSearch(params: OperationSearchParams, enabled = fals
     queryFn: () => operationService.search(params),
     enabled: enabled && params.q.trim().length >= 2,
     staleTime: 30 * 1000,
-    retry: 1,
+    retry: 2,
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -19,7 +20,8 @@ export function useOperationUnitSearch(query: string, enabled = false) {
     queryFn: () => operationService.searchUnits(query, 12),
     enabled: enabled && query.trim().length >= 2,
     staleTime: 30 * 1000,
-    retry: 1,
+    retry: 2,
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -29,7 +31,8 @@ export function usePersonAccessSummary(personId?: string | null, enabled = false
     queryFn: () => operationService.getPersonAccessSummary(personId as string),
     enabled: enabled && Boolean(personId),
     staleTime: 30 * 1000,
-    retry: 1,
+    retry: 2,
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -39,7 +42,8 @@ export function useOperationActions(enabled = false) {
     queryFn: () => operationService.listActions(),
     enabled,
     staleTime: 60 * 1000,
-    retry: 1,
+    retry: 2,
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -49,7 +53,8 @@ export function useOperationMessages(params?: OperationMessagesParams, enabled =
     queryFn: () => operationService.listMessages(params),
     enabled,
     staleTime: 30 * 1000,
-    retry: 1,
+    retry: 2,
+    placeholderData: keepPreviousData,
     refetchInterval: enabled ? 15 * 1000 : false,
   });
 }

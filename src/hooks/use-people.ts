@@ -1,7 +1,7 @@
 //src/hooks/use-people.ts
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { getAllPeople, getPeople, getUnitResidents } from '@/services/people.service';
 import type { PeopleListResponse } from '@/types/person';
 import type { UnitResidentOption } from '@/types/resident';
@@ -20,7 +20,8 @@ export const usePeople = (params?: UsePeopleParams) =>
     queryFn: () => getPeople(params),
     enabled: params?.enabled ?? true,
     staleTime: 5 * 60 * 1000,
-    retry: 1,
+    retry: 2,
+    placeholderData: keepPreviousData,
   });
 
 export const useAllPeople = (params?: Omit<UsePeopleParams, 'page'>) =>
@@ -29,7 +30,8 @@ export const useAllPeople = (params?: Omit<UsePeopleParams, 'page'>) =>
     queryFn: () => getAllPeople(params),
     enabled: params?.enabled ?? true,
     staleTime: 5 * 60 * 1000,
-    retry: 1,
+    retry: 2,
+    placeholderData: keepPreviousData,
   });
 
 export const useUnitResidents = (unitId?: string | null, enabled = true) =>
@@ -38,5 +40,6 @@ export const useUnitResidents = (unitId?: string | null, enabled = true) =>
     queryFn: () => getUnitResidents(unitId as string),
     enabled: enabled && Boolean(unitId),
     staleTime: 60 * 1000,
-    retry: 1,
+    retry: 2,
+    placeholderData: keepPreviousData,
   });

@@ -100,10 +100,24 @@ export async function createCondominium(name: string): Promise<Condominium> {
 }
 
 export async function getStreets(condominiumId?: string): Promise<Street[]> {
-  const response = await api.get<Street[]>('/streets', {
-    params: condominiumId ? { condominiumId } : undefined,
-  });
-  return response.data;
+  try {
+    const response = await api.get<Street[]>('/streets', {
+      params: condominiumId ? { condominiumId } : undefined,
+    });
+    return response.data;
+  } catch (error) {
+    const status = (error as { response?: { status?: number } }).response?.status;
+
+    if (status && [500, 502, 503, 504].includes(status)) {
+      console.warn('[residence] catalogo de ruas indisponivel; usando lista vazia temporariamente', {
+        condominiumId,
+        status,
+      });
+      return [];
+    }
+
+    throw error;
+  }
 }
 
 export async function createStreet(name: string, condominiumId: string): Promise<Street> {

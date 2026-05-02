@@ -11,6 +11,7 @@ type UseAlertsParams = {
   status?: string;
   type?: string;
   enabled?: boolean;
+  refetchInterval?: number | false;
 };
 
 export const useAlerts = (params?: UseAlertsParams) =>
@@ -18,6 +19,8 @@ export const useAlerts = (params?: UseAlertsParams) =>
     queryKey: ['alerts', params],
     queryFn: () => getAlerts(params),
     enabled: params?.enabled ?? true,
-    staleTime: 60 * 1000,
+    staleTime: params?.refetchInterval ? 0 : 60 * 1000,
+    refetchInterval: params?.refetchInterval,
+    refetchIntervalInBackground: false,
     retry: 1,
   });
