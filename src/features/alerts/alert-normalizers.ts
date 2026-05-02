@@ -15,6 +15,40 @@ type AlertApiShape = Partial<Alert> & {
   replay_url?: string | null;
   replayCreateUrl?: string | null;
   replay_create_url?: string | null;
+  replayAvailable?: boolean | null;
+  replay_available?: boolean | null;
+  replayEventTime?: string | null;
+  replay_event_time?: string | null;
+  replaySecondsBefore?: number | null;
+  replay_seconds_before?: number | null;
+  replaySecondsAfter?: number | null;
+  replay_seconds_after?: number | null;
+  replayMaxSecondsBefore?: number | null;
+  replay_max_seconds_before?: number | null;
+  replayMaxSecondsAfter?: number | null;
+  replay_max_seconds_after?: number | null;
+  eventTime?: string | null;
+  event_time?: string | null;
+  secondsBefore?: number | null;
+  seconds_before?: number | null;
+  secondsAfter?: number | null;
+  seconds_after?: number | null;
+  cameraIds?: string[] | null;
+  camera_ids?: string[] | null;
+  cameraName?: string | null;
+  camera_name?: string | null;
+  liveUrl?: string | null;
+  live_url?: string | null;
+  deviceId?: string | null;
+  device_id?: string | null;
+  deviceName?: string | null;
+  device_name?: string | null;
+  deviceVendor?: string | null;
+  device_vendor?: string | null;
+  deviceModel?: string | null;
+  device_model?: string | null;
+  unitId?: string | null;
+  unit_id?: string | null;
   cameras?: unknown;
   read_at?: string | null;
   workflow?: Alert['workflow'] | null;
@@ -40,6 +74,20 @@ type RealTimeAlertPayload = Partial<Alert> & {
   replay_url?: string | null;
   replayCreateUrl?: string | null;
   replay_create_url?: string | null;
+  replayAvailable?: boolean | null;
+  replay_available?: boolean | null;
+  eventTime?: string | null;
+  event_time?: string | null;
+  cameraIds?: string[] | null;
+  camera_ids?: string[] | null;
+  cameraName?: string | null;
+  camera_name?: string | null;
+  liveUrl?: string | null;
+  live_url?: string | null;
+  deviceId?: string | null;
+  device_id?: string | null;
+  unitId?: string | null;
+  unit_id?: string | null;
   cameras?: unknown;
   read_at?: string | null;
 };
@@ -48,6 +96,32 @@ function normalizeString(value: unknown) {
   if (typeof value !== 'string') return null;
   const normalized = value.trim();
   return normalized.length > 0 ? normalized : null;
+}
+
+function normalizeBoolean(value: unknown) {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (['true', '1', 'yes', 'sim'].includes(normalized)) return true;
+    if (['false', '0', 'no', 'nao', 'não'].includes(normalized)) return false;
+  }
+  return null;
+}
+
+function normalizeNumber(value: unknown) {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function normalizeStringArray(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => normalizeString(item))
+    .filter((item): item is string => Boolean(item));
 }
 
 function normalizeAssetUrl(value: unknown) {
@@ -124,6 +198,14 @@ function normalizeAlertCameraEvidence(value: unknown): AlertCameraEvidence[] {
         preferredLiveUrl: normalizeAssetUrl(record.preferredLiveUrl) ?? normalizeAssetUrl(record.preferred_live_url),
         replayUrl: normalizeReplayUrl(record.replayUrl ?? record.replay_url ?? record.url),
         replayCreateUrl: normalizeAssetUrl(record.replayCreateUrl) ?? normalizeAssetUrl(record.replay_create_url),
+        replayAvailable: normalizeBoolean(record.replayAvailable ?? record.replay_available),
+        eventTime: normalizeString(record.eventTime) ?? normalizeString(record.event_time),
+        secondsBefore: normalizeNumber(record.secondsBefore ?? record.seconds_before),
+        secondsAfter: normalizeNumber(record.secondsAfter ?? record.seconds_after),
+        replaySecondsBefore: normalizeNumber(record.replaySecondsBefore ?? record.replay_seconds_before),
+        replaySecondsAfter: normalizeNumber(record.replaySecondsAfter ?? record.replay_seconds_after),
+        replayMaxSecondsBefore: normalizeNumber(record.replayMaxSecondsBefore ?? record.replay_max_seconds_before),
+        replayMaxSecondsAfter: normalizeNumber(record.replayMaxSecondsAfter ?? record.replay_max_seconds_after),
       };
     })
     .filter((item): item is AlertCameraEvidence => Boolean(item));
@@ -182,7 +264,24 @@ export function normalizeAlert(raw: AlertApiShape): Alert {
     imageUrl: normalizeAssetUrl(raw.imageUrl) ?? normalizeAssetUrl(raw.image_url),
     replayUrl: normalizeReplayUrl(raw.replayUrl ?? raw.replay_url, raw.payload),
     replayCreateUrl: normalizeAssetUrl(raw.replayCreateUrl) ?? normalizeAssetUrl(raw.replay_create_url),
+    replayAvailable: normalizeBoolean(raw.replayAvailable ?? raw.replay_available),
+    replayEventTime: normalizeString(raw.replayEventTime) ?? normalizeString(raw.replay_event_time),
+    replaySecondsBefore: normalizeNumber(raw.replaySecondsBefore ?? raw.replay_seconds_before),
+    replaySecondsAfter: normalizeNumber(raw.replaySecondsAfter ?? raw.replay_seconds_after),
+    replayMaxSecondsBefore: normalizeNumber(raw.replayMaxSecondsBefore ?? raw.replay_max_seconds_before),
+    replayMaxSecondsAfter: normalizeNumber(raw.replayMaxSecondsAfter ?? raw.replay_max_seconds_after),
+    eventTime: normalizeString(raw.eventTime) ?? normalizeString(raw.event_time),
+    secondsBefore: normalizeNumber(raw.secondsBefore ?? raw.seconds_before),
+    secondsAfter: normalizeNumber(raw.secondsAfter ?? raw.seconds_after),
+    cameraIds: normalizeStringArray(raw.cameraIds ?? raw.camera_ids),
     cameras: normalizeAlertCameraEvidence(raw.cameras),
+    cameraName: normalizeString(raw.cameraName) ?? normalizeString(raw.camera_name),
+    liveUrl: normalizeAssetUrl(raw.liveUrl) ?? normalizeAssetUrl(raw.live_url),
+    deviceId: normalizeString(raw.deviceId) ?? normalizeString(raw.device_id),
+    deviceName: normalizeString(raw.deviceName) ?? normalizeString(raw.device_name),
+    deviceVendor: normalizeString(raw.deviceVendor) ?? normalizeString(raw.device_vendor),
+    deviceModel: normalizeString(raw.deviceModel) ?? normalizeString(raw.device_model),
+    unitId: normalizeString(raw.unitId) ?? normalizeString(raw.unit_id),
     location: normalizeString(raw.location),
     readAt: normalizeString(raw.readAt) ?? normalizeString(raw.read_at),
     workflow: raw.workflow ?? null,
@@ -271,7 +370,8 @@ export function getAlertEvidenceUrl(alert?: Pick<Alert, 'snapshotUrl' | 'imageUr
 
 export function getAlertReplayUrl(alert?: Pick<Alert, 'replayUrl' | 'payload' | 'cameras'> | null) {
   if (!alert) return null;
-  return normalizeReplayUrl(alert.replayUrl, alert.payload) || alert.cameras?.find((camera) => camera.replayUrl)?.replayUrl || null;
+  const replayCamera = alert.cameras?.find((camera) => camera.replayUrl) ?? null;
+  return normalizeReplayUrl(alert.replayUrl, alert.payload) || replayCamera?.replayUrl || null;
 }
 
 export function getAlertEvidenceLabel(alert?: Pick<Alert, 'snapshotUrl' | 'imageUrl' | 'thumbnailUrl' | 'photoUrl'> | null) {

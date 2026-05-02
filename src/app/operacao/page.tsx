@@ -1282,6 +1282,11 @@ type AlertMediaItem = {
   snapshotUrl?: string | null;
   liveUrl?: string | null;
   replayUrl?: string | null;
+  replayAvailable?: boolean | null;
+  replayCreateUrl?: string | null;
+  eventTime?: string | null;
+  secondsBefore?: number | null;
+  secondsAfter?: number | null;
 };
 
 type CameraAlertFocusPayload = {
@@ -1340,6 +1345,11 @@ function getAlertMediaItems(alert?: Alert | null): AlertMediaItem[] {
       snapshotUrl: camera.snapshotUrl ?? camera.imageUrl ?? camera.thumbnailUrl ?? null,
       liveUrl: camera.liveUrl ?? camera.hlsUrl ?? camera.preferredLiveUrl ?? null,
       replayUrl: camera.replayUrl ?? null,
+      replayAvailable: camera.replayAvailable ?? null,
+      replayCreateUrl: camera.replayCreateUrl ?? null,
+      eventTime: camera.eventTime ?? null,
+      secondsBefore: camera.secondsBefore ?? camera.replaySecondsBefore ?? null,
+      secondsAfter: camera.secondsAfter ?? camera.replaySecondsAfter ?? null,
     });
   });
 
@@ -1348,8 +1358,13 @@ function getAlertMediaItems(alert?: Alert | null): AlertMediaItem[] {
     cameraId: alert.cameraId ?? getObjectString(payload, 'cameraId', 'camera_id'),
     cameraName: getObjectString(payload, 'cameraName', 'camera_name'),
     snapshotUrl: alert.snapshotUrl ?? alert.imageUrl ?? alert.thumbnailUrl ?? alert.photoUrl ?? getObjectString(payload, 'snapshotUrl', 'snapshot_url', 'imageUrl', 'image_url'),
-    liveUrl: getObjectString(payload, 'liveUrl', 'live_url', 'hlsUrl', 'hls_url'),
+    liveUrl: alert.liveUrl ?? getObjectString(payload, 'liveUrl', 'live_url', 'hlsUrl', 'hls_url'),
     replayUrl: alert.replayUrl ?? getObjectString(payload, 'replayUrl', 'replay_url'),
+    replayAvailable: alert.replayAvailable ?? null,
+    replayCreateUrl: alert.replayCreateUrl ?? getObjectString(payload, 'replayCreateUrl', 'replay_create_url'),
+    eventTime: alert.eventTime ?? alert.replayEventTime ?? getObjectString(payload, 'eventTime', 'event_time'),
+    secondsBefore: alert.secondsBefore ?? alert.replaySecondsBefore ?? null,
+    secondsAfter: alert.secondsAfter ?? alert.replaySecondsAfter ?? null,
   });
 
   const payloadArrays = ['cameras', 'cameraEvidence', 'cameraSnapshots', 'snapshots', 'replays', 'evidence'];
@@ -1367,11 +1382,13 @@ function getAlertMediaItems(alert?: Alert | null): AlertMediaItem[] {
         snapshotUrl: getObjectString(record, 'snapshotUrl', 'snapshot_url', 'imageUrl', 'image_url', 'thumbnailUrl', 'thumbnail_url'),
         liveUrl: getObjectString(record, 'liveUrl', 'live_url', 'hlsUrl', 'hls_url', 'preferredLiveUrl', 'preferred_live_url'),
         replayUrl: getObjectString(record, 'replayUrl', 'replay_url', 'url'),
+        replayCreateUrl: getObjectString(record, 'replayCreateUrl', 'replay_create_url'),
+        eventTime: getObjectString(record, 'eventTime', 'event_time'),
       });
     });
   });
 
-  const cameraIds = payload.cameraIds ?? payload.camera_ids;
+  const cameraIds = alert.cameraIds?.length ? alert.cameraIds : payload.cameraIds ?? payload.camera_ids;
   if (Array.isArray(cameraIds)) {
     cameraIds.forEach((cameraId, index) => {
       if (typeof cameraId !== 'string' || !cameraId.trim()) return;
@@ -1379,7 +1396,7 @@ function getAlertMediaItems(alert?: Alert | null): AlertMediaItem[] {
     });
   }
 
-  const deviceId = getObjectString(payload, 'deviceId', 'device_id') ?? getObjectString(payload, 'sourceDeviceId', 'source_device_id');
+  const deviceId = alert.deviceId ?? getObjectString(payload, 'deviceId', 'device_id') ?? getObjectString(payload, 'sourceDeviceId', 'source_device_id');
   const mappedCameraIds = deviceId ? readDeviceAlertCameraMap()[deviceId] ?? [] : [];
   mappedCameraIds.forEach((cameraId, index) => {
     addItem({ key: `device-${deviceId}-camera-${cameraId}`, cameraId, cameraName: `Câmera vinculada ${index + 1}` });
@@ -7499,6 +7516,16 @@ export default function OperacaoPage() {
                               >
                                 Ver replay
                               </a>
+                            ) : null}
+                            {!media.replayUrl && (media.replayAvailable || media.replayCreateUrl) ? (
+                              <span className="inline-flex items-center rounded-xl border border-amber-400/20 bg-amber-400/10 px-3 py-2 text-xs font-medium text-amber-100">
+                                Replay em preparo
+                              </span>
+                            ) : null}
+                            {media.eventTime || media.secondsBefore || media.secondsAfter ? (
+                              <span className="inline-flex items-center rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-300">
+                                {media.secondsBefore ?? 7}s antes / {media.secondsAfter ?? 30}s depois
+                              </span>
                             ) : null}
                             {media.cameraId ? (
                               <Button
