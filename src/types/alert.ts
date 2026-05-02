@@ -38,6 +38,14 @@ export type AlertCameraEvidence = {
   preferredLiveUrl?: string | null;
   replayUrl?: string | null;
   replayCreateUrl?: string | null;
+  replayAvailable?: boolean | null;
+  eventTime?: string | null;
+  secondsBefore?: number | null;
+  secondsAfter?: number | null;
+  replaySecondsBefore?: number | null;
+  replaySecondsAfter?: number | null;
+  replayMaxSecondsBefore?: number | null;
+  replayMaxSecondsAfter?: number | null;
 };
 
 export type Alert = {
@@ -57,7 +65,24 @@ export type Alert = {
   imageUrl?: string | null;
   replayUrl?: string | null;
   replayCreateUrl?: string | null;
+  replayAvailable?: boolean | null;
+  replayEventTime?: string | null;
+  replaySecondsBefore?: number | null;
+  replaySecondsAfter?: number | null;
+  replayMaxSecondsBefore?: number | null;
+  replayMaxSecondsAfter?: number | null;
+  eventTime?: string | null;
+  secondsBefore?: number | null;
+  secondsAfter?: number | null;
+  cameraIds?: string[];
   cameras?: AlertCameraEvidence[];
+  cameraName?: string | null;
+  liveUrl?: string | null;
+  deviceId?: string | null;
+  deviceName?: string | null;
+  deviceVendor?: string | null;
+  deviceModel?: string | null;
+  unitId?: string | null;
   location?: string | null;
   readAt?: string | null;
   workflow?: AlertWorkflow | null;

@@ -307,13 +307,26 @@ export default function AdminVmsServersPage() {
       await vmsServersService.remove(server.id);
       setServers((current) => current.filter((item) => item.id !== server.id));
       setMessage('Servidor VMS excluído.');
+      setModalFeedback({
+        title: 'Servidor VMS excluído',
+        message: `O servidor "${server.name}" foi removido com sucesso.`,
+        tone: 'success',
+      });
       if (editingServer?.id === server.id) {
         setEditingServer(null);
         setForm(initialForm);
         setModalOpen(false);
       }
-    } catch {
-      setError('Não foi possível excluir o servidor VMS agora.');
+    } catch (deleteError) {
+      const friendlyMessage = getApiErrorMessage(deleteError, {
+        fallback: 'Não foi possível excluir o servidor VMS agora.',
+      });
+      setError(friendlyMessage);
+      setModalFeedback({
+        title: 'Falha ao excluir servidor VMS',
+        message: friendlyMessage,
+        tone: 'error',
+      });
     } finally {
       setSaving(false);
     }
@@ -332,13 +345,26 @@ export default function AdminVmsServersPage() {
           ? `Comunicação com VMS validada. ${count} câmera(s) encontrada(s).`
           : response.message || 'Comunicação com VMS validada, mas nenhuma câmera foi retornada.'
       );
+      setModalFeedback({
+        title: 'Comunicação com VMS validada',
+        message:
+          count > 0
+            ? `${count} câmera(s) encontrada(s) no servidor "${server.name}".`
+            : response.message || `O servidor "${server.name}" respondeu, mas nenhuma câmera foi retornada.`,
+        tone: 'success',
+      });
     } catch (testError) {
       const maybeApiError = testError as { response?: { data?: { message?: string; detail?: string } } };
-      setError(
+      const friendlyMessage =
         maybeApiError.response?.data?.message ||
           maybeApiError.response?.data?.detail ||
-          'Não foi possível comunicar com o servidor VMS agora.'
-      );
+          'Não foi possível comunicar com o servidor VMS agora.';
+      setError(friendlyMessage);
+      setModalFeedback({
+        title: 'Falha na comunicação com VMS',
+        message: friendlyMessage,
+        tone: 'error',
+      });
     } finally {
       setTestingServerId(null);
     }

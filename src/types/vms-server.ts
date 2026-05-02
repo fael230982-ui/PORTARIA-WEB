@@ -27,12 +27,18 @@ export type VmsServer = {
     internal?: string | null;
     external?: string | null;
   } | null;
+  hasApiToken?: boolean | null;
+  hasPassword?: boolean | null;
   authType?: VmsServerAuthType | null;
+  username?: string | null;
   verifySsl?: boolean | null;
   timeoutSeconds?: number | null;
+  lastHealthcheckAt?: string | null;
   operationMode?: string | null;
   capabilities?: VmsServerCapabilityFlags | null;
+  partnerId?: string | null;
   condominiumId?: string | null;
+  settings?: Record<string, unknown> | null;
   status?: VmsServerStatus | null;
 };
 
@@ -47,10 +53,14 @@ export type VmsServerPayload = {
   externalIp?: string | null;
   externalPort?: number | null;
   condominiumId?: string | null;
+  partnerId?: string | null;
   apiToken?: string | null;
+  username?: string | null;
+  password?: string | null;
   authType?: VmsServerAuthType | null;
   verifySsl?: boolean | null;
   timeoutSeconds?: number | null;
+  settings?: Record<string, unknown> | null;
   status?: VmsServerStatus | null;
 };
 
