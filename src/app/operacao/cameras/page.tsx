@@ -35,6 +35,14 @@ type CameraAlertFocusPayload = {
   title?: string;
   timestamp?: string;
   cameraIds?: string[];
+  media?: Array<{
+    key?: string;
+    cameraId?: string | null;
+    cameraName?: string | null;
+    snapshotUrl?: string | null;
+    replayUrl?: string | null;
+    replayAvailable?: boolean | null;
+  }>;
 };
 
 function readAlertFocusPayload(): CameraAlertFocusPayload | null {
@@ -190,6 +198,7 @@ export default function OperacaoCâmerasPage() {
   const [autoRotateSeconds, setAutoRotateSeconds] = useState(readStoredAutoRotateSettings().seconds);
   const [alertFocus, setAlertFocus] = useState<CameraAlertFocusPayload | null>(readAlertFocusPayload);
   const [positionMessage, setPositionMessage] = useState<string | null>(null);
+  const alertMediaItems = alertFocus?.media?.filter((item) => item.snapshotUrl || item.replayUrl || item.replayAvailable) ?? [];
 
   useEffect(() => {
     window.localStorage.setItem('operation-camera-layout', String(layout));
@@ -598,6 +607,11 @@ export default function OperacaoCâmerasPage() {
             {alertFocus ? (
               <p className="mt-1 truncate text-xs font-semibold text-red-200">
                 Alerta em foco: {alertFocus.title || 'ocorrência'}.
+              </p>
+            ) : null}
+            {alertMediaItems.length ? (
+              <p className="mt-1 truncate text-xs text-amber-100">
+                {alertMediaItems.length} evidência(s) vinculada(s): snapshot/replay do evento.
               </p>
             ) : null}
             {positionMessage ? (

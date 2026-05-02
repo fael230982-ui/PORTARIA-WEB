@@ -71,6 +71,8 @@ function getReplayStatusLabel(status?: string | null) {
   return 'Pendente';
 }
 
+const replayPlaybackRates = [0.25, 0.5, 1, 2, 4] as const;
+
 export function CameraPlayer({
   cameraId,
   cameraData,
@@ -97,6 +99,7 @@ export function CameraPlayer({
   const [replay, setReplay] = useState<CameraReplayResponse | null>(null);
   const [replayLoading, setReplayLoading] = useState(false);
   const [replayError, setReplayError] = useState<string | null>(null);
+  const [replayPlaybackRate, setReplayPlaybackRate] = useState<(typeof replayPlaybackRates)[number]>(1);
   const { token, hydrated, loading } = useAuth();
 
   const streamingReady = Boolean(cameraData?.id) && Boolean(token) && hydrated && !loading;
@@ -137,6 +140,7 @@ export function CameraPlayer({
     setReplay(null);
     setReplayError(null);
     setReplayLoading(false);
+    setReplayPlaybackRate(1);
   }, [cameraData?.id]);
 
   const handleAction = (action: string) => {
@@ -361,13 +365,39 @@ export function CameraPlayer({
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => window.open(replay.replayUrl, '_blank', 'noopener,noreferrer')}
+                      onClick={() => {
+                        const url = new URL('/operacao/cameras/replay', window.location.origin);
+                        url.searchParams.set('url', replay.replayUrl as string);
+                        url.searchParams.set('camera', cameraData.name || 'Camera');
+                        url.searchParams.set('rate', String(replayPlaybackRate));
+                        window.open(url.toString(), '_blank', 'noopener,noreferrer');
+                      }}
                       className="border-emerald-500/20 bg-emerald-500/10 text-emerald-100 hover:bg-emerald-500/20"
                     >
                       Abrir replay
                     </Button>
                   ) : null}
                 </div>
+
+                {replayReady && replay?.replayUrl ? (
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <span className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Velocidade</span>
+                    {replayPlaybackRates.map((rate) => (
+                      <button
+                        key={rate}
+                        type="button"
+                        onClick={() => setReplayPlaybackRate(rate)}
+                        className={`rounded-lg border px-2 py-1 text-xs font-semibold transition ${
+                          replayPlaybackRate === rate
+                            ? 'border-cyan-300/40 bg-cyan-300/20 text-cyan-50'
+                            : 'border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'
+                        }`}
+                      >
+                        {rate}x
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
 
                 <div className="mt-3 space-y-1 text-xs text-slate-400">
                   <p>A janela rápida atual cobre até 5 minutos, conforme o limite documentado da API v6.0.</p>
