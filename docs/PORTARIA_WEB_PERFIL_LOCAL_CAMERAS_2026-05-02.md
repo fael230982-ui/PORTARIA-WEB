@@ -22,6 +22,29 @@ Exemplos de preenchimento pelo admin:
 - Monitor externo da portaria: filtro por perfil.
 - Tela de cameras do morador no Portaria Web: filtro por perfil.
 
+## Regra para o App Morador
+
+Enquanto nao existir campo estruturado de grupo no backend, o App Morador deve usar o mesmo campo `location` da camera como perfil de exibicao.
+
+Exemplo:
+
+```json
+{
+  "name": "Portaria social 01",
+  "location": "ACESSOS"
+}
+```
+
+No App Morador:
+
+- listar os valores distintos de `camera.location`;
+- exibir esses valores como filtros/perfis;
+- ao selecionar um perfil, mostrar apenas as cameras com `location` igual ao perfil selecionado;
+- manter um filtro `Todos` para exibir todas as cameras permitidas ao morador;
+- se `location` vier vazio, exibir em `Sem perfil` ou `Outras`.
+
+Importante: nao criar campo paralelo no App Morador para isso nesta etapa. O ponto de integracao comum entre Portaria Web, backend e App Morador e `location`.
+
 ## Limite atual
 
 Essa abordagem usa texto livre salvo em `location`.
