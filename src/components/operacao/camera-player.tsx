@@ -105,7 +105,7 @@ export function CameraPlayer({
   const preferredWebRtcUrl = getPreferredWebRtcUrl(cameraData, streamingData);
   const preferredImageStreamUrl = getPreferredImageStreamUrl(cameraData, streamingData);
   const preferredSnapshotUrl = getPreferredSnapshotUrl(cameraData, streamingData);
-  const hasVideoStream = Boolean(cameraData?.streamUrl);
+  const hasVideoStream = Boolean(preferredVideoStreamUrl);
   const replayReady = Boolean(replay?.replayUrl) && String(replay?.status ?? '').toUpperCase() === 'READY';
   const effectiveStatus: CameraStatus = preferredVideoStreamUrl || preferredImageStreamUrl || preferredSnapshotUrl ? 'ONLINE' : cameraData?.status ?? 'OFFLINE';
   const compactVisualMode = compactOverlay;

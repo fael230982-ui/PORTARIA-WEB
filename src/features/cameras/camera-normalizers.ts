@@ -15,6 +15,8 @@ type CameraApiShape = Partial<Camera> & {
   hls_url?: string | null;
   web_rtc_url?: string | null;
   vms_streaming_url?: string | null;
+  vms_streaming_urls?: Camera['vmsStreamingUrls'];
+  selected_stream_uuid?: string | null;
   camera_uuid?: string | null;
   preferred_still_url?: string | null;
   preferred_live_url?: string | null;
@@ -60,8 +62,12 @@ type CameraStreamingApiShape = Partial<CameraStreamingResponse> & {
   gateway_path?: string | null;
   vms_streaming_url?: string | null;
   vms_streaming_urls?: CameraStreamingResponse['vmsStreamingUrls'];
+  selected_stream_uuid?: string | null;
   vms_snapshot_urls?: CameraStreamingResponse['vmsSnapshotUrls'];
   vms_base_urls?: CameraStreamingResponse['vmsBaseUrls'];
+  camera_uuid?: string | null;
+  playback?: CameraStreamingResponse['playback'];
+  native_web_socket_protocol?: string | null;
 };
 
 function normalizeString(value: unknown) {
@@ -98,6 +104,31 @@ function normalizeRouteUrls(value: CameraStreamingResponse['vmsStreamingUrls']) 
   };
 }
 
+function normalizePlayback(value: unknown) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const playback = value as Record<string, unknown>;
+  const nativePayload =
+    playback.nativePlayerPayload && typeof playback.nativePlayerPayload === 'object' && !Array.isArray(playback.nativePlayerPayload)
+      ? (playback.nativePlayerPayload as Record<string, unknown>)
+      : null;
+
+  return {
+    ...playback,
+    mode: normalizeString(playback.mode),
+    player: normalizeString(playback.player),
+    backendProcessesStream: Boolean(playback.backendProcessesStream ?? false),
+    nativeWebSocketProtocol: normalizeString(playback.nativeWebSocketProtocol) ?? normalizeString(playback.native_web_socket_protocol),
+    nativePlayerPayload: nativePayload
+      ? {
+          ...nativePayload,
+          url: normalizeString(nativePayload.url),
+          cameraUuid: normalizeString(nativePayload.cameraUuid) ?? normalizeString(nativePayload.camera_uuid),
+          streamUuid: normalizeString(nativePayload.streamUuid) ?? normalizeString(nativePayload.stream_uuid),
+        }
+      : null,
+  };
+}
+
 export function normalizeCamera(raw: CameraApiShape): Camera {
   return {
     id: String(raw.id ?? ''),
@@ -116,6 +147,8 @@ export function normalizeCamera(raw: CameraApiShape): Camera {
     hlsUrl: resolveCameraMediaUrl(normalizeString(raw.hlsUrl) ?? normalizeString(raw.hls_url)),
     webRtcUrl: resolveCameraMediaUrl(normalizeString(raw.webRtcUrl) ?? normalizeString(raw.web_rtc_url)),
     vmsStreamingUrl: normalizeString(raw.vmsStreamingUrl) ?? normalizeString(raw.vms_streaming_url),
+    vmsStreamingUrls: normalizeRouteUrls(raw.vmsStreamingUrls ?? raw.vms_streaming_urls ?? null),
+    selectedStreamUuid: normalizeString(raw.selectedStreamUuid) ?? normalizeString(raw.selected_stream_uuid),
     cameraUuid: normalizeString(raw.cameraUuid) ?? normalizeString(raw.camera_uuid),
     preferredStillUrl: resolveCameraMediaUrl(normalizeString(raw.preferredStillUrl) ?? normalizeString(raw.preferred_still_url)),
     preferredLiveUrl: resolveCameraMediaUrl(normalizeString(raw.preferredLiveUrl) ?? normalizeString(raw.preferred_live_url)),
@@ -147,6 +180,7 @@ export function normalizeCamera(raw: CameraApiShape): Camera {
     residentCameraGroupName: normalizeString(raw.residentCameraGroupName) ?? normalizeString(raw.resident_camera_group_name),
     residentCameraGroupOrder: normalizeNumber(raw.residentCameraGroupOrder ?? raw.resident_camera_group_order),
     visibilityScope: normalizeString(raw.visibilityScope) ?? normalizeString(raw.visibility_scope),
+    playback: normalizePlayback(raw.playback),
     streaming: raw.streaming && typeof raw.streaming === 'object' ? raw.streaming as Record<string, unknown> : null,
     vmsProvisioning: raw.vmsProvisioning && typeof raw.vmsProvisioning === 'object' ? raw.vmsProvisioning as Record<string, unknown> : null,
     gatewayProvisioning: raw.gatewayProvisioning && typeof raw.gatewayProvisioning === 'object' ? raw.gatewayProvisioning as Record<string, unknown> : null,
@@ -190,9 +224,11 @@ export function normalizeCameraStreamingResponse(
     gatewayPath: normalizeString(raw.gatewayPath) ?? normalizeString(legacyRaw.gateway_path),
     vmsStreamingUrl: normalizeString(raw.vmsStreamingUrl) ?? normalizeString(legacyRaw.vms_streaming_url),
     vmsStreamingUrls: normalizeRouteUrls(raw.vmsStreamingUrls ?? legacyRaw.vms_streaming_urls ?? null),
+    selectedStreamUuid: normalizeString(raw.selectedStreamUuid) ?? normalizeString(legacyRaw.selected_stream_uuid),
     vmsSnapshotUrls: raw.vmsSnapshotUrls ?? legacyRaw.vms_snapshot_urls ?? null,
     vmsBaseUrls: raw.vmsBaseUrls ?? legacyRaw.vms_base_urls ?? null,
-    cameraUuid: normalizeString(raw.cameraUuid),
+    cameraUuid: normalizeString(raw.cameraUuid) ?? normalizeString(legacyRaw.camera_uuid),
+    playback: normalizePlayback(raw.playback ?? legacyRaw.playback),
     streams: Array.isArray(raw.streams) ? raw.streams : [],
   };
 }

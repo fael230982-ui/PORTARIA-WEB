@@ -17,6 +17,7 @@ import type {
 type CamerasListParams = {
   status?: string;
   unitId?: string;
+  mediaRoute?: 'internal' | 'external';
 };
 
 export const camerasService = {
@@ -24,6 +25,7 @@ export const camerasService = {
     const queryParams = {
       status: params?.status,
       unitId: params?.unitId,
+      mediaRoute: params?.mediaRoute ?? 'external',
     };
 
     const { data } = await api.get<Camera[] | CamerasListResponse>('/cameras', {

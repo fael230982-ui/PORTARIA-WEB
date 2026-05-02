@@ -11,6 +11,7 @@ import {
   getPreferredSnapshotUrl,
   getPreferredVideoStreamUrl,
   getPreferredWebRtcUrl,
+  getVmsNativePlayerPayload,
   isRtspUrl,
   isVmsNativeStreaming,
 } from '@/features/cameras/camera-media';
@@ -51,6 +52,7 @@ export function CameraFeed({
   const imageStreamUrl = getPreferredImageStreamUrl(camera, streamingData);
   const snapshotUrl = getPreferredSnapshotUrl(camera, streamingData);
   const hasVmsNative = isVmsNativeStreaming(camera, streamingData);
+  const nativePayload = getVmsNativePlayerPayload(camera, streamingData);
   const hasOnlyRtsp = Boolean(camera?.streamUrl) && isRtspUrl(camera?.streamUrl) && !videoStreamUrl && !imageStreamUrl && !snapshotUrl;
   const hasOnlyWebRtc = Boolean(webRtcUrl) && !videoStreamUrl && !imageStreamUrl && !snapshotUrl;
   const mediaKey = `${camera?.id ?? 'none'}|${videoStreamUrl ?? ''}|${imageStreamUrl ?? ''}|${snapshotUrl ?? ''}`;
@@ -91,6 +93,8 @@ export function CameraFeed({
       hlsUrl: camera?.hlsUrl ?? streamingData?.hlsUrl ?? null,
       vmsStreamingUrl: camera?.vmsStreamingUrl ?? streamingData?.vmsStreamingUrl ?? null,
       vmsStreamingUrls: streamingData?.vmsStreamingUrls ?? null,
+      playback: streamingData?.playback ?? camera?.playback ?? null,
+      nativePlayerPayload: nativePayload,
       resolvedVideoUrl: videoStreamUrl,
       using: isHls ? 'hls' : 'video',
     });
@@ -247,7 +251,8 @@ export function CameraFeed({
         {modeBadge}
         {hasVmsNative && !compactErrors ? (
           <div className="pointer-events-none absolute bottom-3 left-3 z-10 max-w-[calc(100%-1.5rem)] rounded-xl border border-amber-400/25 bg-black/70 px-3 py-2 text-xs text-amber-100 shadow-lg backdrop-blur">
-            Preview em frames. A API retornou VMS nativo, mas ainda não enviou HLS/WebRTC para vídeo ao vivo no navegador.
+            VMS nativo recebido. Exibindo fallback em frames até integrar o player Incoresoft.
+            {nativePayload?.streamUuid ? ` Stream: ${nativePayload.streamUuid}` : ''}
           </div>
         ) : null}
         {/* eslint-disable-next-line @next/next/no-img-element */}

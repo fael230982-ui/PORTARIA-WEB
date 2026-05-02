@@ -19,6 +19,11 @@ export type Camera = {
   preferredLiveUrl?: string | null;
   webRtcUrl?: string | null;
   vmsStreamingUrl?: string | null;
+  vmsStreamingUrls?: {
+    internal?: string | null;
+    external?: string | null;
+  } | null;
+  selectedStreamUuid?: string | null;
   cameraUuid?: string | null;
   preferredStillUrl?: string | null;
   mediaAuthType?: string | null;
@@ -50,9 +55,26 @@ export type Camera = {
   residentCameraGroupName?: string | null;
   residentCameraGroupOrder?: number | null;
   visibilityScope?: string | null;
+  playback?: CameraPlayback | null;
   streaming?: Record<string, unknown> | null;
   vmsProvisioning?: Record<string, unknown> | null;
   gatewayProvisioning?: Record<string, unknown> | null;
+};
+
+export type CameraNativePlayerPayload = {
+  url?: string | null;
+  cameraUuid?: string | null;
+  streamUuid?: string | null;
+  [key: string]: unknown;
+};
+
+export type CameraPlayback = {
+  mode?: string | null;
+  player?: string | null;
+  backendProcessesStream?: boolean;
+  nativePlayerPayload?: CameraNativePlayerPayload | null;
+  nativeWebSocketProtocol?: string | null;
+  [key: string]: unknown;
 };
 
 export type CamerasListResponse = {
@@ -85,6 +107,7 @@ export type CameraStreamingResponse = {
     internal?: string | null;
     external?: string | null;
   } | null;
+  selectedStreamUuid?: string | null;
   vmsSnapshotUrls?: {
     internal?: string | null;
     external?: string | null;
@@ -94,6 +117,7 @@ export type CameraStreamingResponse = {
     external?: string | null;
   } | null;
   cameraUuid?: string | null;
+  playback?: CameraPlayback | null;
   streams?: object[];
 };
 

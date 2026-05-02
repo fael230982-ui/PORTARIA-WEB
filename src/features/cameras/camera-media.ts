@@ -16,6 +16,16 @@ export type CameraDiagnostics = {
   items: CameraDiagnosticItem[];
 };
 
+type VmsNativeCameraSource = Pick<
+  Camera,
+  'vmsStreamingUrl' | 'vmsStreamingUrls' | 'preferredLiveUrl' | 'liveUrl' | 'cameraUuid' | 'selectedStreamUuid' | 'playback'
+>;
+
+type VmsNativeStreamingSource = Pick<
+  CameraStreamingResponse,
+  'vmsStreamingUrl' | 'vmsStreamingUrls' | 'preferredLiveUrl' | 'liveUrl' | 'transport' | 'cameraUuid' | 'selectedStreamUuid' | 'playback'
+>;
+
 export function resolveCameraMediaUrl(value?: string | null) {
   const url = String(value ?? '').trim();
   if (!url) return null;
@@ -61,7 +71,7 @@ function resolvePlayableVideoUrl(value?: string | null) {
 }
 
 export function getPreferredVideoStreamUrl(
-  camera?: Pick<Camera, 'streamUrl' | 'preferredLiveUrl' | 'liveUrl' | 'hlsUrl' | 'webRtcUrl' | 'vmsStreamingUrl'> | null,
+  camera?: Pick<Camera, 'streamUrl' | 'preferredLiveUrl' | 'liveUrl' | 'hlsUrl' | 'webRtcUrl' | 'vmsStreamingUrl' | 'vmsStreamingUrls'> | null,
   streaming?: Pick<CameraStreamingResponse, 'preferredLiveUrl' | 'liveUrl' | 'hlsUrl' | 'webRtcUrl' | 'vmsStreamingUrl' | 'vmsStreamingUrls'> | null
 ) {
   const candidates = [
@@ -72,6 +82,7 @@ export function getPreferredVideoStreamUrl(
     streaming?.hlsUrl,
     camera?.hlsUrl,
     streaming?.vmsStreamingUrls?.external,
+    camera?.vmsStreamingUrls?.external,
     streaming?.vmsStreamingUrl,
     camera?.vmsStreamingUrl,
     camera?.streamUrl,
@@ -120,6 +131,10 @@ export function getCameraMediaAvailabilityLabels(
     | 'thumbnailUrl'
     | 'imageStreamUrl'
     | 'vmsStreamingUrl'
+    | 'vmsStreamingUrls'
+    | 'cameraUuid'
+    | 'selectedStreamUuid'
+    | 'playback'
     | 'lastSeen'
   > | null,
   streaming?: Pick<
@@ -136,13 +151,16 @@ export function getCameraMediaAvailabilityLabels(
     | 'frameUrl'
     | 'vmsStreamingUrl'
     | 'vmsStreamingUrls'
+    | 'cameraUuid'
+    | 'selectedStreamUuid'
     | 'transport'
+    | 'playback'
   > | null
 ) {
   const labels: string[] = [];
   const videoStreamUrl = getPreferredVideoStreamUrl(camera, streaming);
   if (isBrowserPlayableVideoUrl(videoStreamUrl)) labels.push('ao vivo');
-  if (isVmsNativeStreaming(camera, streaming)) labels.push('vms nativo');
+  if (getVmsNativePlayerPayload(camera, streaming)) labels.push('vms nativo');
   if (getPreferredWebRtcUrl(camera, streaming)) labels.push('webrtc');
   if (getPreferredImageStreamUrl(camera, streaming)) labels.push('preview');
   if (getPreferredSnapshotUrl(camera, streaming)) labels.push('snapshot');
@@ -160,11 +178,14 @@ export function isVmsNativeStreamUrl(value?: string | null) {
 }
 
 export function getVmsNativeStreamUrl(
-  camera?: Pick<Camera, 'vmsStreamingUrl' | 'preferredLiveUrl' | 'liveUrl'> | null,
-  streaming?: Pick<CameraStreamingResponse, 'vmsStreamingUrl' | 'vmsStreamingUrls' | 'preferredLiveUrl' | 'liveUrl' | 'transport'> | null
+  camera?: Pick<Camera, 'vmsStreamingUrl' | 'vmsStreamingUrls' | 'preferredLiveUrl' | 'liveUrl' | 'playback'> | null,
+  streaming?: Pick<CameraStreamingResponse, 'vmsStreamingUrl' | 'vmsStreamingUrls' | 'preferredLiveUrl' | 'liveUrl' | 'transport' | 'playback'> | null
 ) {
   const candidate =
+    streaming?.playback?.nativePlayerPayload?.url ||
+    camera?.playback?.nativePlayerPayload?.url ||
     streaming?.vmsStreamingUrls?.external ||
+    camera?.vmsStreamingUrls?.external ||
     streaming?.vmsStreamingUrl ||
     streaming?.preferredLiveUrl ||
     streaming?.liveUrl ||
@@ -176,11 +197,38 @@ export function getVmsNativeStreamUrl(
   return isVmsNativeStreamUrl(candidate) ? candidate : null;
 }
 
+export function getVmsNativePlayerPayload(camera?: VmsNativeCameraSource | null, streaming?: VmsNativeStreamingSource | null) {
+  const playback = streaming?.playback ?? camera?.playback ?? null;
+  const nativePayload = playback?.nativePlayerPayload ?? null;
+  const url = getVmsNativeStreamUrl(camera, streaming);
+  const cameraUuid = nativePayload?.cameraUuid || streaming?.cameraUuid || camera?.cameraUuid || null;
+  const streamUuid = nativePayload?.streamUuid || streaming?.selectedStreamUuid || camera?.selectedStreamUuid || null;
+
+  if (!url && !cameraUuid && !streamUuid) return null;
+
+  return {
+    url,
+    cameraUuid,
+    streamUuid,
+    player: playback?.player ?? null,
+    mode: playback?.mode ?? streaming?.transport ?? null,
+    nativeWebSocketProtocol: playback?.nativeWebSocketProtocol ?? null,
+    backendProcessesStream: playback?.backendProcessesStream ?? null,
+  };
+}
+
 export function isVmsNativeStreaming(
-  camera?: Pick<Camera, 'vmsStreamingUrl' | 'preferredLiveUrl' | 'liveUrl'> | null,
-  streaming?: Pick<CameraStreamingResponse, 'vmsStreamingUrl' | 'vmsStreamingUrls' | 'preferredLiveUrl' | 'liveUrl' | 'transport'> | null
+  camera?: Pick<Camera, 'vmsStreamingUrl' | 'vmsStreamingUrls' | 'preferredLiveUrl' | 'liveUrl' | 'playback'> | null,
+  streaming?: Pick<CameraStreamingResponse, 'vmsStreamingUrl' | 'vmsStreamingUrls' | 'preferredLiveUrl' | 'liveUrl' | 'transport' | 'playback'> | null
 ) {
-  return String(streaming?.transport ?? '').toUpperCase() === 'VMS_NATIVE' || Boolean(getVmsNativeStreamUrl(camera, streaming));
+  const playbackMode = String(streaming?.playback?.mode ?? camera?.playback?.mode ?? '').toUpperCase();
+  const playbackPlayer = String(streaming?.playback?.player ?? camera?.playback?.player ?? '').toUpperCase();
+  return (
+    String(streaming?.transport ?? '').toUpperCase() === 'VMS_NATIVE' ||
+    playbackMode === 'VMS_NATIVE' ||
+    playbackPlayer === 'INCORESOFT_VMS_NATIVE' ||
+    Boolean(getVmsNativeStreamUrl(camera, streaming))
+  );
 }
 
 export function isBrowserPlayableVideoUrl(value?: string | null) {
@@ -237,6 +285,10 @@ export function getCameraDiagnostics(
     | 'thumbnailUrl'
     | 'imageStreamUrl'
     | 'vmsStreamingUrl'
+    | 'vmsStreamingUrls'
+    | 'cameraUuid'
+    | 'selectedStreamUuid'
+    | 'playback'
     | 'status'
     | 'lastSeen'
   > | null,
@@ -254,9 +306,12 @@ export function getCameraDiagnostics(
     | 'frameUrl'
     | 'vmsStreamingUrl'
     | 'vmsStreamingUrls'
+    | 'cameraUuid'
+    | 'selectedStreamUuid'
     | 'mediaRoute'
     | 'transport'
     | 'provider'
+    | 'playback'
   > | null
 ): CameraDiagnostics {
   const videoStreamUrl = getPreferredVideoStreamUrl(camera, streaming);
@@ -268,6 +323,7 @@ export function getCameraDiagnostics(
   const hasRtsp = isRtspUrl(rawRtspUrl);
   const hasBrowserVideo = isBrowserPlayableVideoUrl(videoStreamUrl) && !hasRtsp;
   const hasVmsNative = isVmsNativeStreaming(camera, streaming);
+  const nativePayload = getVmsNativePlayerPayload(camera, streaming);
   const previewReady = previewMode !== 'none';
 
   const items: CameraDiagnosticItem[] = [
@@ -278,13 +334,18 @@ export function getCameraDiagnostics(
     },
     {
       label: 'Rota VMS externa',
-      ok: Boolean(streaming?.vmsStreamingUrls?.external),
-      detail: streaming?.vmsStreamingUrls?.external ? 'Endereço externo recebido da API.' : 'Endereço externo não informado.',
+      ok: Boolean(nativePayload?.url || streaming?.vmsStreamingUrls?.external || camera?.vmsStreamingUrls?.external),
+      detail: nativePayload?.url || streaming?.vmsStreamingUrls?.external || camera?.vmsStreamingUrls?.external ? 'Endereço externo recebido da API.' : 'Endereço externo não informado.',
     },
     {
       label: 'VMS nativo',
       ok: hasVmsNative,
-      detail: hasVmsNative ? 'Recebido como WebSocket nativo do VMS; precisa de player/protocolo próprio.' : 'Não informado.',
+      detail:
+        nativePayload?.cameraUuid && nativePayload?.streamUuid
+          ? 'Payload nativo recebido com cameraUuid e streamUuid.'
+          : hasVmsNative
+            ? 'Recebido como WebSocket nativo do VMS; precisa de bind/live do player Incoresoft.'
+            : 'Não informado.',
     },
     {
       label: 'MJPEG/frame',
@@ -318,14 +379,18 @@ export function getCameraDiagnostics(
         previewMode === 'video-stream'
           ? 'Vídeo ao vivo disponível.'
           : previewMode === 'image-stream'
-            ? 'Preview em frames disponível.'
+            ? hasVmsNative
+              ? 'VMS nativo recebido. Exibindo fallback em frames.'
+              : 'Preview em frames disponível.'
             : 'Imagem atual disponível para consulta.',
       recommendation:
         previewMode === 'image-stream' && hasVmsNative
-          ? 'A API já envia rota externa do VMS, mas ainda falta HLS/WebRTC ou player VMS nativo para vídeo contínuo.'
+          ? nativePayload?.cameraUuid && nativePayload?.streamUuid
+            ? 'A API já envia o payload nativo. Falta integrar o protocolo/player Incoresoft para transformar o WebSocket em vídeo renderizável.'
+            : 'A API envia rota VMS nativa, mas ainda falta payload completo ou integração do player Incoresoft para vídeo contínuo.'
           : 'A câmera já possui uma fonte de imagem utilizável.',
       backendMessage:
-        'Para vídeo contínuo no navegador, mantenha uma fonte compatível como HLS ou WebRTC. O WebSocket nativo do VMS exige player/protocolo próprio.',
+        'Para vídeo contínuo com VMS_NATIVE, o front precisa do protocolo/player Incoresoft. imageStreamUrl e mjpegUrl são apenas fallback por frames.',
       items,
     };
   }

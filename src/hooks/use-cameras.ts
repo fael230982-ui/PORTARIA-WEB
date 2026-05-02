@@ -6,6 +6,7 @@ import { camerasService } from '@/services/cameras.service';
 type UseCamerasParams = {
   status?: string;
   unitId?: string;
+  mediaRoute?: 'internal' | 'external';
   enabled?: boolean;
 };
 
@@ -14,6 +15,7 @@ export function useCameras(params?: UseCamerasParams) {
   const queryParams = {
     status: rawParams.status,
     unitId: rawParams.unitId,
+    mediaRoute: rawParams.mediaRoute ?? 'external',
   };
 
   return useQuery({
