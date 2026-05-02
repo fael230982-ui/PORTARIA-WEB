@@ -1468,10 +1468,23 @@ function operationEventToAlert(event: OperationEvent): Alert | null {
     severity: critical ? 'CRITICAL' : 'INFO',
     timestamp: String(event.occurredAt ?? event.timestamp ?? event.createdAt ?? new Date().toISOString()),
     cameraId: event.cameraId ?? getOperationEventPayloadString(event, 'cameraId', 'camera_id'),
+    cameraIds: Array.isArray(event.payload?.cameraIds)
+      ? event.payload.cameraIds.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+      : Array.isArray(event.payload?.camera_ids)
+        ? event.payload.camera_ids.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+        : [],
+    cameraName: getOperationEventPayloadString(event, 'cameraName', 'camera_name'),
     personId: getOperationEventPayloadString(event, 'personId', 'person_id'),
     snapshotUrl: getOperationEventPayloadString(event, 'snapshotUrl', 'snapshot_url'),
     imageUrl: getOperationEventPayloadString(event, 'imageUrl', 'image_url'),
+    liveUrl: getOperationEventPayloadString(event, 'liveUrl', 'live_url'),
     replayUrl: getOperationEventPayloadString(event, 'replayUrl', 'replay_url'),
+    replayCreateUrl: getOperationEventPayloadString(event, 'replayCreateUrl', 'replay_create_url'),
+    replayAvailable: event.payload?.replayAvailable === true || event.payload?.replay_available === true || null,
+    eventTime: getOperationEventPayloadString(event, 'eventTime', 'event_time'),
+    deviceId: getOperationEventPayloadString(event, 'deviceId', 'device_id') ?? event.entityId ?? null,
+    deviceName: getOperationEventPayloadString(event, 'deviceName', 'device_name'),
+    unitId: getOperationEventPayloadString(event, 'unitId', 'unit_id'),
     location: getOperationEventPayloadString(event, 'location', 'deviceName', 'doorName'),
     readAt: null,
     workflow: null,
