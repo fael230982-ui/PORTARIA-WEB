@@ -1112,6 +1112,7 @@ export default function AdminCamerasPage() {
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [profileError, setProfileError] = useState<string | null>(null);
+  const [profileSearch, setProfileSearch] = useState('');
   const [editingProfile, setEditingProfile] = useState<string | null>(null);
   const [editingProfileValue, setEditingProfileValue] = useState('');
   const [cameraProfileOverrides, setCameraProfileOverrides] = useState<Record<string, string>>({});
@@ -1507,6 +1508,11 @@ export default function AdminCamerasPage() {
       ...visibleCameras.map((camera) => normalizeCameraProfile(camera.location)),
     ]);
   }, [customCameraProfiles, visibleCameras]);
+  const filteredProfileOptions = useMemo(() => {
+    const search = normalizeString(profileSearch);
+    if (!search) return profileOptions;
+    return profileOptions.filter((profile) => normalizeString(profile).includes(search));
+  }, [profileOptions, profileSearch]);
 
   const handleAddCameraProfile = (profile: string) => {
     const normalized = normalizeCameraProfile(profile);
@@ -2000,13 +2006,36 @@ export default function AdminCamerasPage() {
             Renomear um perfil atualiza todas as câmeras vinculadas a ele. A exclusão só é permitida para perfil sem câmera em uso.
           </div>
 
+          <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3">
+            <Search className="h-4 w-4 text-slate-400" />
+            <input
+              value={profileSearch}
+              onChange={(event) => setProfileSearch(event.target.value)}
+              placeholder="Buscar perfil..."
+              className="min-w-0 flex-1 border-0 bg-transparent p-0 text-sm text-white outline-none placeholder:text-slate-500"
+            />
+            {profileSearch ? (
+              <button
+                type="button"
+                onClick={() => setProfileSearch('')}
+                className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-xs text-slate-300 transition hover:bg-white/10"
+              >
+                Limpar
+              </button>
+            ) : null}
+          </label>
+
           {profileOptions.length === 0 ? (
             <p className="rounded-2xl border border-dashed border-white/10 p-4 text-sm text-slate-400">
               Nenhum perfil cadastrado ainda.
             </p>
+          ) : filteredProfileOptions.length === 0 ? (
+            <p className="rounded-2xl border border-dashed border-white/10 p-4 text-sm text-slate-400">
+              Nenhum perfil encontrado para essa busca.
+            </p>
           ) : (
             <div className="space-y-2">
-              {profileOptions.map((profile) => {
+              {filteredProfileOptions.map((profile) => {
                 const usedBy = profileUsage.get(profile) ?? 0;
                 const isEditing = editingProfile === profile;
 
