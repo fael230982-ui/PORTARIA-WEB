@@ -249,9 +249,11 @@ export function CameraFeed({
           preload="auto"
           controls={controls}
           onError={() => {
-            if (!videoStreamUrl.toLowerCase().split('?')[0].endsWith('.m3u8')) {
-              setFailedVideoMediaKey(mediaKey);
-            }
+            console.warn('[camera-feed] vídeo principal falhou; alternando para snapshot', {
+              cameraId: camera.id,
+              url: videoStreamUrl,
+            });
+            setFailedVideoMediaKey(mediaKey);
           }}
         />
       </div>
