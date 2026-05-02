@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { CameraFeed } from '@/components/camera-feed';
 import { PageContainer } from '@/components/layout/page-container';
+import { normalizeCameraProfileKey, uniqueSortedCameraProfiles } from '@/features/cameras/camera-profiles';
 import { useAuth } from '@/hooks/use-auth';
 import { useCameras } from '@/hooks/use-cameras';
 import type { Camera } from '@/types/camera';
@@ -23,18 +24,6 @@ function compareResidentCameras(left: Camera, right: Camera) {
   return String(left.name ?? '').localeCompare(String(right.name ?? ''), 'pt-BR', { numeric: true, sensitivity: 'base' });
 }
 
-function normalizeString(value: unknown) {
-  return String(value ?? '')
-    .trim()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase();
-}
-
-function normalizeCameraProfile(value: unknown) {
-  return String(value ?? '').trim().replace(/\s+/g, ' ').toUpperCase();
-}
-
 export default function CamerasPage() {
   const { user } = useAuth();
   const activeUnitId = user?.selectedUnitId ?? user?.unitId ?? null;
@@ -46,16 +35,10 @@ export default function CamerasPage() {
   const [selectedProfile, setSelectedProfile] = useState('');
   const cameras = useMemo(() => [...(data?.data ?? [])].sort(compareResidentCameras), [data?.data]);
   const profileOptions = useMemo(() => {
-    const profiles = cameras
-      .map((camera) => normalizeCameraProfile(camera.location))
-      .filter(Boolean);
-
-    return Array.from(new Set(profiles)).sort((left, right) =>
-      left.localeCompare(right, 'pt-BR', { numeric: true, sensitivity: 'base' })
-    );
+    return uniqueSortedCameraProfiles(cameras.map((camera) => camera.location));
   }, [cameras]);
   const visibleCameras = selectedProfile
-    ? cameras.filter((camera) => normalizeString(camera.location) === normalizeString(selectedProfile))
+    ? cameras.filter((camera) => normalizeCameraProfileKey(camera.location) === normalizeCameraProfileKey(selectedProfile))
     : cameras;
 
   return (

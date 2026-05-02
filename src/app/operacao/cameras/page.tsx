@@ -11,6 +11,7 @@ import {
   getPreferredVideoStreamUrl,
   isBrowserPlayableVideoUrl,
 } from '@/features/cameras/camera-media';
+import { uniqueSortedCameraProfiles } from '@/features/cameras/camera-profiles';
 import { useCameras } from '@/hooks/use-cameras';
 import { useProtectedRoute } from '@/hooks/use-protected-route';
 import type { Camera as CameraRecord } from '@/types/camera';
@@ -136,10 +137,6 @@ function normalizeString(value: unknown) {
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase();
-}
-
-function normalizeCameraProfile(value: unknown) {
-  return String(value ?? '').trim().replace(/\s+/g, ' ').toUpperCase();
 }
 
 function getGridClass(layout: CameraLayout) {
@@ -298,13 +295,7 @@ export default function OperacaoCâmerasPage() {
 
   const cameras = useMemo(() => camerasData?.data ?? [], [camerasData]);
   const profileOptions = useMemo(() => {
-    const profiles = cameras
-      .map((camera) => normalizeCameraProfile(camera.location))
-      .filter(Boolean);
-
-    return Array.from(new Set(profiles)).sort((left, right) =>
-      left.localeCompare(right, 'pt-BR', { numeric: true, sensitivity: 'base' })
-    );
+    return uniqueSortedCameraProfiles(cameras.map((camera) => camera.location));
   }, [cameras]);
 
   const filteredCâmeras = useMemo(() => {

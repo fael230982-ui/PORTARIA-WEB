@@ -31,6 +31,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { getCameraDiagnostics } from '@/features/cameras/camera-media';
+import { compareCameraProfiles, normalizeCameraProfile, uniqueSortedCameraProfiles } from '@/features/cameras/camera-profiles';
 import { TimedAlert } from '@/components/ui/timed-alert';
 import { useAuthStore } from '@/store/auth.store';
 import type {
@@ -149,10 +150,6 @@ function normalizeString(value: unknown) {
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase();
-}
-
-function normalizeCameraProfile(value: unknown) {
-  return String(value ?? '').trim().replace(/\s+/g, ' ').toUpperCase();
 }
 
 function statusBadgeClass(status: CameraStatus) {
@@ -1154,11 +1151,7 @@ export default function AdminCamerasPage() {
       const raw = window.localStorage.getItem(CAMERA_PROFILE_OPTIONS_STORAGE_KEY);
       const cached = raw ? (JSON.parse(raw) as unknown) : [];
       if (Array.isArray(cached)) {
-        setCustomCameraProfiles(
-          Array.from(new Set(cached.map(normalizeCameraProfile).filter(Boolean))).sort((left, right) =>
-            left.localeCompare(right, 'pt-BR', { numeric: true, sensitivity: 'base' })
-          )
-        );
+        setCustomCameraProfiles(uniqueSortedCameraProfiles(cached));
       }
     } catch {
       // Ignore invalid local cache for camera profiles.
@@ -1509,14 +1502,10 @@ export default function AdminCamerasPage() {
   }, [accessibleUnitIds, activeUnitId, filters, isAdminScope, unitOptions, visibleCameras]);
 
   const profileOptions = useMemo(() => {
-    const profiles = [
+    return uniqueSortedCameraProfiles([
       ...customCameraProfiles,
       ...visibleCameras.map((camera) => normalizeCameraProfile(camera.location)),
-    ].filter(Boolean);
-
-    return Array.from(new Set(profiles)).sort((left, right) =>
-      left.localeCompare(right, 'pt-BR', { numeric: true, sensitivity: 'base' })
-    );
+    ]);
   }, [customCameraProfiles, visibleCameras]);
 
   const handleAddCameraProfile = (profile: string) => {
@@ -1524,9 +1513,7 @@ export default function AdminCamerasPage() {
     if (!normalized) return;
 
     setCustomCameraProfiles((current) =>
-      Array.from(new Set([...current.map(normalizeCameraProfile), normalized])).sort((left, right) =>
-        left.localeCompare(right, 'pt-BR', { numeric: true, sensitivity: 'base' })
-      )
+      uniqueSortedCameraProfiles([...current.map(normalizeCameraProfile), normalized])
     );
   };
 
@@ -1596,7 +1583,7 @@ export default function AdminCamerasPage() {
       setCustomCameraProfiles((current) =>
         Array.from(
           new Set(current.map((profile) => (normalizeString(profile) === normalizeString(editingProfile) ? nextProfile : normalizeCameraProfile(profile))))
-        ).sort((left, right) => left.localeCompare(right, 'pt-BR', { numeric: true, sensitivity: 'base' }))
+        ).sort(compareCameraProfiles)
       );
       setFilters((current) => ({
         ...current,
