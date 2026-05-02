@@ -110,7 +110,8 @@ export function CameraPlayer({
   const preferredSnapshotUrl = getPreferredSnapshotUrl(cameraData, streamingData);
   const hasVideoStream = Boolean(preferredVideoStreamUrl);
   const replayReady = Boolean(replay?.replayUrl) && String(replay?.status ?? '').toUpperCase() === 'READY';
-  const effectiveStatus: CameraStatus = preferredVideoStreamUrl || preferredImageStreamUrl || preferredSnapshotUrl ? 'ONLINE' : cameraData?.status ?? 'OFFLINE';
+  const hasRenderableMedia = Boolean(preferredVideoStreamUrl || preferredImageStreamUrl || preferredSnapshotUrl);
+  const effectiveStatus: CameraStatus = hasRenderableMedia ? 'ONLINE' : cameraData?.status ?? 'OFFLINE';
   const compactVisualMode = compactOverlay;
 
   useEffect(() => {
@@ -415,7 +416,7 @@ export function CameraPlayer({
             {hasVideoStream && cameraData.streamUrl && !preferredVideoStreamUrl ? (
               <video
                 ref={videoRef}
-                className={`h-full w-full object-contain bg-black ${effectiveStatus === 'OFFLINE' && !compactVisualMode ? 'opacity-40' : ''}`}
+                className="h-full w-full object-contain bg-black"
                 playsInline
                 muted={isMuted}
                 controls={false}
@@ -428,7 +429,7 @@ export function CameraPlayer({
             ) : (
               <CameraFeed
                 camera={cameraData}
-                className={`h-full ${effectiveStatus === 'OFFLINE' && !compactVisualMode ? 'opacity-40' : ''}`}
+                className="h-full"
                 imageClassName="h-full w-full object-contain bg-black"
                 emptyLabel="Nenhum preview disponível"
                 emptyHint="Valide liveUrl, hlsUrl e webRtcUrl no contrato da câmera. imageStreamUrl e snapshotUrl devem ficar como apoio."
@@ -436,7 +437,7 @@ export function CameraPlayer({
               />
             )}
 
-            {effectiveStatus === 'OFFLINE' && !compactVisualMode ? (
+            {effectiveStatus === 'OFFLINE' && !compactVisualMode && !hasRenderableMedia ? (
               <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/70">
                 <div className="text-center">
                   <Cctv className="mx-auto mb-4 h-16 w-16 text-red-500" />

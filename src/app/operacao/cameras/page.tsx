@@ -821,7 +821,7 @@ export default function OperacaoCâmerasPage() {
                   >
                     <CameraFeed
                       camera={camera}
-                      className={camera.status === 'OFFLINE' ? 'opacity-45' : ''}
+                      className=""
                       imageClassName="h-full w-full object-cover"
                       emptyLabel="Sem imagem"
                       emptyHint="Aguardando stream ou snapshot."
