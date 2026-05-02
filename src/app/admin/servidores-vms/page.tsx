@@ -483,6 +483,18 @@ export default function AdminVmsServersPage() {
                 A Base URL enviada ao backend usa o endereço interno do VMS, conforme o contrato atual.
               </p>
             </label>
+            <label className="space-y-2 md:col-span-2">
+              <span className="text-sm text-slate-300">URL externa calculada</span>
+              <Input
+                value={composeBaseUrl(form.externalScheme, form.externalIp, form.externalPort) ?? ''}
+                readOnly
+                className="border-white/10 bg-slate-900 text-slate-300"
+                placeholder="Preencha IP externo e porta para visualizar"
+              />
+              <p className="text-xs text-slate-500">
+                Use este endereço para conferir se o navegador conseguirá acessar o VMS fora da rede local.
+              </p>
+            </label>
             <div className="space-y-3 rounded-2xl border border-white/10 bg-white/5 p-4 md:col-span-2">
               <div>
                 <p className="text-sm font-medium text-white">Endereço interno</p>
