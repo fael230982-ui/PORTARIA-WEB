@@ -509,6 +509,7 @@ function buildPayload(
       },
     },
     accessGroupIds: form.accessGroupIds,
+    cameraIds: form.alertCameraIds,
     condominiumId: condominiumId || null,
     status: form.status,
   };
