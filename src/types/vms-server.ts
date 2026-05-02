@@ -17,15 +17,22 @@ export type VmsServer = {
   internalIp?: string | null;
   internalPort?: number | null;
   internalBaseUrl?: string | null;
+  internalNativeStreamingUrl?: string | null;
   externalScheme?: string | null;
   externalIp?: string | null;
   externalPort?: number | null;
   externalBaseUrl?: string | null;
+  externalNativeStreamingUrl?: string | null;
+  nativeStreamingUrls?: {
+    internal?: string | null;
+    external?: string | null;
+  } | null;
   authType?: VmsServerAuthType | null;
   verifySsl?: boolean | null;
   timeoutSeconds?: number | null;
   operationMode?: string | null;
   capabilities?: VmsServerCapabilityFlags | null;
+  condominiumId?: string | null;
   status?: VmsServerStatus | null;
 };
 
@@ -39,6 +46,7 @@ export type VmsServerPayload = {
   externalScheme?: string | null;
   externalIp?: string | null;
   externalPort?: number | null;
+  condominiumId?: string | null;
   apiToken?: string | null;
   authType?: VmsServerAuthType | null;
   verifySsl?: boolean | null;

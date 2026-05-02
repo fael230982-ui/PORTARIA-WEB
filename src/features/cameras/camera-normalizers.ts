@@ -75,6 +75,15 @@ function normalizeStringArray(value: unknown) {
     : [];
 }
 
+function normalizeRouteUrls(value: CameraStreamingResponse['vmsStreamingUrls']) {
+  if (!value || typeof value !== 'object') return null;
+
+  return {
+    internal: resolveCameraMediaUrl(normalizeString(value.internal)),
+    external: resolveCameraMediaUrl(normalizeString(value.external)),
+  };
+}
+
 export function normalizeCamera(raw: CameraApiShape): Camera {
   return {
     id: String(raw.id ?? ''),
@@ -161,7 +170,7 @@ export function normalizeCameraStreamingResponse(
     webRtcUrl: resolveCameraMediaUrl(normalizeString(raw.webRtcUrl) ?? normalizeString(legacyRaw.web_rtc_url)),
     gatewayPath: normalizeString(raw.gatewayPath) ?? normalizeString(legacyRaw.gateway_path),
     vmsStreamingUrl: normalizeString(raw.vmsStreamingUrl) ?? normalizeString(legacyRaw.vms_streaming_url),
-    vmsStreamingUrls: raw.vmsStreamingUrls ?? legacyRaw.vms_streaming_urls ?? null,
+    vmsStreamingUrls: normalizeRouteUrls(raw.vmsStreamingUrls ?? legacyRaw.vms_streaming_urls ?? null),
     vmsSnapshotUrls: raw.vmsSnapshotUrls ?? legacyRaw.vms_snapshot_urls ?? null,
     vmsBaseUrls: raw.vmsBaseUrls ?? legacyRaw.vms_base_urls ?? null,
     cameraUuid: normalizeString(raw.cameraUuid),

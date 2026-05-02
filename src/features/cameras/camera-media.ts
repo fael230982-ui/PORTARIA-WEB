@@ -61,8 +61,8 @@ function resolvePlayableVideoUrl(value?: string | null) {
 }
 
 export function getPreferredVideoStreamUrl(
-  camera?: Pick<Camera, 'streamUrl' | 'preferredLiveUrl' | 'liveUrl' | 'hlsUrl' | 'webRtcUrl'> | null,
-  streaming?: Pick<CameraStreamingResponse, 'preferredLiveUrl' | 'liveUrl' | 'hlsUrl' | 'webRtcUrl'> | null
+  camera?: Pick<Camera, 'streamUrl' | 'preferredLiveUrl' | 'liveUrl' | 'hlsUrl' | 'webRtcUrl' | 'vmsStreamingUrl'> | null,
+  streaming?: Pick<CameraStreamingResponse, 'preferredLiveUrl' | 'liveUrl' | 'hlsUrl' | 'webRtcUrl' | 'vmsStreamingUrl' | 'vmsStreamingUrls'> | null
 ) {
   const candidates = [
     streaming?.preferredLiveUrl,
@@ -71,6 +71,9 @@ export function getPreferredVideoStreamUrl(
     camera?.liveUrl,
     streaming?.hlsUrl,
     camera?.hlsUrl,
+    streaming?.vmsStreamingUrls?.external,
+    streaming?.vmsStreamingUrl,
+    camera?.vmsStreamingUrl,
     camera?.streamUrl,
   ];
 

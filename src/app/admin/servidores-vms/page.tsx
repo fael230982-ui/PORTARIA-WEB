@@ -80,7 +80,7 @@ function parseBaseUrl(value?: string | null) {
   }
 }
 
-function buildPayload(form: FormState): VmsServerPayload {
+function buildPayload(form: FormState, condominiumId?: string | null): VmsServerPayload {
   const internalPort = Number(form.internalPort);
   const externalPort = Number(form.externalPort);
   const internalBaseUrl = composeBaseUrl(form.internalScheme, form.internalIp, form.internalPort);
@@ -95,6 +95,7 @@ function buildPayload(form: FormState): VmsServerPayload {
     externalScheme: toNullable(form.externalScheme),
     externalIp: toNullable(form.externalIp),
     externalPort: Number.isFinite(externalPort) && externalPort > 0 ? externalPort : null,
+    condominiumId: condominiumId || null,
     apiToken: toNullable(form.apiToken),
     authType: form.authType,
     verifySsl: form.verifySsl,
@@ -117,7 +118,7 @@ function readCachedVmsServers() {
 
 export default function AdminVmsServersPage() {
   const { canAccess, isChecking } = useProtectedRoute({ allowedRoles: ['ADMIN', 'MASTER'] });
-  useAuth();
+  const { user } = useAuth();
   const [servers, setServers] = useState<VmsServer[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -194,7 +195,7 @@ export default function AdminVmsServersPage() {
 
     try {
       if (editingServer) {
-        const payload = buildPayload(form);
+        const payload = buildPayload(form, editingServer.condominiumId ?? user?.condominiumId ?? user?.condominiumIds?.[0] ?? null);
         if (!form.apiToken.trim()) {
           delete payload.apiToken;
         }
@@ -208,7 +209,7 @@ export default function AdminVmsServersPage() {
           tone: 'success',
         });
       } else {
-        const createdServer = await vmsServersService.create(buildPayload(form));
+        const createdServer = await vmsServersService.create(buildPayload(form, user?.condominiumId ?? user?.condominiumIds?.[0] ?? null));
         setServers((current) => [createdServer, ...current.filter((server) => server.id !== createdServer.id)]);
         setMessage('Servidor VMS cadastrado.');
         setModalFeedback({

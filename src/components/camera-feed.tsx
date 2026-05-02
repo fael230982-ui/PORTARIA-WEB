@@ -89,6 +89,8 @@ export function CameraFeed({
       preferredLiveUrl: camera?.preferredLiveUrl ?? streamingData?.preferredLiveUrl ?? null,
       liveUrl: camera?.liveUrl ?? streamingData?.liveUrl ?? null,
       hlsUrl: camera?.hlsUrl ?? streamingData?.hlsUrl ?? null,
+      vmsStreamingUrl: camera?.vmsStreamingUrl ?? streamingData?.vmsStreamingUrl ?? null,
+      vmsStreamingUrls: streamingData?.vmsStreamingUrls ?? null,
       resolvedVideoUrl: videoStreamUrl,
       using: isHls ? 'hls' : 'video',
     });
