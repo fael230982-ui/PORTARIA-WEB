@@ -92,30 +92,17 @@ export function CameraFeed({
     if (!proxyAuthReady) return;
     setFailedVideoMediaKey(null);
     setFailedImageMediaKey(null);
-  }, [camera?.id, proxyAuthReady]);
+  }, [camera?.id, proxyAuthReady, videoStreamUrl]);
 
   useEffect(() => {
     const video = videoRef.current;
     if (!shouldUseVideo || !videoStreamUrl || !video) return;
 
     const isHls = videoStreamUrl.toLowerCase().split('?')[0].endsWith('.m3u8');
-    console.info('[camera-feed] URL recebida da API', {
-      cameraId: camera?.id,
-      preferredLiveUrl: camera?.preferredLiveUrl ?? streamingData?.preferredLiveUrl ?? null,
-      liveUrl: camera?.liveUrl ?? streamingData?.liveUrl ?? null,
-      hlsUrl: camera?.hlsUrl ?? streamingData?.hlsUrl ?? null,
-      vmsStreamingUrl: camera?.vmsStreamingUrl ?? streamingData?.vmsStreamingUrl ?? null,
-      vmsStreamingUrls: streamingData?.vmsStreamingUrls ?? null,
-      playback: streamingData?.playback ?? camera?.playback ?? null,
-      nativePlayerPayload: streamingData?.playback?.nativePlayerPayload ?? camera?.playback?.nativePlayerPayload ?? null,
-      resolvedVideoUrl: videoStreamUrl,
-      using: isHls ? 'hls' : 'video',
-    });
 
     if (!isHls) return;
 
     if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      console.info('[camera-feed] usando HLS nativo', { cameraId: camera?.id, url: videoStreamUrl });
       video.src = videoStreamUrl;
       return;
     }
@@ -141,15 +128,8 @@ export function CameraFeed({
           enableWorker: true,
           lowLatencyMode: true,
         });
-        console.info('[camera-feed] usando hls.js', { cameraId: camera?.id, url: videoStreamUrl });
         hlsInstance.loadSource(videoStreamUrl);
         hlsInstance.attachMedia(video);
-        hlsInstance.on(Hls.Events.MANIFEST_LOADED, () => {
-          console.info('[camera-feed] manifest loaded', { cameraId: camera?.id, url: videoStreamUrl });
-        });
-        hlsInstance.on(Hls.Events.LEVEL_LOADED, () => {
-          console.info('[camera-feed] level loaded', { cameraId: camera?.id, url: videoStreamUrl });
-        });
         hlsInstance.on(Hls.Events.ERROR, (_event, data) => {
           console.error('[camera-feed] player error', { cameraId: camera?.id, url: videoStreamUrl, data });
           if (data?.fatal) {
@@ -249,7 +229,7 @@ export function CameraFeed({
           preload="auto"
           controls={controls}
           onError={() => {
-            console.warn('[camera-feed] vídeo principal falhou; alternando para snapshot', {
+            console.warn('[camera-feed] vídeo principal indisponível; alternando para snapshot', {
               cameraId: camera.id,
               url: videoStreamUrl,
             });
