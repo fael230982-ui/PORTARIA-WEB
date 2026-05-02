@@ -2093,6 +2093,19 @@ export default function AdminCamerasPage() {
                           <Button
                             type="button"
                             variant="outline"
+                            onClick={() => {
+                              setFilters((current) => ({ ...current, profile }));
+                              setShowFilters(true);
+                              setOpenProfiles(false);
+                            }}
+                            disabled={usedBy === 0}
+                            className="rounded-xl border-cyan-400/30 bg-cyan-400/10 px-3 py-2 text-xs text-cyan-50 hover:bg-cyan-400/20 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Ver lista
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
                             onClick={() => beginEditProfile(profile)}
                             className="rounded-xl border-white/10 bg-white/5 px-3 py-2 text-xs text-white hover:bg-white/10"
                           >
