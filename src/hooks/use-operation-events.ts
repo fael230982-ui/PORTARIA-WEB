@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { getStreamCapabilities } from '@/services/auth.service';
-import { env } from '@/lib/env';
 import { useAuthStore } from '@/store/auth.store';
 import type { OperationEvent } from '@/types/operation';
 
@@ -32,13 +31,15 @@ export function useOperationEvents(enabled = false) {
         const canonicalTimeField = capabilities.canonicalTimeField || 'occurredAt';
 
         const { token, user } = useAuthStore.getState();
-        const url = new URL('/api/v1/events/stream', env.apiBaseUrl);
+        const cookieSecure = window.location.protocol === 'https:' ? '; Secure' : '';
+        const url = new URL('/api/proxy/events/stream', window.location.origin);
+
+        if (token) {
+          document.cookie = `camera_proxy_token=${encodeURIComponent(token)}; Path=/api/proxy; SameSite=Lax${cookieSecure}`;
+        }
 
         if (user?.selectedUnitId) {
           url.searchParams.set('selectedUnitId', user.selectedUnitId);
-        }
-        if (token) {
-          url.searchParams.set('token', token);
         }
 
         source = new EventSource(url.toString());
