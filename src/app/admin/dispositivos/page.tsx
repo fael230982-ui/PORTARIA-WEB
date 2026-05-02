@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowRightLeft,
-  Camera,
+  Cctv,
   Cpu,
   DoorClosed,
   DoorOpen,
@@ -18,6 +18,8 @@ import {
   Router,
   Save,
   Search,
+  ScanFace,
+  ServerCog,
   ShieldCheck,
   Trash2,
   Wifi,
@@ -31,12 +33,16 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { getApiErrorMessage } from '@/features/http/api-error';
 import { useAuth } from '@/hooks/use-auth';
+import { useCameras } from '@/hooks/use-cameras';
 import { useProtectedRoute } from '@/hooks/use-protected-route';
+import { useResidenceCatalog } from '@/hooks/use-residence-catalog';
 import { devicesService } from '@/services/devices.service';
 import { accessGroupsService } from '@/services/access-groups.service';
 import { faceEquipmentCatalogService, type FaceEquipmentCatalogEntry } from '@/services/face-equipment-catalog.service';
+import { vmsServersService } from '@/services/vms-servers.service';
 import { getAllPeople } from '@/services/people.service';
 import type { AccessGroup } from '@/types/access-group';
+import type { VmsServer } from '@/types/vms-server';
 import type {
   Device,
   DeviceControlResponse,
@@ -53,6 +59,10 @@ type DeviceForm = {
   type: DeviceType;
   vendor: string;
   model: string;
+  externalId: string;
+  externalUuid: string;
+  vmsServerId: string;
+  unitId: string;
   host: string;
   aiPort: string;
   webPort: string;
@@ -72,6 +82,7 @@ type DeviceForm = {
   interlockBlockedDeviceIds: string[];
   interlockOpenStateTtlSeconds: string;
   accessGroupIds: string[];
+  alertCameraIds: string[];
   status: DeviceStatus;
 };
 
@@ -92,11 +103,25 @@ type ControlForm = {
 
 type ActionFeedback = 'success' | 'pending' | 'error';
 
+type AuthScopedUnit = {
+  id?: string | null;
+  name?: string | null;
+  label?: string | null;
+  displayName?: string | null;
+  structureLabel?: string | null;
+  structureType?: string | null;
+  condominiumId?: string | null;
+};
+
 const initialForm: DeviceForm = {
   name: '',
   type: 'FACIAL_DEVICE',
   vendor: '',
   model: '',
+  externalId: '',
+  externalUuid: '',
+  vmsServerId: '',
+  unitId: '',
   host: '',
   aiPort: '80',
   webPort: '80',
@@ -116,6 +141,7 @@ const initialForm: DeviceForm = {
   interlockBlockedDeviceIds: [],
   interlockOpenStateTtlSeconds: '180',
   accessGroupIds: [],
+  alertCameraIds: [],
   status: 'OFFLINE',
 };
 
@@ -136,6 +162,71 @@ const initialControlForm: ControlForm = {
 
 const DEVICES_PENDING_SYNC_STORAGE_KEY = 'admin-devices-pending-sync';
 const DEVICES_PENDING_ENTRIES_STORAGE_KEY = 'admin-devices-pending-entries';
+const DEVICE_ALERT_CAMERAS_STORAGE_KEY = 'admin-device-alert-cameras';
+const DEVICE_VMS_SERVERS_STORAGE_KEY = 'admin-device-vms-servers';
+const DEVICE_ACCESS_GROUPS_STORAGE_KEY = 'admin-device-access-groups';
+
+function readDeviceAlertCameraMap() {
+  if (typeof window === 'undefined') return {} as Record<string, string[]>;
+  try {
+    const raw = window.localStorage.getItem(DEVICE_ALERT_CAMERAS_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    return Object.fromEntries(
+      Object.entries(parsed as Record<string, unknown>).map(([deviceId, cameraIds]) => [
+        deviceId,
+        Array.isArray(cameraIds) ? cameraIds.filter((id): id is string => typeof id === 'string') : [],
+      ])
+    );
+  } catch {
+    return {};
+  }
+}
+
+function persistDeviceAlertCameraMap(map: Record<string, string[]>) {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(DEVICE_ALERT_CAMERAS_STORAGE_KEY, JSON.stringify(map));
+}
+
+function readDeviceAlertCameraIds(deviceId?: string | null) {
+  if (!deviceId) return [] as string[];
+  return readDeviceAlertCameraMap()[deviceId] ?? [];
+}
+
+function persistDeviceAlertCameraIds(deviceId: string, cameraIds: string[]) {
+  const current = readDeviceAlertCameraMap();
+  const normalized = Array.from(new Set(cameraIds.filter(Boolean)));
+  if (normalized.length) {
+    current[deviceId] = normalized;
+  } else {
+    delete current[deviceId];
+  }
+  persistDeviceAlertCameraMap(current);
+  window.dispatchEvent(new StorageEvent('storage', { key: DEVICE_ALERT_CAMERAS_STORAGE_KEY }));
+}
+
+function readCachedList<T>(key: string): T[] {
+  if (typeof window === 'undefined') return [];
+
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed) ? (parsed as T[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function persistCachedList<T>(key: string, entries: T[]) {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(key, JSON.stringify(entries));
+  } catch {
+    // Cache failure must not block the screen.
+  }
+}
 
 function getDeviceCacheKey(condominiumId?: string | null) {
   return condominiumId ? `admin-devices:${condominiumId}` : 'admin-devices:global';
@@ -266,6 +357,8 @@ function shouldPreserveDevices(currentDevices: Device[], nextDevices: Device[]) 
 }
 
 const deviceTypeOptions: Array<{ value: DeviceType; label: string }> = [
+  { value: 'CAMERA', label: 'Câmera' },
+  { value: 'CAMERA_IA', label: 'Câmera IA' },
   { value: 'FACIAL_DEVICE', label: 'Dispositivo facial' },
 ];
 
@@ -292,9 +385,7 @@ function getErrorMessage(error: unknown, fallback: string) {
   return getApiErrorMessage(error, {
     fallback,
     byStatus: {
-      400: 'Confira os dados informados.',
       401: 'Sua sessão expirou. Entre novamente.',
-      403: 'Seu perfil não tem permissão para esta ação.',
       404: 'O backend não localizou este dispositivo para concluir a ação.',
       405: 'Essa ação ainda não está disponível para este tipo de dispositivo no backend.',
       502: 'O equipamento não respondeu. Verifique rede, endereço e credenciais.',
@@ -312,13 +403,24 @@ function getUsageLabel(type?: DeviceUsageType | null) {
 }
 
 function isCameraOnlyDevice(device: Device) {
-  return device.type === 'CAMERA' || device.type === 'CAMERA_IA';
+  return device.type === 'CAMERA';
 }
 
 function getDeviceVisual(device: Device): { Icon: LucideIcon; className: string; label: string } {
-  if (device.type === 'FACIAL_DEVICE' || device.type === 'IA_FACES') {
+  const deviceType = String(device.type ?? '');
+  const deviceModel = String(device.model ?? '').toUpperCase();
+
+  if (deviceType.includes('BIOMETRIC') || deviceType.includes('FINGERPRINT') || deviceModel.includes('BIOMETR')) {
     return {
       Icon: Fingerprint,
+      className: 'border-amber-400/25 bg-amber-400/10 text-amber-100',
+      label: 'Leitor biométrico',
+    };
+  }
+
+  if (device.type === 'FACIAL_DEVICE' || device.type === 'IA_FACES') {
+    return {
+      Icon: ScanFace,
       className: 'border-cyan-400/25 bg-cyan-400/10 text-cyan-100',
       label: 'Leitor facial',
     };
@@ -326,9 +428,9 @@ function getDeviceVisual(device: Device): { Icon: LucideIcon; className: string;
 
   if (device.type === 'CAMERA' || device.type === 'CAMERA_IA') {
     return {
-      Icon: Camera,
+      Icon: Cctv,
       className: 'border-sky-400/25 bg-sky-400/10 text-sky-100',
-      label: 'Câmera',
+      label: device.type === 'CAMERA_IA' ? 'Câmera IA' : 'Câmera',
     };
   }
 
@@ -381,6 +483,10 @@ function buildPayload(
     type: form.type,
     vendor: toNullableString(form.vendor),
     model: toNullableString(form.model),
+    externalId: toNullableString(form.externalId),
+    externalUuid: toNullableString(form.externalUuid),
+    vmsServerId: toNullableString(form.vmsServerId),
+    unitId: toNullableString(form.unitId),
     host: toNullableString(form.host),
     aiPort: toNullableNumber(form.aiPort),
     webPort: toNullableNumber(form.webPort),
@@ -429,6 +535,10 @@ function formFromDevice(device: Device): DeviceForm {
     type: normalizedType,
     vendor: device.vendor ?? '',
     model: device.model ?? '',
+    externalId: device.externalId ?? '',
+    externalUuid: device.externalUuid ?? '',
+    vmsServerId: device.vmsServerId ?? '',
+    unitId: device.unitId ?? '',
     host: device.host ?? '',
     aiPort: device.aiPort ? String(device.aiPort) : '',
     webPort: device.webPort ? String(device.webPort) : '',
@@ -448,13 +558,40 @@ function formFromDevice(device: Device): DeviceForm {
     interlockBlockedDeviceIds: device.remoteAccessConfig?.interlockConfig?.blockedByDeviceIds ?? [],
     interlockOpenStateTtlSeconds: String(device.remoteAccessConfig?.interlockConfig?.openStateTtlSeconds ?? 180),
     accessGroupIds: device.accessGroupIds ?? [],
+    alertCameraIds: device.cameraIds?.length ? device.cameraIds : readDeviceAlertCameraIds(device.id),
     status: device.status ?? 'OFFLINE',
   };
+}
+
+function getUnitOptionLabel(unit: {
+  structure?: { type?: string | null; label?: string | null } | null;
+  structureType?: string | null;
+  structureLabel?: string | null;
+  label?: string | null;
+}) {
+  const rawType = String(unit.structure?.type ?? unit.structureType ?? '').toUpperCase();
+  const typeLabel =
+    rawType === 'BLOCK'
+      ? 'BLOCO'
+      : rawType === 'QUAD'
+        ? 'QUADRA'
+        : rawType === 'LOT'
+          ? 'LOTE'
+          : rawType === 'STREET'
+            ? 'RUA'
+            : '';
+  const structureLabel = String(unit.structure?.label ?? unit.structureLabel ?? '').trim();
+  const unitLabel = String(unit.label ?? '').trim();
+  return [typeLabel && structureLabel ? `${typeLabel} ${structureLabel}` : structureLabel, unitLabel]
+    .filter(Boolean)
+    .join(' - ') || unitLabel || 'Unidade sem identificação';
 }
 
 export default function AdminDevicesPage() {
   const { isChecking, canAccess } = useProtectedRoute({ allowedRoles: ['ADMIN', 'MASTER'] });
   const { user } = useAuth();
+  const { data: camerasData } = useCameras({ enabled: canAccess });
+  const { units } = useResidenceCatalog(canAccess, user?.condominiumId ?? undefined);
   const [allDevices, setAllDevices] = useState<Device[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -462,10 +599,13 @@ export default function AdminDevicesPage() {
   const [search, setSearch] = useState('');
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [formMessage, setFormMessage] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
   const [snapshotUpdatedAt, setSnapshotUpdatedAt] = useState<string | null>(null);
   const [pendingDeviceIds, setPendingDeviceIds] = useState<string[]>([]);
   const [pendingDevices, setPendingDevices] = useState<Device[]>([]);
   const [equipmentCatalog, setEquipmentCatalog] = useState<FaceEquipmentCatalogEntry[]>([]);
+  const [vmsServers, setVmsServers] = useState<VmsServer[]>([]);
   const [accessGroups, setAccessGroups] = useState<AccessGroup[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
@@ -484,9 +624,44 @@ export default function AdminDevicesPage() {
   const accessGroupsSectionRef = useRef<HTMLDivElement | null>(null);
 
   const devices = useMemo(() => allDevices.filter((device) => !isCameraOnlyDevice(device)), [allDevices]);
+  const cameras = camerasData?.data ?? [];
   const hiddenCameraCount = allDevices.length - devices.length;
   const scopedCondominiumId = user?.condominiumId ?? user?.condominiumIds?.[0] ?? null;
   const usingSnapshot = Boolean(error && allDevices.length > 0);
+  const unitOptions = useMemo(() => {
+    const userUnits = ((user as typeof user & { units?: AuthScopedUnit[] })?.units ?? []).filter(
+      (unit): unit is AuthScopedUnit & { id: string } => Boolean(unit?.id)
+    );
+    const scopedUnitIds = new Set((user?.unitIds ?? []).filter(Boolean));
+    const sourceUnits =
+      userUnits.length > 0
+        ? userUnits.map((unit) => ({
+            id: unit.id,
+            label:
+              unit.displayName?.trim() ||
+              getUnitOptionLabel({
+                structureType: unit.structureType,
+                structureLabel: unit.structureLabel,
+                label: unit.label ?? unit.name ?? null,
+              }),
+            condominiumId: unit.condominiumId ?? null,
+          }))
+        : units
+            .filter((unit) => {
+              const condominiumOk = !scopedCondominiumId || unit.condominiumId === scopedCondominiumId;
+              const scopeOk = scopedUnitIds.size === 0 || scopedUnitIds.has(unit.id);
+              return condominiumOk && scopeOk;
+            })
+            .map((unit) => ({
+              id: unit.id,
+              label: getUnitOptionLabel(unit),
+              condominiumId: unit.condominiumId ?? null,
+            }));
+
+    return Array.from(new Map(sourceUnits.map((unit) => [unit.id, unit])).values()).sort((a, b) =>
+      a.label.localeCompare(b.label, 'pt-BR', { numeric: true, sensitivity: 'base' })
+    );
+  }, [scopedCondominiumId, units, user]);
 
   const filteredDevices = useMemo(() => {
     const normalized = search.trim().toLowerCase();
@@ -496,15 +671,18 @@ export default function AdminDevicesPage() {
         device.name,
         device.vendor,
         device.model,
+        device.externalId,
+        device.externalUuid,
         device.host,
         device.cameraName,
+        unitOptions.find((unit) => unit.id === device.unitId)?.label,
         getDeviceTypeLabel(device.type),
         getUsageLabel(device.deviceUsageType),
       ]
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(normalized))
     );
-  }, [devices, search]);
+  }, [devices, search, unitOptions]);
 
   const onlineCount = devices.filter((device) => device.status === 'ONLINE').length;
   const commandReadyCount = devices.filter((device) => device.host || device.remoteAccessConfig).length;
@@ -701,6 +879,32 @@ function getActionButtonClass(actionKey: string) {
     }
   }
 
+  async function refreshVmsServers() {
+    try {
+      const servers = await vmsServersService.list();
+      setVmsServers(servers);
+      persistCachedList(DEVICE_VMS_SERVERS_STORAGE_KEY, servers);
+      return servers;
+    } catch {
+      const cachedServers = readCachedList<VmsServer>(DEVICE_VMS_SERVERS_STORAGE_KEY);
+      setVmsServers((current) => (current.length > 0 ? current : cachedServers));
+      return cachedServers;
+    }
+  }
+
+  async function refreshAccessGroups() {
+    try {
+      const groups = await accessGroupsService.list();
+      setAccessGroups(groups);
+      persistCachedList(DEVICE_ACCESS_GROUPS_STORAGE_KEY, groups);
+      return groups;
+    } catch {
+      const cachedGroups = readCachedList<AccessGroup>(DEVICE_ACCESS_GROUPS_STORAGE_KEY);
+      setAccessGroups((current) => (current.length > 0 ? current : cachedGroups));
+      return cachedGroups;
+    }
+  }
+
   useEffect(() => {
     if (!canAccess) return;
     const cachedDevices = readCachedDevices(scopedCondominiumId);
@@ -724,10 +928,30 @@ function getActionButtonClass(actionKey: string) {
 
   useEffect(() => {
     if (!canAccess) return;
-    void accessGroupsService
-      .list()
-      .then((groups) => setAccessGroups(groups))
-      .catch(() => setAccessGroups([]));
+    const cachedServers = readCachedList<VmsServer>(DEVICE_VMS_SERVERS_STORAGE_KEY);
+    if (cachedServers.length > 0) {
+      setVmsServers(cachedServers);
+    }
+    void refreshVmsServers();
+  }, [canAccess]);
+
+  useEffect(() => {
+    if (modal !== 'form') return;
+    if (form.vmsServerId || vmsServers.length !== 1) return;
+    if (!(form.type === 'CAMERA_IA' || form.vendor === 'MAX_ROBOT' || form.cameraEnabled)) return;
+    setForm((current) => ({
+      ...current,
+      vmsServerId: current.vmsServerId || vmsServers[0].id,
+    }));
+  }, [form.cameraEnabled, form.type, form.vendor, form.vmsServerId, modal, vmsServers]);
+
+  useEffect(() => {
+    if (!canAccess) return;
+    const cachedGroups = readCachedList<AccessGroup>(DEVICE_ACCESS_GROUPS_STORAGE_KEY);
+    if (cachedGroups.length > 0) {
+      setAccessGroups(cachedGroups);
+    }
+    void refreshAccessGroups();
   }, [canAccess]);
 
   useEffect(() => {
@@ -758,6 +982,8 @@ function getActionButtonClass(actionKey: string) {
     setForm(initialForm);
     setError(null);
     setMessage(null);
+    setFormError(null);
+    setFormMessage(null);
     setControlError(null);
     setControlMessage(null);
     setModal('form');
@@ -769,6 +995,8 @@ function getActionButtonClass(actionKey: string) {
     setFocusAccessGroupsOnOpen(false);
     setError(null);
     setMessage(null);
+    setFormError(null);
+    setFormMessage(null);
     setModal('form');
   }
 
@@ -778,6 +1006,8 @@ function getActionButtonClass(actionKey: string) {
     setFocusAccessGroupsOnOpen(true);
     setError(null);
     setMessage(null);
+    setFormError(null);
+    setFormMessage(null);
     setModal('form');
   }
 
@@ -805,10 +1035,24 @@ function getActionButtonClass(actionKey: string) {
     setSaving(true);
     setError(null);
     setMessage(null);
+    setFormError(null);
+    setFormMessage(null);
 
     try {
       if (!form.name.trim()) {
         throw new Error('Informe o nome do dispositivo.');
+      }
+
+      if ((form.vendor === 'MAX_ROBOT' || form.type === 'CAMERA_IA') && !form.externalId.trim()) {
+        throw new Error('Informe o ID externo do equipamento. Para Max Robot, use o DeviceID enviado nos eventos snap/verify.');
+      }
+
+      if ((form.vendor === 'MAX_ROBOT' || form.type === 'CAMERA_IA') && !form.streamUrl.trim()) {
+        throw new Error('Informe a URL de stream da Camera IA. O backend exige o campo streamUrl para salvar esse tipo de equipamento.');
+      }
+
+      if ((form.vendor === 'MAX_ROBOT' || form.type === 'CAMERA_IA') && !form.vmsServerId.trim()) {
+        throw new Error('Selecione o servidor VMS da Camera IA. O backend exige vmsServerId para salvar esse tipo de equipamento.');
       }
 
       if (selectedDevice) {
@@ -816,6 +1060,7 @@ function getActionButtonClass(actionKey: string) {
           selectedDevice.id,
           buildPayload(form, scopedCondominiumId, { preserveBlankCredentials: true })
         );
+        persistDeviceAlertCameraIds(updatedDevice.id, form.alertCameraIds);
         const nextDevices = mergeDeviceList(allDevices, updatedDevice);
         setAllDevices(nextDevices);
         setPendingDevices((currentPendingDevices) => {
@@ -825,10 +1070,13 @@ function getActionButtonClass(actionKey: string) {
         });
         persistCachedDevices(scopedCondominiumId, nextDevices);
         setSnapshotUpdatedAt(readCachedDevicesTimestamp(scopedCondominiumId));
-        setMessage('Dispositivo atualizado. Se a lista do servidor oscilar, o item continuará visível com a última atualização salva.');
+        const successMessage = 'Dispositivo atualizado. Se a lista do servidor oscilar, o item continuará visível com a última atualização salva.';
+        setMessage(successMessage);
+        setFormMessage(successMessage);
       } else {
         const createResult = await devicesService.create(buildPayload(form, scopedCondominiumId));
         const createdDevice = createResult.device;
+        persistDeviceAlertCameraIds(createdDevice.id, form.alertCameraIds);
         const nextDevices = mergeDeviceList(allDevices, createdDevice);
         setAllDevices(nextDevices);
         setPendingDevices((currentPendingDevices) => {
@@ -843,17 +1091,25 @@ function getActionButtonClass(actionKey: string) {
           persistPendingDeviceIds(nextPending);
           return nextPending;
         });
-        setMessage(
+        const successMessage =
           createResult.controlIdProvisioning?.ok === false
             ? `Device salvo, mas o provisionamento online do Control iD falhou. ${createResult.controlIdProvisioning.message}`
-            : 'Dispositivo cadastrado. Ele ficará como sincronização pendente até o servidor confirmar esse registro na lista.'
-        );
+            : createdDevice.cameraId || createdDevice.cameraIds?.length
+              ? 'Dispositivo cadastrado e câmera integrada vinculada automaticamente.'
+              : 'Dispositivo cadastrado. Ele ficará como sincronização pendente até o servidor confirmar esse registro na lista.';
+        setMessage(successMessage);
+        setFormMessage(successMessage);
       }
 
-      setModal(null);
       void loadDevices({ preserveExistingOnEmpty: true });
+      window.setTimeout(() => {
+        setModal((current) => (current === 'form' ? null : current));
+        setFormMessage(null);
+      }, 2500);
     } catch (saveError) {
-      setError(getErrorMessage(saveError, 'Não foi possível salvar o dispositivo.'));
+      const nextError = getErrorMessage(saveError, 'Não foi possível salvar o dispositivo.');
+      setError(nextError);
+      setFormError(nextError);
     } finally {
       setSaving(false);
     }
@@ -873,6 +1129,7 @@ function getActionButtonClass(actionKey: string) {
 
     try {
       await devicesService.remove(device.id);
+      persistDeviceAlertCameraIds(device.id, []);
 
       const nextDevices = allDevices.filter((item) => item.id !== device.id);
       setAllDevices(nextDevices);
@@ -1221,7 +1478,7 @@ function getActionButtonClass(actionKey: string) {
                         {getDeviceTypeLabel(device.type)} · {getUsageLabel(device.deviceUsageType)}
                       </p>
                       <p className="mt-1 text-sm text-slate-500">
-                        {[device.vendor, device.model, device.host].filter(Boolean).join(' · ') || 'Sem detalhes de conexão cadastrados'}
+                        {[device.vendor, device.model, device.externalId ? `ID ${device.externalId}` : null, device.host].filter(Boolean).join(' · ') || 'Sem detalhes de conexão cadastrados'}
                       </p>
                       {device.accessGroupNames?.length ? (
                         <p className="mt-2 text-xs text-emerald-200">
@@ -1296,6 +1553,17 @@ function getActionButtonClass(actionKey: string) {
         onClose={() => setModal(null)}
         maxWidth="xl"
       >
+        {(formMessage || formError) ? (
+          <div
+            className={`mb-5 rounded-2xl border px-4 py-3 text-sm ${
+              formError
+                ? 'border-red-500/30 bg-red-500/10 text-red-100'
+                : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-100'
+            }`}
+          >
+            {formError || formMessage}
+          </div>
+        ) : null}
         <form onSubmit={saveDevice} className="space-y-5">
           <div className="rounded-2xl border border-white/10 bg-slate-900/60 px-4 py-3 text-sm text-slate-300">
             Preencha primeiro o essencial: <span className="font-medium text-white">nome, IP, porta web, usuário e senha</span>.
@@ -1308,6 +1576,15 @@ function getActionButtonClass(actionKey: string) {
             </Link>{' '}
             e vinculado na câmera correspondente.
           </div>
+          {equipmentCatalog.length ? (
+            <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
+              Catálogo carregado: {catalogVendors.length} fabricante(s) e {equipmentCatalog.length} modelo(s). Ao escolher fabricante e modelo, o tipo do dispositivo é preenchido automaticamente.
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+              Catálogo de fabricantes/modelos indisponível agora. Você ainda pode preencher fabricante e modelo manualmente.
+            </div>
+          )}
           <div className="grid gap-4 md:grid-cols-2">
             <label className="space-y-1 text-sm text-slate-300">
               Nome
@@ -1349,7 +1626,20 @@ function getActionButtonClass(actionKey: string) {
               {catalogModels.length > 0 ? (
                 <select
                   value={form.model}
-                  onChange={(event) => setForm({ ...form, model: event.target.value })}
+                  onChange={(event) => {
+                    const nextModel = event.target.value;
+                    const catalogEntry = equipmentCatalog.find((entry) => entry.vendor === form.vendor.trim() && entry.model === nextModel);
+                    const nextType = (catalogEntry?.deviceType as DeviceType | undefined) ?? form.type;
+                    const isMaxRobotCameraIa = catalogEntry?.vendor === 'MAX_ROBOT' && nextType === 'CAMERA_IA';
+                    setForm((current) => ({
+                      ...current,
+                      model: nextModel,
+                      type: nextType,
+                      cameraEnabled: isMaxRobotCameraIa ? true : current.cameraEnabled,
+                      monitoringEnabled: isMaxRobotCameraIa ? true : current.monitoringEnabled,
+                      aiPort: isMaxRobotCameraIa && !current.aiPort.trim() ? '8080' : current.aiPort,
+                    }));
+                  }}
                   className="h-10 w-full rounded-md border border-white/10 bg-slate-900 px-3 text-sm text-white"
                 >
                   <option value="">Selecione o modelo</option>
@@ -1363,10 +1653,12 @@ function getActionButtonClass(actionKey: string) {
                 <Input value={form.model} onChange={(event) => setForm({ ...form, model: event.target.value })} className="border-white/10 bg-slate-900 text-white" />
               )}
               {selectedCatalogModel ? (
-                <span className="block text-xs text-slate-500">
-                  Tipo: {selectedCatalogModel.deviceType || 'não informado'}
-                  {selectedCatalogModel.eventWebhookPath ? ` | Webhook: ${selectedCatalogModel.eventWebhookPath}` : ''}
-                </span>
+                <div className="mt-2 rounded-xl border border-cyan-500/20 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-100">
+                  Modelo reconhecido pelo catálogo. Tipo aplicado: <strong>{getDeviceTypeLabel(form.type)}</strong>
+                  {selectedCatalogModel.eventWebhookPath ? (
+                    <span className="block text-cyan-200/80">Webhook: {selectedCatalogModel.eventWebhookPath}</span>
+                  ) : null}
+                </div>
               ) : null}
             </label>
             <label className="space-y-1 text-sm text-slate-300">
@@ -1374,11 +1666,52 @@ function getActionButtonClass(actionKey: string) {
               <Input value={form.host} onChange={(event) => setForm({ ...form, host: event.target.value })} placeholder="192.168.0.10" className="border-white/10 bg-slate-900 text-white" />
             </label>
             <label className="space-y-1 text-sm text-slate-300">
+              ID externo do equipamento
+              <Input
+                value={form.externalId}
+                onChange={(event) => setForm({ ...form, externalId: event.target.value })}
+                placeholder={form.vendor === 'MAX_ROBOT' || form.type === 'CAMERA_IA' ? 'Ex.: 1013680' : 'ID enviado pelo equipamento'}
+                className="border-white/10 bg-slate-900 text-white"
+              />
+              {form.vendor === 'MAX_ROBOT' || form.type === 'CAMERA_IA' ? (
+                <span className="block text-xs text-amber-200">
+                  Para Camera IA Max Robot, informe o DeviceID que chega nos eventos snap/verify. Sem isso o backend nao associa os eventos ao dispositivo.
+                </span>
+              ) : null}
+            </label>
+            <label className="space-y-1 text-sm text-slate-300">
+              UUID externo
+              <Input
+                value={form.externalUuid}
+                onChange={(event) => setForm({ ...form, externalUuid: event.target.value })}
+                placeholder="Opcional"
+                className="border-white/10 bg-slate-900 text-white"
+              />
+            </label>
+            <label className="space-y-1 text-sm text-slate-300">
               Uso
               <select value={form.deviceUsageType} onChange={(event) => setForm({ ...form, deviceUsageType: event.target.value as DeviceForm['deviceUsageType'] })} className="h-10 w-full rounded-md border border-white/10 bg-slate-900 px-3 text-sm text-white">
                 <option value="">Não configurado</option>
                 {usageOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
               </select>
+            </label>
+            <label className="space-y-1 text-sm text-slate-300">
+              Unidade vinculada
+              <select
+                value={form.unitId}
+                onChange={(event) => setForm({ ...form, unitId: event.target.value })}
+                className="h-10 w-full rounded-md border border-white/10 bg-slate-900 px-3 text-sm text-white"
+              >
+                <option value="">Área comum do condomínio</option>
+                {unitOptions.map((unit) => (
+                  <option key={unit.id} value={unit.id}>
+                    {unit.label}
+                  </option>
+                ))}
+              </select>
+              <span className="block text-xs text-slate-500">
+                Use unidade quando o equipamento atender uma residência específica. Área comum fica disponível conforme permissões gerais.
+              </span>
             </label>
             <label className="space-y-1 text-sm text-slate-300">
               Porta de comunicação
@@ -1411,6 +1744,83 @@ function getActionButtonClass(actionKey: string) {
               />
             </label>
           </div>
+
+          {form.type === 'CAMERA_IA' || form.vendor === 'MAX_ROBOT' || form.cameraEnabled ? (
+            <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/10 p-4">
+              <p className="text-sm font-medium text-cyan-50">Dados de video da Camera IA</p>
+              <p className="mt-1 text-xs text-cyan-100/80">
+                Para Camera IA, o backend exige a URL de stream. Use a URL oficial informada pelo equipamento ou pelo servidor VMS.
+              </p>
+              <div className="mt-4 grid gap-4 md:grid-cols-2">
+                <label className="space-y-1 text-sm text-cyan-50 md:col-span-2">
+                  <span className="flex items-center justify-between gap-3">
+                    <span>Servidor VMS</span>
+                    <button
+                      type="button"
+                      onClick={() => void refreshVmsServers()}
+                      className="inline-flex items-center gap-1 rounded-lg border border-cyan-400/20 bg-cyan-400/10 px-2 py-1 text-xs text-cyan-50 hover:bg-cyan-400/20"
+                    >
+                      <RefreshCw className="h-3 w-3" />
+                      Atualizar
+                    </button>
+                  </span>
+                  <select
+                    value={form.vmsServerId}
+                    onChange={(event) => setForm({ ...form, vmsServerId: event.target.value })}
+                    className="h-10 w-full rounded-md border border-cyan-400/20 bg-slate-950 px-3 text-sm text-white"
+                  >
+                    <option value="">Selecione o servidor VMS</option>
+                    {vmsServers.map((server) => (
+                      <option key={server.id} value={server.id}>
+                        {[server.name, server.vendor].filter(Boolean).join(' - ')}
+                      </option>
+                    ))}
+                  </select>
+                  {vmsServers.length === 0 ? (
+                    <span className="block text-xs text-amber-200">
+                      Nenhum servidor VMS carregado agora. Clique em atualizar; se continuar vazio, verifique a tela de Servidores VMS.
+                    </span>
+                  ) : null}
+                </label>
+                <label className="space-y-1 text-sm text-cyan-50 md:col-span-2">
+                  Unidade vinculada
+                  <select
+                    value={form.unitId}
+                    onChange={(event) => setForm({ ...form, unitId: event.target.value })}
+                    className="h-10 w-full rounded-md border border-cyan-400/20 bg-slate-950 px-3 text-sm text-white"
+                  >
+                    <option value="">Área comum do condomínio</option>
+                    {unitOptions.map((unit) => (
+                      <option key={unit.id} value={unit.id}>
+                        {unit.label}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="block text-xs text-cyan-100/80">
+                    Para câmera em frente a uma residência, selecione a unidade. Para área comum, deixe vazio.
+                  </span>
+                </label>
+                <label className="space-y-1 text-sm text-cyan-50">
+                  URL de stream
+                  <Input
+                    value={form.streamUrl}
+                    onChange={(event) => setForm({ ...form, streamUrl: event.target.value })}
+                    placeholder="Ex.: rtsp://192.168.0.71:554/live/main"
+                    className="border-cyan-400/20 bg-slate-950 text-white"
+                  />
+                </label>
+                <label className="space-y-1 text-sm text-cyan-50">
+                  URL de snapshot
+                  <Input
+                    value={form.snapshotUrl}
+                    onChange={(event) => setForm({ ...form, snapshotUrl: event.target.value })}
+                    placeholder="Opcional"
+                    className="border-cyan-400/20 bg-slate-950 text-white"
+                  />
+                </label>
+              </div>
+            </div>
+          ) : null}
 
           <div className="grid gap-3 md:grid-cols-3">
             {[
@@ -1537,7 +1947,51 @@ function getActionButtonClass(actionKey: string) {
             </div>
           </div>
 
+          <div className="rounded-2xl border border-white/10 bg-slate-900/70 p-4">
+            <p className="text-sm font-medium text-white">Câmeras vinculadas a alertas</p>
+            <p className="mt-1 text-xs text-slate-400">
+              Se este dispositivo gerar uma ocorrência, estas câmeras serão abertas automaticamente no monitor externo.
+            </p>
+            {cameras.length ? (
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                {cameras.map((camera) => {
+                  const checked = form.alertCameraIds.includes(camera.id);
+                  return (
+                    <label key={camera.id} className="flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-slate-950/60 px-3 py-3 text-sm text-slate-200 hover:bg-white/5">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => setForm((current) => ({ ...current, alertCameraIds: toggleId(current.alertCameraIds, camera.id) }))}
+                        className="mt-1"
+                      />
+                      <span>
+                        <span className="block font-medium text-white">{camera.name}</span>
+                        <span className="text-xs text-slate-400">
+                          {[camera.location, camera.status, camera.unitName].filter(Boolean).join(' | ') || 'Sem localização informada'}
+                        </span>
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="mt-4 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">
+                Nenhuma câmera cadastrada para vincular a este dispositivo.
+              </div>
+            )}
+          </div>
+
           <div ref={accessGroupsSectionRef} className={`rounded-2xl border p-4 ${focusAccessGroupsOnOpen ? 'border-emerald-400/50 bg-emerald-500/10' : 'border-white/10 bg-slate-900/70'}`}>
+            <div className="mb-3 flex items-center justify-end">
+              <button
+                type="button"
+                onClick={() => void refreshAccessGroups()}
+                className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-white/10 px-2 py-1 text-xs text-white hover:bg-white/15"
+              >
+                <RefreshCw className="h-3 w-3" />
+                Atualizar grupos
+              </button>
+            </div>
             <p className="text-sm font-medium text-white">Grupos de acesso físico</p>
             <p className="mt-1 text-xs text-slate-400">
               Vincule este equipamento aos grupos que podem receber permissão facial neste dispositivo.

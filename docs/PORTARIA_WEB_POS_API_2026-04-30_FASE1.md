@@ -144,5 +144,15 @@ Próxima checagem:
 
 - capturar request payload final;
 - capturar response body completo;
-- retestar no navegador se o fluxo novo de importação eliminou o `400 Bad Request`;
-- se ainda falhar, validar se o backend exige algum campo adicional além de `cameraId`.
+- retestar no navegador após correção backend;
+- a reprodução real mostrou que o endpoint de importação responde `400` com `streamUrl inválida: porta ausente`;
+- a câmera VMS `FRENTE - 1` vem do VMS com `rtsp://192.168.0.153/cam/realmonitor?...`, sem `:554`;
+- o endpoint `/cameras` também não pode ser usado como fallback, pois o backend respondeu que o cadastro direto foi desativado;
+- conclusão: o backend precisa normalizar a porta padrão RTSP no fluxo `/integrations/vms/servers/{server_id}/cameras/import` ou aceitar a URL sem porta.
+
+## Ajustes adicionais de front
+
+- Admin > Servidores VMS recebeu botão `Testar comunicação`, usando a consulta de câmeras do servidor como validação prática.
+- Admin > Dispositivos agora exibe também `Câmera` e `Câmera IA` como tipos permitidos pelo contrato `PublicCameraDeviceType`.
+- O catálogo de equipamentos agora mostra contagem de fabricantes/modelos carregados.
+- Ao selecionar um modelo do catálogo, o tipo do device é ajustado automaticamente conforme `deviceType` retornado pelo backend.
