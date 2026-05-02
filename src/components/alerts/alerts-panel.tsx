@@ -62,6 +62,7 @@ export function AlertsPanel({
   const { data: fetchedAlerts, isLoading, refetch, isFetching } = useAlerts({
     limit,
     enabled: !providedAlerts,
+    refetchInterval: 5000,
   });
   const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
   const [resolutionPreset, setResolutionPreset] = useState('');

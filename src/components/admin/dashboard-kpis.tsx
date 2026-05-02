@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import { Users, BellRing, Package, Camera } from 'lucide-react';
+import { Users, BellRing, Package, Cctv } from 'lucide-react';
 
 type KpiItem = {
   title: string;
@@ -38,7 +38,7 @@ const kpis: KpiItem[] = [
   {
     title: 'Câmeras Online',
     value: '24/24',
-    icon: Camera,
+    icon: Cctv,
     colorClass: 'text-green-300',
   },
 ];

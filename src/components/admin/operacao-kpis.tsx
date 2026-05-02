@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
-import { Activity, ShieldCheck, Camera, Wifi } from 'lucide-react';
+import { Activity, ShieldCheck, Cctv, Wifi } from 'lucide-react';
 
 type KpiItem = {
   title: string;
@@ -28,7 +28,7 @@ const kpis: KpiItem[] = [
   {
     title: 'Câmeras Online',
     value: '24/24',
-    icon: Camera,
+    icon: Cctv,
     helper: 'Monitoramento ativo',
     colorClass: 'text-purple-300',
   },

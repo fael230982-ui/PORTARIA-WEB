@@ -86,7 +86,7 @@ export function MetricCard({ icon, label, value, unit, trend }: MetricCardProps)
             {label}
           </p>
           <div className="mt-3 flex items-baseline justify-center gap-2">
-            <span className="text-3xl font-black tabular-nums text-white">{value}</span>
+            <span className="text-center text-3xl font-black tabular-nums text-white">{value}</span>
             {unit && <span className="text-sm text-slate-400">{unit}</span>}
           </div>
           {trend && (

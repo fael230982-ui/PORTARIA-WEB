@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import { WifiOff, Camera as CameraIcon } from 'lucide-react';
+import { WifiOff, Cctv } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { CameraFeed } from '@/components/camera-feed';
@@ -51,7 +51,7 @@ export function CameraView({ activeCameraId }: CameraViewProps) {
     return (
       <div className="flex h-full items-center justify-center rounded-2xl border border-dashed border-white/15 bg-slate-950 text-slate-400">
         <div className="text-center">
-          <CameraIcon className="mx-auto mb-3 h-10 w-10" />
+          <Cctv className="mx-auto mb-3 h-10 w-10" />
           <p className="text-sm">Nenhuma câmera disponível</p>
         </div>
       </div>
@@ -75,7 +75,7 @@ export function CameraView({ activeCameraId }: CameraViewProps) {
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <CardTitle className="flex items-center gap-2 truncate text-base">
-              <CameraIcon className="h-4 w-4 flex-shrink-0" />
+              <Cctv className="h-4 w-4 flex-shrink-0" />
               <span className="truncate">{camera.name}</span>
             </CardTitle>
             <p className="mt-1 truncate text-sm text-slate-400">

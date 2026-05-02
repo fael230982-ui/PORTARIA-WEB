@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { format } from 'date-fns';
 import {
   AlertTriangle,
-  Camera,
+  Cctv,
   Download,
   History,
   LoaderCircle,
@@ -231,7 +231,7 @@ export function CameraPlayer({
         <CardContent className="p-0">
           <div className="flex h-64 items-center justify-center rounded-lg bg-slate-900">
             <div className="text-center">
-              <Camera className="mx-auto mb-4 h-12 w-12 text-slate-600" />
+              <Cctv className="mx-auto mb-4 h-12 w-12 text-slate-600" />
               <p className="text-slate-400">Selecione uma câmera</p>
             </div>
           </div>
@@ -409,7 +409,7 @@ export function CameraPlayer({
             {effectiveStatus === 'OFFLINE' && !compactVisualMode ? (
               <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/70">
                 <div className="text-center">
-                  <Camera className="mx-auto mb-4 h-16 w-16 text-red-500" />
+                  <Cctv className="mx-auto mb-4 h-16 w-16 text-red-500" />
                   <p className="mb-2 text-white">Câmera offline</p>
                   <p className="text-sm text-slate-400">{cameraData.lastSeen || 'Sem último contato informado'}</p>
                 </div>
@@ -493,7 +493,7 @@ export function CameraPlayer({
                 <Popover open={showSettings} onOpenChange={setShowSettings}>
                   <PopoverTrigger asChild>
                     <Button variant="ghost" size="sm" className="ml-auto h-10 w-10 p-0">
-                      <Camera className="h-4 w-4" />
+                      <Cctv className="h-4 w-4" />
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent className="ml-4 w-56 border-white/10 bg-slate-800 p-3">
@@ -559,7 +559,7 @@ export function CameraPlayer({
                     className="h-8 w-full justify-start text-left text-xs hover:bg-green-500/20"
                     onClick={() => handleAction('save-clip')}
                   >
-                    <Camera className="mr-2 h-3 w-3 text-green-400" />
+                    <Cctv className="mr-2 h-3 w-3 text-green-400" />
                     Salvar clipe
                   </Button>
 

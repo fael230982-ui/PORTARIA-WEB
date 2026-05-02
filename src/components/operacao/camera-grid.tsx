@@ -1,7 +1,7 @@
 'use client';
 
 import { Card, CardContent } from '@/components/ui/card';
-import { Camera } from 'lucide-react';
+import { Cctv } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { CameraSnapshot } from '@/components/camera-snapshot';
 import { CameraStatusIndicator } from '@/components/operacao/camera-status-indicator';
@@ -75,7 +75,7 @@ export function CameraGrid({
                 )
               ) : (
                 <div className="flex h-full items-center justify-center text-slate-600">
-                  <Camera className="h-12 w-12 opacity-20" />
+                  <Cctv className="h-12 w-12 opacity-20" />
                 </div>
               )}
 
@@ -86,7 +86,7 @@ export function CameraGrid({
               {isActive ? (
                 <div className={`absolute inset-0 flex items-center justify-center ${brandClasses.activeOverlay}`}>
                   <div className="text-center">
-                    <Camera className={`mx-auto mb-2 h-12 w-12 ${brandClasses.accentTextSoft}`} />
+                    <Cctv className={`mx-auto mb-2 h-12 w-12 ${brandClasses.accentTextSoft}`} />
                     <p className="font-medium text-white">Camera ativa</p>
                   </div>
                 </div>

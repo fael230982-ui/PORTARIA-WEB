@@ -1,5 +1,5 @@
 import { Badge } from '@/components/ui/badge';
-import { Camera, Monitor, AlertTriangle } from 'lucide-react';
+import { Cctv, Monitor, AlertTriangle } from 'lucide-react';
 import type { CameraStatus } from '@/types/camera';
 
 type CameraStatusIndicatorProps = {
@@ -18,7 +18,7 @@ const statusConfig = {
   OFFLINE: {
     label: 'Offline',
     color: 'bg-red-500/20 text-red-300 border-red-500/30',
-    icon: Camera,
+    icon: Cctv,
   },
 } as const;
 

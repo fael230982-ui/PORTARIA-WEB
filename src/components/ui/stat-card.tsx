@@ -17,7 +17,7 @@ export function StatCard({ icon, label, value, helper, trend }: Props) {
       <div className="flex items-start justify-between">
         <div>
           <p className="text-sm text-slate-400">{label}</p>
-          <h3 className="mt-3 text-4xl font-semibold text-white">{value}</h3>
+          <h3 className="mt-3 text-center text-4xl font-semibold tabular-nums text-white">{value}</h3>
           {helper ? (
             <p className="mt-3 text-sm text-slate-500">{helper}</p>
           ) : null}
