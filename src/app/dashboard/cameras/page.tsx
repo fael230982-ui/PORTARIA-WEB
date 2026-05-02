@@ -4,6 +4,23 @@ import { CameraFeed } from '@/components/camera-feed';
 import { PageContainer } from '@/components/layout/page-container';
 import { useAuth } from '@/hooks/use-auth';
 import { useCameras } from '@/hooks/use-cameras';
+import type { Camera } from '@/types/camera';
+
+function compareResidentCameras(left: Camera, right: Camera) {
+  if (left.residentMainSuggested !== right.residentMainSuggested) {
+    return left.residentMainSuggested ? -1 : 1;
+  }
+
+  const leftGroupOrder = left.residentCameraGroupOrder ?? Number.MAX_SAFE_INTEGER;
+  const rightGroupOrder = right.residentCameraGroupOrder ?? Number.MAX_SAFE_INTEGER;
+  if (leftGroupOrder !== rightGroupOrder) return leftGroupOrder - rightGroupOrder;
+
+  const leftOrder = left.residentDisplayOrder ?? Number.MAX_SAFE_INTEGER;
+  const rightOrder = right.residentDisplayOrder ?? Number.MAX_SAFE_INTEGER;
+  if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+
+  return String(left.name ?? '').localeCompare(String(right.name ?? ''), 'pt-BR', { numeric: true, sensitivity: 'base' });
+}
 
 export default function CamerasPage() {
   const { user } = useAuth();
@@ -13,7 +30,7 @@ export default function CamerasPage() {
     unitId: activeUnitId ?? undefined,
     enabled: Boolean(activeUnitId),
   });
-  const cameras = data?.data ?? [];
+  const cameras = [...(data?.data ?? [])].sort(compareResidentCameras);
 
   return (
     <PageContainer title="Câmeras" description="Veja as câmeras da sua unidade e das áreas comuns do condomínio.">

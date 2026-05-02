@@ -44,6 +44,11 @@ export type Camera = {
   accessGroupIds?: string[];
   accessGroupNames?: string[];
   residentVisibleUnitIds?: string[];
+  residentDisplayOrder?: number | null;
+  residentMainSuggested?: boolean;
+  residentCameraGroupId?: string | null;
+  residentCameraGroupName?: string | null;
+  residentCameraGroupOrder?: number | null;
   visibilityScope?: string | null;
   streaming?: Record<string, unknown> | null;
   vmsProvisioning?: Record<string, unknown> | null;
@@ -145,6 +150,9 @@ export type CameraCreateRequest = {
   unitId?: string | null;
   personId?: string | null;
   accessGroupIds?: string[];
+  residentDisplayOrder?: number | null;
+  residentMainSuggested?: boolean | null;
+  residentCameraGroupId?: string | null;
 };
 
 export type CameraUpdateRequest = Partial<CameraCreateRequest>;

@@ -37,6 +37,11 @@ type CameraApiShape = Partial<Camera> & {
   access_group_ids?: string[] | null;
   access_group_names?: string[] | null;
   resident_visible_unit_ids?: string[] | null;
+  resident_display_order?: number | string | null;
+  resident_main_suggested?: boolean | null;
+  resident_camera_group_id?: string | null;
+  resident_camera_group_name?: string | null;
+  resident_camera_group_order?: number | string | null;
   visibility_scope?: string | null;
   last_seen?: string | null;
 };
@@ -73,6 +78,15 @@ function normalizeStringArray(value: unknown) {
   return Array.isArray(value)
     ? value.map((item) => normalizeString(item)).filter((item): item is string => Boolean(item))
     : [];
+}
+
+function normalizeNumber(value: unknown) {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
 }
 
 function normalizeRouteUrls(value: CameraStreamingResponse['vmsStreamingUrls']) {
@@ -127,6 +141,11 @@ export function normalizeCamera(raw: CameraApiShape): Camera {
     accessGroupIds: normalizeStringArray(raw.accessGroupIds ?? raw.access_group_ids),
     accessGroupNames: normalizeStringArray(raw.accessGroupNames ?? raw.access_group_names),
     residentVisibleUnitIds: normalizeStringArray(raw.residentVisibleUnitIds ?? raw.resident_visible_unit_ids),
+    residentDisplayOrder: normalizeNumber(raw.residentDisplayOrder ?? raw.resident_display_order),
+    residentMainSuggested: Boolean(raw.residentMainSuggested ?? raw.resident_main_suggested ?? false),
+    residentCameraGroupId: normalizeString(raw.residentCameraGroupId) ?? normalizeString(raw.resident_camera_group_id),
+    residentCameraGroupName: normalizeString(raw.residentCameraGroupName) ?? normalizeString(raw.resident_camera_group_name),
+    residentCameraGroupOrder: normalizeNumber(raw.residentCameraGroupOrder ?? raw.resident_camera_group_order),
     visibilityScope: normalizeString(raw.visibilityScope) ?? normalizeString(raw.visibility_scope),
     streaming: raw.streaming && typeof raw.streaming === 'object' ? raw.streaming as Record<string, unknown> : null,
     vmsProvisioning: raw.vmsProvisioning && typeof raw.vmsProvisioning === 'object' ? raw.vmsProvisioning as Record<string, unknown> : null,
