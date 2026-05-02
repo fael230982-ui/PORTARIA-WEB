@@ -62,3 +62,88 @@ Para o Portaria Web mostrar ao vivo real com `VMS_NATIVE`, precisamos de uma das
 3. backend converter o VMS nativo para HLS/WebRTC/browser-compatible.
 
 Enquanto isso, `/image-stream` segue somente como fallback.
+
+## Validacao do SDK informado pelo backend
+
+Foi testado:
+
+```bash
+npm view @incoresoft/incoresoft-players@1.0.319-dev.0 version dist-tags --json
+```
+
+Resultado:
+
+- `E404 Not Found`
+- o pacote nao esta disponivel no registry publico do npm ou exige registry privado.
+
+Portanto, para instalar via pacote, precisamos de uma das opcoes:
+
+- URL do registry privado;
+- token de acesso ao registry;
+- arquivo `.tgz` do pacote;
+- pacote publicado em um registry acessivel pelo projeto.
+
+## Pendencia do player remoto
+
+O backend informou alternativa:
+
+```text
+https://IP_DO_VMS:2443/app.js
+modulo exposto: ./ISPlayer
+```
+
+Para integrar isso no Next/React, ainda falta confirmar:
+
+- URL externa do `app.js` acessivel pelo navegador do operador;
+- se o certificado HTTPS e valido ou se o navegador bloqueara por certificado local;
+- se `app.js` e ESM, UMD/global ou Module Federation;
+- nome do container/global exposto, se for Module Federation;
+- assinatura de inicializacao do `ISPlayer`;
+- exemplo minimo de uso com:
+  - `url`
+  - `cameraUuid`
+  - `streamUuid`
+  - `streamingType`
+  - `isPlayback`
+
+Sem essas informacoes, o front consegue reconhecer o payload, mas nao consegue instanciar corretamente o player.
+
+## Solicitacao objetiva para backend/Incore
+
+Enviar um destes caminhos:
+
+1. Pacote instalavel:
+
+```text
+@incoresoft/incoresoft-players@1.0.319-dev.0
+registry:
+token, se necessario:
+exemplo de import:
+exemplo de componente React:
+```
+
+2. Player remoto:
+
+```text
+playerScriptUrl:
+remoteName/global:
+module:
+exemplo de inicializacao:
+exemplo de destroy/unmount:
+```
+
+3. Alternativa de gateway:
+
+```text
+hlsUrl ou webRtcUrl browser-compatible para cada camera
+```
+
+## Observacao de rede externa
+
+Mesmo com o player correto, o acesso externo depende do NAT informado:
+
+```text
+189.51.92.18:60110 -> 192.168.0.160:8080 TCP
+```
+
+Se `wss://189.51.92.18:60110/vms` estiver recusando conexao, o player nativo tambem nao conseguira abrir ao vivo fora da rede.
