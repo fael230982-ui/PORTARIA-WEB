@@ -1,7 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { resolveCameraMediaUrl } from '@/features/cameras/camera-media';
 
@@ -31,6 +31,17 @@ export function CameraSnapshot({
   const [src, setSrc] = useState<string | null>(normalizedFallbackSrc);
   const [loading, setLoading] = useState(Boolean(cameraId));
   const [error, setError] = useState<string | null>(null);
+  const currentSrcRef = useRef<string | null>(normalizedFallbackSrc);
+
+  useEffect(() => {
+    setSrc(normalizedFallbackSrc);
+    setLoading(Boolean(cameraId));
+    setError(null);
+  }, [cameraId, normalizedFallbackSrc]);
+
+  useEffect(() => {
+    currentSrcRef.current = src;
+  }, [src]);
 
   useEffect(() => {
     if (!cameraId || !token) {
@@ -40,12 +51,25 @@ export function CameraSnapshot({
     }
 
     let active = true;
-    let objectUrl: string | null = null;
     let timerId: number | null = null;
+
+    const blobToDataUrl = (blob: Blob) =>
+      new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          if (typeof reader.result === 'string') {
+            resolve(reader.result);
+          } else {
+            reject(new Error('Snapshot inválido.'));
+          }
+        };
+        reader.onerror = () => reject(reader.error ?? new Error('Falha ao ler snapshot.'));
+        reader.readAsDataURL(blob);
+      });
 
     const loadSnapshot = async () => {
       try {
-        setLoading(true);
+        setLoading((currentLoading) => currentLoading || !currentSrcRef.current);
         setError(null);
 
         const response = await fetch(`/api/proxy/cameras/${cameraId}/snapshot`, {
@@ -61,24 +85,22 @@ export function CameraSnapshot({
         }
 
         const blob = await response.blob();
-        const nextObjectUrl = URL.createObjectURL(blob);
+        if (!blob.type.startsWith('image/')) {
+          throw new Error(`Tipo de mídia inválido: ${blob.type || 'desconhecido'}`);
+        }
+
+        const nextSrc = await blobToDataUrl(blob);
 
         if (!active) {
-          URL.revokeObjectURL(nextObjectUrl);
           return;
         }
 
-        if (objectUrl) {
-          URL.revokeObjectURL(objectUrl);
-        }
-
-        objectUrl = nextObjectUrl;
-        setSrc(nextObjectUrl);
+        setSrc(nextSrc);
       } catch {
         if (!active) return;
 
-        setError(normalizedFallbackSrc ? null : errorLabel);
-        setSrc(normalizedFallbackSrc);
+        setError(currentSrcRef.current || normalizedFallbackSrc ? null : errorLabel);
+        setSrc((currentSrc) => currentSrc || normalizedFallbackSrc);
       } finally {
         if (active) {
           setLoading(false);
@@ -99,10 +121,6 @@ export function CameraSnapshot({
 
       if (timerId) {
         window.clearInterval(timerId);
-      }
-
-      if (objectUrl) {
-        URL.revokeObjectURL(objectUrl);
       }
     };
   }, [cameraId, errorLabel, normalizedFallbackSrc, refreshMs, token]);
