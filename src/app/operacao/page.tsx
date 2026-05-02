@@ -312,7 +312,16 @@ function mergeOperationMessagesById(messages: OperationMessage[]) {
     itemsById.set(message.id, message);
   });
 
-  return [...itemsById.values()].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  return sortOperationMessages([...itemsById.values()]);
+}
+
+function sortOperationMessages(messages: OperationMessage[]) {
+  return [...messages].sort((left, right) => {
+    const leftUnread = left.readAt ? 0 : 1;
+    const rightUnread = right.readAt ? 0 : 1;
+    if (leftUnread !== rightUnread) return rightUnread - leftUnread;
+    return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
+  });
 }
 
 type OperationSnapshotCache = {
@@ -1971,9 +1980,7 @@ export default function OperacaoPage() {
   const residentMessages = residentMessagesData?.data ?? [];
   const recentInboxMessages = useMemo(
     () =>
-      [...inboxMessages]
-        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-        .slice(0, 6),
+      sortOperationMessages(inboxMessages).slice(0, 6),
     [inboxMessages]
   );
   const unreadResidentMessagesCount = residentMessages.filter((message) => !message.readAt).length;

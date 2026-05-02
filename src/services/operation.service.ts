@@ -156,6 +156,17 @@ function normalizeOperationMessage(message: ApiOperationMessage): OperationMessa
   };
 }
 
+function compareOperationMessages(left: OperationMessage, right: OperationMessage) {
+  const leftUnread = left.readAt ? 0 : 1;
+  const rightUnread = right.readAt ? 0 : 1;
+  if (leftUnread !== rightUnread) return rightUnread - leftUnread;
+  return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
+}
+
+function sortOperationMessages(messages: OperationMessage[]) {
+  return [...messages].sort(compareOperationMessages);
+}
+
 function parseOperationMessagesPayload(payload: OperationMessagesResponse | ApiOperationMessage[] | ApiOperationMessage): ApiOperationMessage[] {
   if (Array.isArray(payload)) return payload;
   if (Array.isArray((payload as OperationMessagesResponse).data)) return (payload as OperationMessagesResponse).data as ApiOperationMessage[];
@@ -348,13 +359,13 @@ export const operationService = {
   async listMessages(params?: OperationMessagesParams): Promise<OperationMessagesResponse> {
     const response = await api.get<OperationMessagesResponse | ApiOperationMessage[] | ApiOperationMessage>('/messages', { params });
     const messages = parseOperationMessagesPayload(response.data);
-    return { data: messages.map(normalizeOperationMessage) };
+    return { data: sortOperationMessages(messages.map(normalizeOperationMessage)) };
   },
 
   async listMessageInbox(params?: { limit?: number; unreadOnly?: boolean }): Promise<OperationMessagesResponse> {
     const response = await api.get<OperationMessagesResponse | ApiOperationMessage[] | ApiOperationMessage>('/messages/inbox', { params });
     const messages = parseOperationMessagesPayload(response.data);
-    return { data: messages.map(normalizeOperationMessage) };
+    return { data: sortOperationMessages(messages.map(normalizeOperationMessage)) };
   },
 
   async sendMessage(payload: OperationMessagePayload): Promise<OperationMessage> {
