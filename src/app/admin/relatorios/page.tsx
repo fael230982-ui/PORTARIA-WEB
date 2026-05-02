@@ -164,7 +164,7 @@ export default function RelatoriosPage() {
     isLoading: alertsLoading,
     error: alertsError,
     refetch: refetchAlerts,
-  } = useAlerts({ limit: 200 });
+  } = useAlerts({ limit: 100 });
 
   const {
     data: camerasData,
