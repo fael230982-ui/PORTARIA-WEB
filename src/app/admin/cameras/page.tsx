@@ -1108,10 +1108,15 @@ export default function AdminCamerasPage() {
   const [openCreate, setOpenCreate] = useState(false);
   const [openEdit, setOpenEdit] = useState(false);
   const [openView, setOpenView] = useState(false);
+  const [openProfiles, setOpenProfiles] = useState(false);
   const [selectedCamera, setSelectedCamera] = useState<CameraRecord | null>(null);
   const [saving, setSaving] = useState(false);
+  const [profileSaving, setProfileSaving] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const [editingProfile, setEditingProfile] = useState<string | null>(null);
+  const [editingProfileValue, setEditingProfileValue] = useState('');
   const [faceEngineServers, setFaceEngineServers] = useState<FaceEngineServer[]>([]);
   const [vmsServers, setVmsServers] = useState<VmsServer[]>([]);
   const [pendingRtspJob, setPendingRtspJob] = useState<BackgroundJob | null>(null);
@@ -1498,6 +1503,95 @@ export default function AdminCamerasPage() {
     );
   };
 
+  const profileUsage = useMemo(() => {
+    const usage = new Map<string, number>();
+    visibleCameras.forEach((camera) => {
+      const profile = normalizeCameraProfile(camera.location);
+      if (!profile) return;
+      usage.set(profile, (usage.get(profile) ?? 0) + 1);
+    });
+    return usage;
+  }, [visibleCameras]);
+
+  const beginEditProfile = (profile: string) => {
+    setProfileError(null);
+    setEditingProfile(profile);
+    setEditingProfileValue(profile);
+  };
+
+  const cancelEditProfile = () => {
+    setEditingProfile(null);
+    setEditingProfileValue('');
+    setProfileError(null);
+  };
+
+  const handleRenameProfile = async () => {
+    if (!editingProfile) return;
+
+    const nextProfile = normalizeCameraProfile(editingProfileValue);
+    if (!nextProfile) {
+      setProfileError('Informe um nome válido para o perfil.');
+      return;
+    }
+
+    if (normalizeString(nextProfile) === normalizeString(editingProfile)) {
+      cancelEditProfile();
+      return;
+    }
+
+    if (profileOptions.some((profile) => normalizeString(profile) === normalizeString(nextProfile))) {
+      setProfileError('Já existe um perfil com esse nome. Escolha o perfil existente ou informe outro nome.');
+      return;
+    }
+
+    const camerasToUpdate = visibleCameras.filter(
+      (camera) => normalizeString(camera.location) === normalizeString(editingProfile) && !isLocalCameraDraft(camera)
+    );
+
+    setProfileSaving(true);
+    setProfileError(null);
+
+    try {
+      await Promise.all(
+        camerasToUpdate.map((camera) =>
+          camerasService.update(camera.id, {
+            ...buildCameraPayload(cameraToFormData(camera)),
+            location: nextProfile,
+          })
+        )
+      );
+
+      setCustomCameraProfiles((current) =>
+        Array.from(
+          new Set(current.map((profile) => (normalizeString(profile) === normalizeString(editingProfile) ? nextProfile : normalizeCameraProfile(profile))))
+        ).sort((left, right) => left.localeCompare(right, 'pt-BR', { numeric: true, sensitivity: 'base' }))
+      );
+      setFilters((current) => ({
+        ...current,
+        profile: normalizeString(current.profile) === normalizeString(editingProfile) ? nextProfile : current.profile,
+      }));
+      cancelEditProfile();
+      setActionMessage(`Perfil "${editingProfile}" renomeado para "${nextProfile}".`);
+      await refetch();
+    } catch (error) {
+      setProfileError(getCameraErrorMessage(error, 'Não foi possível renomear o perfil agora.'));
+    } finally {
+      setProfileSaving(false);
+    }
+  };
+
+  const handleDeleteProfile = (profile: string) => {
+    const normalized = normalizeCameraProfile(profile);
+    const usedBy = profileUsage.get(normalized) ?? 0;
+    if (usedBy > 0) {
+      setProfileError(`O perfil "${normalized}" está em uso por ${usedBy} câmera(s). Renomeie ou mova essas câmeras antes de excluir.`);
+      return;
+    }
+
+    setCustomCameraProfiles((current) => current.filter((item) => normalizeString(item) !== normalizeString(normalized)));
+    setActionMessage(`Perfil "${normalized}" removido.`);
+  };
+
   const stats = useMemo(() => {
     const total = filteredCameras.length;
     const online = filteredCameras.filter((camera) => getAutomaticCameraStatus(camera) === 'ONLINE').length;
@@ -1736,7 +1830,18 @@ export default function AdminCamerasPage() {
             ) : null}
           </div>
 
-        <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap gap-3">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setProfileError(null);
+                setOpenProfiles(true);
+              }}
+              className="inline-flex items-center gap-2 border-cyan-400/20 bg-cyan-400/10 text-cyan-50 hover:bg-cyan-400/15"
+            >
+              <Filter className="h-4 w-4" />
+              Gerenciar perfis
+            </Button>
             <Button
               onClick={() => {
                 setSubmitError(null);
@@ -1859,6 +1964,106 @@ export default function AdminCamerasPage() {
           {actionMessage}
         </TimedAlert>
       ) : null}
+
+      <CrudModal
+        open={openProfiles}
+        title="Gerenciar perfis de câmera"
+        description="Padronize os perfis usados para agrupar câmeras na visualização."
+        onClose={() => {
+          setOpenProfiles(false);
+          cancelEditProfile();
+        }}
+        maxWidth="lg"
+      >
+        <div className="space-y-4">
+          {profileError ? (
+            <TimedAlert tone="error" onClose={() => setProfileError(null)} className="rounded-2xl p-4">
+              {profileError}
+            </TimedAlert>
+          ) : null}
+
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
+            Renomear um perfil atualiza todas as câmeras vinculadas a ele. A exclusão só é permitida para perfil sem câmera em uso.
+          </div>
+
+          {profileOptions.length === 0 ? (
+            <p className="rounded-2xl border border-dashed border-white/10 p-4 text-sm text-slate-400">
+              Nenhum perfil cadastrado ainda.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {profileOptions.map((profile) => {
+                const usedBy = profileUsage.get(profile) ?? 0;
+                const isEditing = editingProfile === profile;
+
+                return (
+                  <div key={profile} className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
+                    <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+                      <div className="min-w-0">
+                        {isEditing ? (
+                          <input
+                            value={editingProfileValue}
+                            onChange={(event) => setEditingProfileValue(event.target.value)}
+                            className="w-full rounded-xl border border-white/10 bg-slate-900 px-3 py-2 text-white outline-none"
+                            autoFocus
+                          />
+                        ) : (
+                          <p className="truncate text-sm font-semibold text-white">{profile}</p>
+                        )}
+                        <p className="mt-1 text-xs text-slate-400">
+                          {usedBy === 1 ? '1 câmera vinculada' : `${usedBy} câmeras vinculadas`}
+                        </p>
+                      </div>
+
+                      {isEditing ? (
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            onClick={() => void handleRenameProfile()}
+                            disabled={profileSaving}
+                            className="rounded-xl bg-white px-3 py-2 text-xs text-slate-950 hover:bg-slate-200"
+                          >
+                            {profileSaving ? 'Salvando...' : 'Salvar'}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={cancelEditProfile}
+                            disabled={profileSaving}
+                            className="rounded-xl border-white/10 bg-white/5 px-3 py-2 text-xs text-white hover:bg-white/10"
+                          >
+                            Cancelar
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => beginEditProfile(profile)}
+                            className="rounded-xl border-white/10 bg-white/5 px-3 py-2 text-xs text-white hover:bg-white/10"
+                          >
+                            Editar
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => handleDeleteProfile(profile)}
+                            disabled={usedBy > 0}
+                            className="rounded-xl border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-100 hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Excluir
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </CrudModal>
 
       {lastRtspJob ? (
         <TimedAlert
