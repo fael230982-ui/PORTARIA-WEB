@@ -31,10 +31,26 @@ function parseMarker<T>(description: string, marker: string): T | null {
 }
 
 export function getPersonUnitLabel(person: Person, unitsMap: Map<string, Unit>) {
-  const resolvedUnit = person.unit || (person.unitId ? unitsMap.get(person.unitId) ?? null : null);
-  const resolvedLabel = [resolvedUnit?.condominium?.name, resolvedUnit?.structure?.label, resolvedUnit?.label]
-    .filter(Boolean)
-    .join(' / ');
+  const mappedUnit = person.unitId ? unitsMap.get(person.unitId) ?? null : null;
+  const mappedHasStructure = Boolean(mappedUnit?.structure?.label?.trim() || mappedUnit?.structureLabel?.trim());
+  const resolvedUnit = mappedHasStructure ? mappedUnit : person.unit || mappedUnit;
+  const structureLabel = resolvedUnit?.structure?.label?.trim() || resolvedUnit?.structureLabel?.trim() || '';
+  const rawStructureType = resolvedUnit?.structure?.type || resolvedUnit?.structureType || (structureLabel ? 'STREET' : null);
+  const structureTypeLabel =
+    rawStructureType === 'BLOCK'
+      ? 'BLOCO'
+      : rawStructureType === 'QUAD'
+        ? 'QUADRA'
+        : rawStructureType === 'LOT'
+          ? 'LOTE'
+          : rawStructureType === 'STREET'
+            ? 'RUA'
+            : '';
+  const unitLabel = resolvedUnit?.label?.trim() || person.unitName?.trim() || '';
+  const resolvedLabel =
+    structureLabel && unitLabel
+      ? `${[structureTypeLabel, structureLabel].filter(Boolean).join(' ')} - ${unitLabel}`
+      : unitLabel || resolvedUnit?.legacyUnitId?.trim() || '';
 
   if (resolvedLabel) return resolvedLabel;
   if (person.unitName?.trim()) return person.unitName.trim();

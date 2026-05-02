@@ -475,7 +475,7 @@ export default function AdminPage() {
     data: alertsData,
     isLoading: alertsLoading,
     refetch: refetchAlerts,
-  } = useAlerts({ limit: 20 });
+  } = useAlerts({ limit: 30, refetchInterval: 10000 });
 
   const {
     data: camerasData,
@@ -841,7 +841,7 @@ export default function AdminPage() {
               tone="emerald"
               highlight={highlightedKeys.includes('acessos')}
               onClick={() => {
-                pushWithContext('/operacao', { metric: 'acessos', period: String(selectedWindow), result: 'ALLOWED' });
+                pushWithContext('/admin/acessos', { metric: 'acessos', period: String(selectedWindow), result: 'ALLOWED' });
               }}
             />
             <MetricTile

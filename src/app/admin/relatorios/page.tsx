@@ -632,22 +632,22 @@ export default function RelatoriosPage() {
       <section className="grid gap-4 xl:grid-cols-4">
         <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-4">
           <p className="text-xs uppercase tracking-[0.16em] text-cyan-100">Alertas em turnos</p>
-          <p className="mt-3 text-center text-3xl font-semibold text-white">{shiftOverview.totalAlerts}</p>
+          <p className="mt-3 text-center text-3xl font-semibold tabular-nums text-white">{shiftOverview.totalAlerts}</p>
           <p className="mt-2 text-center text-xs text-cyan-100/80">Somatório dos relatórios de troca de turno.</p>
         </div>
         <div className="rounded-2xl border border-amber-400/20 bg-amber-400/10 p-4">
           <p className="text-xs uppercase tracking-[0.16em] text-amber-100">Ocorrências em turnos</p>
-          <p className="mt-3 text-center text-3xl font-semibold text-white">{shiftOverview.totalOccurrences}</p>
+          <p className="mt-3 text-center text-3xl font-semibold tabular-nums text-white">{shiftOverview.totalOccurrences}</p>
           <p className="mt-2 text-center text-xs text-amber-100/80">Ocorrências registradas durante os plantões.</p>
         </div>
         <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4">
           <p className="text-xs uppercase tracking-[0.16em] text-emerald-100">Duração média</p>
-          <p className="mt-3 text-center text-3xl font-semibold text-white">{shiftOverview.averageDuration} min</p>
+          <p className="mt-3 text-center text-3xl font-semibold tabular-nums text-white">{shiftOverview.averageDuration} min</p>
           <p className="mt-2 text-center text-xs text-emerald-100/80">Média dos turnos fechados no histórico.</p>
         </div>
         <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
           <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Porteiros no histórico</p>
-          <p className="mt-3 text-center text-3xl font-semibold text-white">{shiftOverview.operators}</p>
+          <p className="mt-3 text-center text-3xl font-semibold tabular-nums text-white">{shiftOverview.operators}</p>
           <p className="mt-2 text-center text-xs text-slate-500">Operadores identificados nas trocas de turno.</p>
         </div>
       </section>

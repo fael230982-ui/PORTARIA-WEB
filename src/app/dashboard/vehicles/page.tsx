@@ -245,12 +245,12 @@ export default function ResidentVehiclesPage() {
           <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
               <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Veículos ativos</p>
-              <p className="mt-2 text-3xl font-semibold text-white">{stats.active}</p>
+              <p className="mt-2 text-center text-3xl font-semibold tabular-nums text-white">{stats.active}</p>
               <p className="mt-1 text-xs text-slate-400">Prontos para uso.</p>
             </div>
             <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
               <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Veículos bloqueados</p>
-              <p className="mt-2 text-3xl font-semibold text-white">{stats.blocked}</p>
+              <p className="mt-2 text-center text-3xl font-semibold tabular-nums text-white">{stats.blocked}</p>
               <p className="mt-1 text-xs text-slate-400">Exigem revisao antes de voltar ao uso.</p>
             </div>
           </section>

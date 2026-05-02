@@ -6,7 +6,7 @@ import {
   Activity,
   AlertTriangle,
   Building2,
-  Camera,
+  Cctv,
   CheckCircle2,
   Cpu,
   Download,
@@ -525,7 +525,7 @@ function MiniInfo({ title, value }: { title: string; value: string }) {
   return (
     <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4 text-center">
       <p className="text-xs text-slate-500">{title}</p>
-      <p className="mt-2 text-2xl font-semibold leading-none text-white">{value}</p>
+      <p className="mt-2 text-center text-2xl font-semibold leading-none tabular-nums text-white">{value}</p>
     </div>
   );
 }
@@ -1433,7 +1433,7 @@ export default function MasterPage() {
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <StatTile title="Clientes" value={summary.clients} description={`${summary.condominiums} condomínios | ${summary.residences} residências`} icon={Building2} />
           <StatTile title="Moradores/Pessoas" value={summary.peopleCount} description="Total informado pelos clientes" icon={Users} tone="emerald" />
-          <StatTile title="Câmeras" value={summary.cameraCount} description="Câmeras cadastradas nos clientes" icon={Camera} />
+          <StatTile title="Câmeras" value={summary.cameraCount} description="Câmeras cadastradas nos clientes" icon={Cctv} />
           <StatTile title="Portarias offline" value={summary.offlineOperations} description="Computadores sem sinal recente" icon={AlertTriangle} tone={summary.offlineOperations ? 'rose' : 'emerald'} />
           <StatTile title="Portarias online" value={Math.max(monitoredClients.length - summary.offlineOperations, 0)} description="Portarias com contato recente" icon={ShieldCheck} tone="emerald" />
           <StatTile title="Licenças ativas" value={summary.activeLicenses} description="Clientes liberados ou em teste" icon={Puzzle} tone="cyan" />
@@ -1757,17 +1757,17 @@ export default function MasterPage() {
         <div className="grid gap-3 md:grid-cols-3">
           <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-4">
             <p className="text-xs uppercase tracking-[0.16em] text-emerald-100">Saudáveis</p>
-            <p className="mt-2 text-3xl font-semibold text-white">{healthyClients}</p>
+            <p className="mt-2 text-center text-3xl font-semibold tabular-nums text-white">{healthyClients}</p>
             <p className="mt-2 text-xs text-emerald-100/80">Com sinal recente e sem alerta operacional.</p>
           </div>
           <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4">
             <p className="text-xs uppercase tracking-[0.16em] text-amber-100">Sem primeiro sinal</p>
-            <p className="mt-2 text-3xl font-semibold text-white">{clientsWithoutHeartbeat}</p>
+            <p className="mt-2 text-center text-3xl font-semibold tabular-nums text-white">{clientsWithoutHeartbeat}</p>
             <p className="mt-2 text-xs text-amber-100/80">Cliente ainda aguardando o primeiro sinal.</p>
           </div>
           <div className="rounded-2xl border border-rose-500/20 bg-rose-500/10 p-4">
             <p className="text-xs uppercase tracking-[0.16em] text-rose-100">Exigem ação</p>
-            <p className="mt-2 text-3xl font-semibold text-white">{priorityMonitoringClients.length}</p>
+            <p className="mt-2 text-center text-3xl font-semibold tabular-nums text-white">{priorityMonitoringClients.length}</p>
             <p className="mt-2 text-xs text-rose-100/80">Offline ou sem sinal.</p>
           </div>
         </div>
@@ -1817,7 +1817,7 @@ export default function MasterPage() {
             <CardContent className="space-y-3">
               <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-4">
                 <p className="text-xs uppercase tracking-[0.16em] text-emerald-100">Online agora</p>
-                <p className="mt-2 text-3xl font-semibold text-white">{Math.max(onlineClients, 0)}</p>
+                <p className="mt-2 text-center text-3xl font-semibold tabular-nums text-white">{Math.max(onlineClients, 0)}</p>
                 <p className="mt-2 text-xs text-emerald-100/80">Clientes com sinal recente.</p>
               </div>
               <div className="rounded-2xl border border-rose-500/20 bg-rose-500/10 p-4">
