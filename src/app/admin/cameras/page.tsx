@@ -48,6 +48,7 @@ type Filters = {
   search: string;
   status: string;
   media: 'all' | 'with-preview' | 'without-preview' | 'rtsp-only';
+  profile: string;
 };
 
 type CameraFormData = {
@@ -729,13 +730,16 @@ function CameraForm({
         </label>
 
         <label className="space-y-2">
-          <span className="text-sm text-slate-300">Localização</span>
+          <span className="text-sm text-slate-300">Perfil / local</span>
           <input
             value={form.location}
             onChange={(e) => setField('location', e.target.value)}
             className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none"
-            placeholder="Ex.: Entrada social"
+            placeholder="Ex.: Acessos, Elevadores, Área comum, Halls, Lazer"
           />
+          <p className="text-xs text-slate-500">
+            Use este campo para agrupar câmeras por perfil de visualização. Ex.: ACESSOS, ELEVADORES, HALLS, LAZER.
+          </p>
         </label>
 
         <label className="space-y-2">
@@ -1014,6 +1018,7 @@ export default function AdminCamerasPage() {
     search: '',
     status: 'all',
     media: 'all',
+    profile: '',
   });
   const [showFilters, setShowFilters] = useState(true);
   const [openCreate, setOpenCreate] = useState(false);
@@ -1327,6 +1332,7 @@ export default function AdminCamerasPage() {
   const filteredCameras = useMemo(() => {
     const search = normalizeString(filters.search);
     const status = normalizeString(filters.status);
+    const profile = normalizeString(filters.profile);
 
     return visibleCameras.filter((camera) => {
       const automaticStatus = getAutomaticCameraStatus(camera);
@@ -1341,15 +1347,26 @@ export default function AdminCamerasPage() {
         (filters.media === 'with-preview' && hasPreview) ||
         (filters.media === 'without-preview' && !hasPreview) ||
         (filters.media === 'rtsp-only' && isRtspOnly);
+      const profileOk = !profile || normalizeString(camera.location) === profile;
       const searchOk =
         !search ||
         [camera.name, camera.location, camera.streamUrl, camera.snapshotUrl, getCameraUnitLabel(camera, unitOptions)]
           .filter(Boolean)
           .some((value) => normalizeString(value).includes(search));
 
-      return scopeOk && statusOk && mediaOk && searchOk;
+      return scopeOk && statusOk && mediaOk && profileOk && searchOk;
     }).sort(compareCameraRecords);
   }, [accessibleUnitIds, activeUnitId, filters, isAdminScope, unitOptions, visibleCameras]);
+
+  const profileOptions = useMemo(() => {
+    const profiles = visibleCameras
+      .map((camera) => camera.location?.trim())
+      .filter((profile): profile is string => Boolean(profile));
+
+    return Array.from(new Set(profiles)).sort((left, right) =>
+      left.localeCompare(right, 'pt-BR', { numeric: true, sensitivity: 'base' })
+    );
+  }, [visibleCameras]);
 
   const stats = useMemo(() => {
     const total = filteredCameras.length;
@@ -1362,7 +1379,7 @@ export default function AdminCamerasPage() {
     return { total, online, offline, withSnapshot, withoutPreview, rtspOnly };
   }, [filteredCameras]);
   const hasActiveFilters = Boolean(
-    filters.search.trim() || filters.status !== 'all' || filters.media !== 'all' || activeUnitId
+    filters.search.trim() || filters.status !== 'all' || filters.media !== 'all' || filters.profile || activeUnitId
   );
   const hiddenByFiltersCount = Math.max(visibleCameras.length - filteredCameras.length, 0);
 
@@ -1653,7 +1670,7 @@ export default function AdminCamerasPage() {
 
       {showFilters ? (
         <section className="rounded-3xl border border-white/10 bg-white/5 p-5 backdrop-blur">
-          <div className="grid gap-3 lg:grid-cols-[1.4fr_0.7fr_0.7fr_auto]">
+          <div className="grid gap-3 xl:grid-cols-[1.4fr_0.7fr_0.7fr_0.8fr_auto]">
             <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3">
               <Search className="h-4 w-4 text-slate-400" />
               <Input
@@ -1686,7 +1703,21 @@ export default function AdminCamerasPage() {
                 <option value="rtsp-only">RTSP sem conversão</option>
               </select>
             </label>
-            <button type="button" onClick={() => setFilters({ search: '', status: 'all', media: 'all' })} className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-white transition hover:bg-white/15">
+            <label className="rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3">
+              <select
+                value={filters.profile}
+                onChange={(e) => setFilters((prev) => ({ ...prev, profile: e.target.value }))}
+                className="w-full bg-transparent text-sm outline-none"
+              >
+                <option value="">Todos os perfis</option>
+                {profileOptions.map((profile) => (
+                  <option key={profile} value={profile}>
+                    {profile}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button type="button" onClick={() => setFilters({ search: '', status: 'all', media: 'all', profile: '' })} className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-white transition hover:bg-white/15">
               Limpar filtros
             </button>
           </div>
@@ -1935,7 +1966,7 @@ export default function AdminCamerasPage() {
       <CrudModal
         open={openEdit}
         title="Editar câmera"
-        description="Atualize nome, local, URLs de preview, integração e unidade vinculada."
+        description="Atualize nome, perfil, URLs de preview, integração e unidade vinculada."
         onClose={() => {
           setOpenEdit(false);
           setSubmitError(null);
@@ -2009,7 +2040,7 @@ export default function AdminCamerasPage() {
             <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
               <div className="flex items-center gap-2 text-slate-400">
                 <MapPin className="h-4 w-4" />
-                <span className="text-xs uppercase tracking-[0.18em]">Localização</span>
+                <span className="text-xs uppercase tracking-[0.18em]">Perfil / local</span>
               </div>
               <p className="mt-2 text-base font-medium text-white">{selectedCamera.location || 'Não informado'}</p>
             </div>

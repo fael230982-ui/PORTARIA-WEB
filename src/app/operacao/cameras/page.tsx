@@ -170,6 +170,7 @@ export default function OperacaoCâmerasPage() {
   const { data: camerasData, isLoading, error, refetch, isFetching } = useCameras();
   const [layout, setLayout] = useState<CameraLayout>(readStoredLayout);
   const [search, setSearch] = useState('');
+  const [selectedProfile, setSelectedProfile] = useState('');
   const [focusedCameraId, setFocusedCameraId] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [slotLayouts, setSlotLayouts] = useState<Record<string, Array<string | null>>>(readStoredSlotLayouts);
@@ -288,17 +289,28 @@ export default function OperacaoCâmerasPage() {
   }, [focusAdjacentSlot, focusedCameraId, selectedSlotIndex]);
 
   const cameras = useMemo(() => camerasData?.data ?? [], [camerasData]);
+  const profileOptions = useMemo(() => {
+    const profiles = cameras
+      .map((camera) => camera.location?.trim())
+      .filter((profile): profile is string => Boolean(profile));
+
+    return Array.from(new Set(profiles)).sort((left, right) =>
+      left.localeCompare(right, 'pt-BR', { numeric: true, sensitivity: 'base' })
+    );
+  }, [cameras]);
 
   const filteredCâmeras = useMemo(() => {
     const term = normalizeString(search);
-    if (!term) return cameras;
+    const profile = normalizeString(selectedProfile);
 
     return cameras.filter((camera) =>
-      [camera.name, camera.location, camera.status, camera.unitId, getMediaLabel(camera)]
-        .filter(Boolean)
-        .some((value) => normalizeString(value).includes(term))
+      (!profile || normalizeString(camera.location) === profile) &&
+      (!term ||
+        [camera.name, camera.location, camera.status, camera.unitId, getMediaLabel(camera)]
+          .filter(Boolean)
+          .some((value) => normalizeString(value).includes(term)))
     );
-  }, [cameras, search]);
+  }, [cameras, search, selectedProfile]);
 
   const onlineCount = useMemo(
     () => filteredCâmeras.filter((camera) => camera.status === 'ONLINE').length,
@@ -608,6 +620,26 @@ export default function OperacaoCâmerasPage() {
               placeholder="Buscar câmera"
               className="w-full bg-transparent outline-none placeholder:text-zinc-600"
             />
+          </label>
+
+          <label className="flex h-9 min-w-[180px] items-center rounded-lg border border-white/10 bg-white/5 px-3 text-sm text-zinc-300">
+            <select
+              value={selectedProfile}
+              onChange={(event) => {
+                setSelectedProfile(event.target.value);
+                setFocusedCameraId(null);
+                setSelectedSlotIndex(null);
+                setBankPage(0);
+              }}
+              className="w-full bg-transparent outline-none"
+            >
+              <option value="">Todos os perfis</option>
+              {profileOptions.map((profile) => (
+                <option key={profile} value={profile}>
+                  {profile}
+                </option>
+              ))}
+            </select>
           </label>
 
           <div className="flex rounded-lg border border-white/10 bg-white/5 p-1">
