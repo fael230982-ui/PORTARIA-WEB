@@ -24,6 +24,8 @@ type FormState = {
   externalIp: string;
   externalPort: string;
   apiToken: string;
+  username: string;
+  password: string;
   authType: VmsServerAuthType;
   verifySsl: boolean;
   timeoutSeconds: string;
@@ -41,6 +43,8 @@ const initialForm: FormState = {
   externalIp: '',
   externalPort: '',
   apiToken: '',
+  username: '',
+  password: '',
   authType: 'API_TOKEN',
   verifySsl: false,
   timeoutSeconds: '45',
@@ -84,6 +88,8 @@ function buildPayload(form: FormState, condominiumId?: string | null): VmsServer
   const internalPort = Number(form.internalPort);
   const externalPort = Number(form.externalPort);
   const internalBaseUrl = composeBaseUrl(form.internalScheme, form.internalIp, form.internalPort);
+  const usesApiToken = form.authType === 'API_TOKEN';
+  const usesBasicAuth = form.authType === 'BASIC';
 
   return {
     name: form.name.trim(),
@@ -96,7 +102,9 @@ function buildPayload(form: FormState, condominiumId?: string | null): VmsServer
     externalIp: toNullable(form.externalIp),
     externalPort: Number.isFinite(externalPort) && externalPort > 0 ? externalPort : null,
     condominiumId: condominiumId || null,
-    apiToken: toNullable(form.apiToken),
+    apiToken: usesApiToken ? toNullable(form.apiToken) : null,
+    username: usesBasicAuth ? toNullable(form.username) : null,
+    password: usesBasicAuth ? toNullable(form.password) : null,
     authType: form.authType,
     verifySsl: form.verifySsl,
     timeoutSeconds: Number(form.timeoutSeconds) || 45,
@@ -199,6 +207,9 @@ export default function AdminVmsServersPage() {
         if (!form.apiToken.trim()) {
           delete payload.apiToken;
         }
+        if (!form.password.trim()) {
+          delete payload.password;
+        }
 
         const updatedServer = await vmsServersService.update(editingServer.id, payload);
         setServers((current) => current.map((server) => (server.id === updatedServer.id ? updatedServer : server)));
@@ -268,6 +279,8 @@ export default function AdminVmsServersPage() {
       externalIp: server.externalIp ?? '',
       externalPort: server.externalPort ? String(server.externalPort) : '',
       apiToken: '',
+      username: server.username ?? '',
+      password: '',
       authType: server.authType ?? 'API_TOKEN',
       verifySsl: Boolean(server.verifySsl),
       timeoutSeconds: String(server.timeoutSeconds ?? 45),
@@ -437,6 +450,18 @@ export default function AdminVmsServersPage() {
                 <div><span className="text-slate-500">IP interno:</span> {server.internalBaseUrl || [server.internalScheme, server.internalIp, server.internalPort].filter(Boolean).join(' / ') || 'Não informado'}</div>
                 <div><span className="text-slate-500">IP externo:</span> {server.externalBaseUrl || [server.externalScheme, server.externalIp, server.externalPort].filter(Boolean).join(' / ') || 'Não informado'}</div>
                 <div><span className="text-slate-500">Auth:</span> {server.authType || 'Não informado'}</div>
+                <div>
+                  <span className="text-slate-500">Credenciais:</span>{' '}
+                  {server.authType === 'BASIC'
+                    ? server.hasPassword
+                      ? 'Usuário/senha configurados'
+                      : 'Senha não informada'
+                    : server.authType === 'API_TOKEN'
+                      ? server.hasApiToken
+                        ? 'Token configurado'
+                        : 'Token não informado'
+                      : 'Não exige autenticação'}
+                </div>
                 <div><span className="text-slate-500">Provisionamento:</span> {server.capabilities?.supportsProvisioning ? 'Sim' : 'Não'}</div>
                 <div><span className="text-slate-500">Lookup:</span> {server.capabilities?.supportsCameraLookup ? 'Sim' : 'Não'}</div>
                 <div className="flex flex-wrap gap-2 pt-3">
@@ -582,10 +607,24 @@ export default function AdminVmsServersPage() {
                 <option value="ONLINE">Online</option>
               </select>
             </label>
-            <label className="space-y-2 md:col-span-2">
-              <span className="text-sm text-slate-300">Token da API</span>
-              <Input type="password" value={form.apiToken} onChange={(event) => setForm((prev) => ({ ...prev, apiToken: event.target.value }))} className="border-white/10 bg-slate-950 text-white" autoComplete="new-password" placeholder={editingServer ? 'Deixe em branco para manter' : ''} />
-            </label>
+            {form.authType === 'API_TOKEN' ? (
+              <label className="space-y-2 md:col-span-2">
+                <span className="text-sm text-slate-300">Token da API</span>
+                <Input type="password" value={form.apiToken} onChange={(event) => setForm((prev) => ({ ...prev, apiToken: event.target.value }))} className="border-white/10 bg-slate-950 text-white" autoComplete="new-password" placeholder={editingServer ? 'Deixe em branco para manter' : ''} />
+              </label>
+            ) : null}
+            {form.authType === 'BASIC' ? (
+              <>
+                <label className="space-y-2">
+                  <span className="text-sm text-slate-300">Usuário</span>
+                  <Input value={form.username} onChange={(event) => setForm((prev) => ({ ...prev, username: event.target.value }))} className="border-white/10 bg-slate-950 text-white" autoComplete="username" />
+                </label>
+                <label className="space-y-2">
+                  <span className="text-sm text-slate-300">Senha</span>
+                  <Input type="password" value={form.password} onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))} className="border-white/10 bg-slate-950 text-white" autoComplete="new-password" placeholder={editingServer ? 'Deixe em branco para manter' : ''} />
+                </label>
+              </>
+            ) : null}
             <label className="space-y-2">
               <span className="text-sm text-slate-300">Timeout em segundos</span>
               <Input value={form.timeoutSeconds} onChange={(event) => setForm((prev) => ({ ...prev, timeoutSeconds: event.target.value }))} className="border-white/10 bg-slate-950 text-white" inputMode="numeric" />

@@ -1306,6 +1306,16 @@ function getObjectString(source: Record<string, unknown> | null | undefined, ...
   return null;
 }
 
+function getReplayPlayerUrl(replayUrl: string, cameraName?: string | null) {
+  if (typeof window === 'undefined') return replayUrl;
+  const url = new URL('/operacao/cameras/replay', window.location.origin);
+  url.searchParams.set('url', replayUrl);
+  if (cameraName?.trim()) {
+    url.searchParams.set('camera', cameraName.trim());
+  }
+  return url.toString();
+}
+
 function readDeviceAlertCameraMap() {
   if (typeof window === 'undefined') return {} as Record<string, string[]>;
   try {
@@ -1356,7 +1366,7 @@ function getAlertMediaItems(alert?: Alert | null): AlertMediaItem[] {
   addItem({
     key: alert.cameraId ?? alert.snapshotUrl ?? alert.replayUrl ?? null,
     cameraId: alert.cameraId ?? getObjectString(payload, 'cameraId', 'camera_id'),
-    cameraName: getObjectString(payload, 'cameraName', 'camera_name'),
+    cameraName: alert.cameraName ?? getObjectString(payload, 'cameraName', 'camera_name'),
     snapshotUrl: alert.snapshotUrl ?? alert.imageUrl ?? alert.thumbnailUrl ?? alert.photoUrl ?? getObjectString(payload, 'snapshotUrl', 'snapshot_url', 'imageUrl', 'image_url'),
     liveUrl: alert.liveUrl ?? getObjectString(payload, 'liveUrl', 'live_url', 'hlsUrl', 'hls_url'),
     replayUrl: alert.replayUrl ?? getObjectString(payload, 'replayUrl', 'replay_url'),
@@ -7522,7 +7532,7 @@ export default function OperacaoPage() {
                           <div className="flex flex-wrap gap-2 p-3">
                             {media.replayUrl ? (
                               <a
-                                href={media.replayUrl}
+                                href={getReplayPlayerUrl(media.replayUrl, media.cameraName || selectedAlert.cameraName || selectedAlert.title)}
                                 target="_blank"
                                 rel="noreferrer"
                                 className={`inline-flex items-center rounded-xl border px-3 py-2 text-xs font-medium transition ${brandClasses.softAccent}`}
