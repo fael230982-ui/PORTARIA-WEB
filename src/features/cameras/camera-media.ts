@@ -71,9 +71,20 @@ function resolvePlayableVideoUrl(value?: string | null) {
 }
 
 export function getPreferredVideoStreamUrl(
-  camera?: Pick<Camera, 'streamUrl' | 'preferredLiveUrl' | 'liveUrl' | 'hlsUrl' | 'webRtcUrl' | 'vmsStreamingUrl' | 'vmsStreamingUrls'> | null,
-  streaming?: Pick<CameraStreamingResponse, 'preferredLiveUrl' | 'liveUrl' | 'hlsUrl' | 'webRtcUrl' | 'vmsStreamingUrl' | 'vmsStreamingUrls'> | null
+  camera?: Pick<Camera, 'streamUrl' | 'preferredLiveUrl' | 'liveUrl' | 'hlsUrl' | 'webRtcUrl' | 'vmsStreamingUrl' | 'vmsStreamingUrls' | 'playback'> | null,
+  streaming?: Partial<Pick<CameraStreamingResponse, 'preferredLiveUrl' | 'liveUrl' | 'hlsUrl' | 'webRtcUrl' | 'vmsStreamingUrl' | 'vmsStreamingUrls' | 'transport' | 'playback'>> | null
 ) {
+  const playback = streaming?.playback ?? camera?.playback ?? null;
+  const isNativeVms =
+    String(streaming?.transport ?? '').toUpperCase() === 'VMS_NATIVE' ||
+    String(playback?.mode ?? '').toUpperCase() === 'VMS_NATIVE' ||
+    String(playback?.player ?? '').toUpperCase() === 'INCORESOFT_VMS_NATIVE';
+  const requiresNativePlayer = isNativeVms && playback?.backendProcessesStream === false;
+
+  if (requiresNativePlayer) {
+    return null;
+  }
+
   const candidates = [
     streaming?.preferredLiveUrl,
     camera?.preferredLiveUrl,
