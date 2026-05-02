@@ -2,6 +2,7 @@
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useState } from 'react';
+import { GlobalShortcuts } from '@/components/global-shortcuts';
 import { AppThemeProvider } from '@/components/theme/app-theme-provider';
 
 export function Providers({ children }: { children: React.ReactNode }) {
@@ -20,6 +21,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
       <AppThemeProvider>
+        <GlobalShortcuts />
         {children}
       </AppThemeProvider>
     </QueryClientProvider>
