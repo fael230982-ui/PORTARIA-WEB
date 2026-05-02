@@ -100,9 +100,11 @@ function PendingList({
 }: {
   title: string;
   subtitle: string;
-  items: Array<{ id: string; title: string; detail: string; href?: string; tone?: Tone; meta?: string }>;
+  items: Array<{ id: string; title: string; detail: string; href?: string; tone?: Tone; meta?: string; attended?: boolean }>;
   empty: string;
 }) {
+  const orderedItems = [...items].sort((left, right) => Number(Boolean(left.attended)) - Number(Boolean(right.attended)));
+
   return (
     <section className="rounded-3xl border border-white/10 bg-white/5 p-4">
       <div className="mb-4 flex items-start justify-between gap-3">
@@ -119,7 +121,7 @@ function PendingList({
         <p className="rounded-2xl border border-dashed border-white/10 p-4 text-sm text-slate-400">{empty}</p>
       ) : (
         <div className="space-y-2">
-          {items.slice(0, 8).map((item) => {
+          {orderedItems.slice(0, 8).map((item) => {
             const content = (
               <div className={`grid gap-3 rounded-2xl border px-4 py-3 text-sm transition sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center ${getItemToneClass(item.tone ?? 'neutral')}`}>
                 <div className="min-w-0">

@@ -110,6 +110,7 @@ const CAMERA_RTSP_JOB_STORAGE_KEY = 'admin-cameras-last-rtsp-job';
 const CAMERAS_SNAPSHOT_STORAGE_KEY = 'admin-cameras-snapshot';
 const CAMERAS_LOCAL_DRAFTS_STORAGE_KEY = 'admin-cameras-local-drafts';
 const VMS_SERVERS_STORAGE_KEY = 'admin-vms-servers-snapshot';
+const CAMERA_PROFILE_OPTIONS_STORAGE_KEY = 'admin-camera-profile-options';
 
 type LocalCameraSyncState = 'PENDING' | 'RUNNING' | 'SUCCEEDED' | 'FAILED';
 
@@ -148,6 +149,10 @@ function normalizeString(value: unknown) {
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase();
+}
+
+function normalizeCameraProfile(value: unknown) {
+  return String(value ?? '').trim().replace(/\s+/g, ' ').toUpperCase();
 }
 
 function statusBadgeClass(status: CameraStatus) {
@@ -532,7 +537,7 @@ function buildCameraPayload(form: CameraFormData): CameraCreateRequest {
 
   payload.deviceUsageType = hasFaceServer ? null : supportsDeviceUsageType(effectiveDeviceType) ? form.deviceUsageType || null : null;
 
-  payload.location = form.location.trim() || null;
+  payload.location = normalizeCameraProfile(form.location) || null;
   payload.streamSourceType = form.streamUrl.trim() ? 'RTSP' : null;
   payload.streamUrl = form.streamUrl.trim() || null;
   payload.snapshotUrl = form.snapshotUrl.trim() || null;
@@ -595,6 +600,8 @@ function CameraForm({
   units,
   faceEngineServers,
   vmsServers,
+  profileOptions,
+  onAddProfile,
   requireUnit = false,
 }: {
   initialData: Partial<CameraFormData>;
@@ -604,6 +611,8 @@ function CameraForm({
   units: Array<{ id: string; label: string; location: string }>;
   faceEngineServers: FaceEngineServer[];
   vmsServers: VmsServer[];
+  profileOptions: string[];
+  onAddProfile: (profile: string) => void;
   requireUnit: boolean;
 }) {
   const [form, setForm] = useState<CameraFormData>({
@@ -615,6 +624,13 @@ function CameraForm({
   const [vmsLookupLoading, setVmsLookupLoading] = useState(false);
   const [vmsLookupMessage, setVmsLookupMessage] = useState<string | null>(null);
   const [vmsShouldCreateNewCamera, setVmsShouldCreateNewCamera] = useState(false);
+  const [profileConfirmOpen, setProfileConfirmOpen] = useState(false);
+  const normalizedProfile = normalizeCameraProfile(form.location);
+  const matchedProfile = profileOptions.find((profile) => normalizeString(profile) === normalizeString(normalizedProfile)) ?? null;
+  const filteredProfileOptions = profileOptions
+    .filter((profile) => !normalizedProfile || normalizeString(profile).includes(normalizeString(normalizedProfile)))
+    .slice(0, 8);
+  const canAddProfile = Boolean(normalizedProfile) && !matchedProfile;
 
   useEffect(() => {
     if (!form.vmsServerId.trim()) {
@@ -711,6 +727,13 @@ function CameraForm({
     await onSubmit(form);
   };
 
+  const handleConfirmProfile = () => {
+    if (!normalizedProfile) return;
+    onAddProfile(normalizedProfile);
+    setField('location', normalizedProfile);
+    setProfileConfirmOpen(false);
+  };
+
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
       <div className="rounded-2xl border border-white/10 bg-slate-900/60 px-4 py-3 text-sm text-slate-300">
@@ -734,9 +757,70 @@ function CameraForm({
           <input
             value={form.location}
             onChange={(e) => setField('location', e.target.value)}
+            onBlur={() => {
+              if (matchedProfile) {
+                setField('location', matchedProfile);
+              } else if (normalizedProfile) {
+                setField('location', normalizedProfile);
+              }
+            }}
             className="w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none"
             placeholder="Ex.: Acessos, Elevadores, Área comum, Halls, Lazer"
           />
+          {filteredProfileOptions.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {filteredProfileOptions.map((profile) => (
+                <button
+                  key={profile}
+                  type="button"
+                  onClick={() => {
+                    setField('location', profile);
+                    setProfileConfirmOpen(false);
+                  }}
+                  className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+                    normalizeString(profile) === normalizeString(normalizedProfile)
+                      ? 'border-cyan-300/40 bg-cyan-300/15 text-cyan-50'
+                      : 'border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'
+                  }`}
+                >
+                  {profile}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          {canAddProfile ? (
+            <button
+              type="button"
+              onClick={() => setProfileConfirmOpen(true)}
+              className="rounded-xl border border-cyan-400/25 bg-cyan-400/10 px-3 py-2 text-xs font-semibold text-cyan-50 transition hover:bg-cyan-400/15"
+            >
+              Adicionar "{normalizedProfile}" como novo perfil
+            </button>
+          ) : null}
+          {profileConfirmOpen && canAddProfile ? (
+            <div className="rounded-2xl border border-cyan-400/25 bg-cyan-400/10 p-3 text-sm text-cyan-50">
+              <p className="font-medium">Adicionar "{normalizedProfile}" como novo perfil?</p>
+              <p className="mt-1 text-xs text-cyan-100/75">
+                Depois ele aparecerá como filtro para novas câmeras e para visualização por perfil.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={handleConfirmProfile}
+                  className="rounded-xl bg-cyan-100 px-3 py-2 text-xs font-semibold text-cyan-950 transition hover:bg-white"
+                >
+                  Adicionar perfil
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setProfileConfirmOpen(false)}
+                  className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white transition hover:bg-white/10"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          ) : null}
           <p className="text-xs text-slate-500">
             Use este campo para agrupar câmeras por perfil de visualização. Ex.: ACESSOS, ELEVADORES, HALLS, LAZER.
           </p>
@@ -1036,6 +1120,8 @@ export default function AdminCamerasPage() {
   const [snapshotUpdatedAt, setSnapshotUpdatedAt] = useState<string | null>(null);
   const [localDraftCameras, setLocalDraftCameras] = useState<LocalCameraDraft[]>([]);
   const [hideLoadErrorAlert, setHideLoadErrorAlert] = useState(false);
+  const [customCameraProfiles, setCustomCameraProfiles] = useState<string[]>([]);
+  const [cameraProfilesLoaded, setCameraProfilesLoaded] = useState(false);
 
   useEffect(() => {
     setHideLoadErrorAlert(false);
@@ -1054,6 +1140,38 @@ export default function AdminCamerasPage() {
       // Ignore invalid VMS cache.
     }
   }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    try {
+      const raw = window.localStorage.getItem(CAMERA_PROFILE_OPTIONS_STORAGE_KEY);
+      const cached = raw ? (JSON.parse(raw) as unknown) : [];
+      if (Array.isArray(cached)) {
+        setCustomCameraProfiles(
+          Array.from(new Set(cached.map(normalizeCameraProfile).filter(Boolean))).sort((left, right) =>
+            left.localeCompare(right, 'pt-BR', { numeric: true, sensitivity: 'base' })
+          )
+        );
+      }
+    } catch {
+      // Ignore invalid local cache for camera profiles.
+    } finally {
+      setCameraProfilesLoaded(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!cameraProfilesLoaded) return;
+    if (typeof window === 'undefined') return;
+
+    if (customCameraProfiles.length === 0) {
+      window.localStorage.removeItem(CAMERA_PROFILE_OPTIONS_STORAGE_KEY);
+      return;
+    }
+
+    window.localStorage.setItem(CAMERA_PROFILE_OPTIONS_STORAGE_KEY, JSON.stringify(customCameraProfiles));
+  }, [cameraProfilesLoaded, customCameraProfiles]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -1359,14 +1477,26 @@ export default function AdminCamerasPage() {
   }, [accessibleUnitIds, activeUnitId, filters, isAdminScope, unitOptions, visibleCameras]);
 
   const profileOptions = useMemo(() => {
-    const profiles = visibleCameras
-      .map((camera) => camera.location?.trim())
-      .filter((profile): profile is string => Boolean(profile));
+    const profiles = [
+      ...customCameraProfiles,
+      ...visibleCameras.map((camera) => normalizeCameraProfile(camera.location)),
+    ].filter(Boolean);
 
     return Array.from(new Set(profiles)).sort((left, right) =>
       left.localeCompare(right, 'pt-BR', { numeric: true, sensitivity: 'base' })
     );
-  }, [visibleCameras]);
+  }, [customCameraProfiles, visibleCameras]);
+
+  const handleAddCameraProfile = (profile: string) => {
+    const normalized = normalizeCameraProfile(profile);
+    if (!normalized) return;
+
+    setCustomCameraProfiles((current) =>
+      Array.from(new Set([...current.map(normalizeCameraProfile), normalized])).sort((left, right) =>
+        left.localeCompare(right, 'pt-BR', { numeric: true, sensitivity: 'base' })
+      )
+    );
+  };
 
   const stats = useMemo(() => {
     const total = filteredCameras.length;
@@ -1959,6 +2089,8 @@ export default function AdminCamerasPage() {
           units={unitOptions}
           faceEngineServers={faceEngineServers}
           vmsServers={vmsServers}
+          profileOptions={profileOptions}
+          onAddProfile={handleAddCameraProfile}
           requireUnit={false}
         />
       </CrudModal>
@@ -1991,6 +2123,8 @@ export default function AdminCamerasPage() {
             units={unitOptions}
             faceEngineServers={faceEngineServers}
             vmsServers={vmsServers}
+            profileOptions={profileOptions}
+            onAddProfile={handleAddCameraProfile}
             requireUnit={false}
           />
         ) : null}
