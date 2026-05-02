@@ -107,7 +107,7 @@ export function getPreferredImageStreamUrl(
   camera?: Pick<Camera, 'imageStreamUrl'> | null,
   streaming?: Pick<CameraStreamingResponse, 'imageStreamUrl' | 'mjpegUrl' | 'frameUrl'> | null
 ) {
-  return resolveCameraMediaUrl(streaming?.imageStreamUrl || streaming?.mjpegUrl || streaming?.frameUrl || camera?.imageStreamUrl || null);
+  return resolveCameraMediaUrl(streaming?.frameUrl || streaming?.imageStreamUrl || streaming?.mjpegUrl || camera?.imageStreamUrl || null);
 }
 
 export function getPreferredSnapshotUrl(
@@ -117,6 +117,13 @@ export function getPreferredSnapshotUrl(
   return resolveCameraMediaUrl(
     streaming?.snapshotUrl || camera?.snapshotUrl || streaming?.previewUrl || streaming?.thumbnailUrl || camera?.thumbnailUrl || null
   );
+}
+
+export function getPreferredStillImageUrl(
+  camera?: Pick<Camera, 'snapshotUrl' | 'thumbnailUrl' | 'imageStreamUrl'> | null,
+  streaming?: Pick<CameraStreamingResponse, 'snapshotUrl' | 'thumbnailUrl' | 'previewUrl' | 'imageStreamUrl' | 'mjpegUrl' | 'frameUrl'> | null
+) {
+  return getPreferredSnapshotUrl(camera, streaming) || getPreferredImageStreamUrl(camera, streaming);
 }
 
 export function getCameraMediaAvailabilityLabels(

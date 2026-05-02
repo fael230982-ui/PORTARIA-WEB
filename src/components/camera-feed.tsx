@@ -9,6 +9,7 @@ import {
   getCameraPreviewMode,
   getPreferredImageStreamUrl,
   getPreferredSnapshotUrl,
+  getPreferredStillImageUrl,
   getPreferredVideoStreamUrl,
   getPreferredWebRtcUrl,
   getVmsNativePlayerPayload,
@@ -52,20 +53,21 @@ export function CameraFeed({
   const webRtcUrl = getPreferredWebRtcUrl(camera, streamingData);
   const imageStreamUrl = getPreferredImageStreamUrl(camera, streamingData);
   const snapshotUrl = getPreferredSnapshotUrl(camera, streamingData);
+  const stillImageUrl = getPreferredStillImageUrl(camera, streamingData);
   const hasVmsNative = isVmsNativeStreaming(camera, streamingData);
   const nativePayload = getVmsNativePlayerPayload(camera, streamingData);
   const hasOnlyRtsp = Boolean(camera?.streamUrl) && isRtspUrl(camera?.streamUrl) && !videoStreamUrl && !imageStreamUrl && !snapshotUrl;
   const hasOnlyWebRtc = Boolean(webRtcUrl) && !videoStreamUrl && !imageStreamUrl && !snapshotUrl;
-  const mediaKey = `${camera?.id ?? 'none'}|${videoStreamUrl ?? ''}|${imageStreamUrl ?? ''}|${snapshotUrl ?? ''}|${proxyAuthReady ? 'auth' : 'no-auth'}`;
+  const mediaKey = `${camera?.id ?? 'none'}|${videoStreamUrl ?? ''}|${imageStreamUrl ?? ''}|${snapshotUrl ?? ''}|${stillImageUrl ?? ''}|${proxyAuthReady ? 'auth' : 'no-auth'}`;
   const [failedVideoMediaKey, setFailedVideoMediaKey] = useState<string | null>(null);
   const [failedImageMediaKey, setFailedImageMediaKey] = useState<string | null>(null);
   const videoError = failedVideoMediaKey === mediaKey;
   const imageError = failedImageMediaKey === mediaKey;
-  const needsProxyAuth = [videoStreamUrl, imageStreamUrl, snapshotUrl].some((url) => String(url ?? '').startsWith('/api/proxy/'));
+  const needsProxyAuth = [videoStreamUrl, imageStreamUrl, snapshotUrl, stillImageUrl].some((url) => String(url ?? '').startsWith('/api/proxy/'));
   const canRenderProtectedMedia = !needsProxyAuth || proxyAuthReady;
   const shouldUseVideo = canRenderProtectedMedia && previewMode === 'video-stream' && Boolean(videoStreamUrl) && !videoError;
-  const shouldUseImageStream = canRenderProtectedMedia && Boolean(imageStreamUrl) && !imageError && (previewMode === 'image-stream' || videoError);
-  const shouldUseSnapshot = canRenderProtectedMedia && (previewMode === 'snapshot' || Boolean(snapshotUrl && (videoError || imageError)));
+  const shouldUseImageStream = canRenderProtectedMedia && Boolean(imageStreamUrl) && !imageError && previewMode === 'image-stream' && !hasVmsNative;
+  const shouldUseSnapshot = canRenderProtectedMedia && Boolean(stillImageUrl) && (previewMode === 'snapshot' || hasVmsNative || videoError || imageError);
   const cookieSecure = typeof window !== 'undefined' && window.location.protocol === 'https:' ? '; Secure' : '';
 
   useEffect(() => {
@@ -277,14 +279,14 @@ export function CameraFeed({
     );
   }
 
-  if (shouldUseSnapshot && snapshotUrl) {
+  if (shouldUseSnapshot && stillImageUrl) {
     return (
       <div className={`relative h-full w-full overflow-hidden ${className}`.trim()}>
         {modeBadge}
         <CameraSnapshot
           cameraId={camera.id}
           alt={camera.name}
-          fallbackSrc={snapshotUrl}
+          fallbackSrc={stillImageUrl}
           className={imageClassName}
           refreshMs={refreshMs}
           errorLabel={compactErrors ? 'Imagem indisponível agora.' : undefined}
