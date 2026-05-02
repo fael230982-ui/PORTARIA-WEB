@@ -1553,11 +1553,6 @@ export default function AdminCamerasPage() {
       return;
     }
 
-    if (profileOptions.some((profile) => normalizeString(profile) === normalizeString(nextProfile))) {
-      setProfileError('Já existe um perfil com esse nome. Escolha o perfil existente ou informe outro nome.');
-      return;
-    }
-
     const camerasToUpdate = visibleCameras.filter(
       (camera) => normalizeString(camera.location) === normalizeString(editingProfile) && !isLocalCameraDraft(camera)
     );
@@ -1590,7 +1585,7 @@ export default function AdminCamerasPage() {
         profile: normalizeString(current.profile) === normalizeString(editingProfile) ? nextProfile : current.profile,
       }));
       cancelEditProfile();
-      setActionMessage(`Perfil "${editingProfile}" renomeado para "${nextProfile}".`);
+      setActionMessage(`Perfil "${editingProfile}" atualizado para "${nextProfile}".`);
       await refetch();
     } catch (error) {
       setProfileError(getCameraErrorMessage(error, 'Não foi possível renomear o perfil agora.'));
