@@ -435,7 +435,6 @@ function logCameraCreateDiagnostics(params: {
   importPayload?: unknown;
   vmsServerId: string | null;
   user: { email?: string | null; role?: string | null } | null;
-  authorizationPreview: string | null;
   response?: { status?: number; data?: unknown; headers?: unknown };
   error?: unknown;
 }) {
@@ -450,6 +449,9 @@ function logCameraCreateDiagnostics(params: {
   const responseStatus = params.response?.status ?? axiosError?.response?.status ?? null;
   const responseBody = params.response?.data ?? axiosError?.response?.data ?? null;
   const responseHeaders = params.response?.headers ?? axiosError?.response?.headers ?? null;
+  const shouldLog = Boolean(params.error) || Boolean(responseStatus && responseStatus >= 400);
+
+  if (!shouldLog) return;
 
   console.groupCollapsed(groupedTitle);
   console.info('Método', 'POST');
@@ -458,7 +460,6 @@ function logCameraCreateDiagnostics(params: {
   console.info('Ambiente/host', typeof window !== 'undefined' ? window.location.origin : 'server');
   console.info('server_id usado', params.vmsServerId);
   console.info('Usuário logado', params.user);
-  console.info('Token usado na chamada', params.authorizationPreview);
   console.info('Payload final enviado', params.payload);
   if (params.importPayload) {
     console.info('Payload de importação VMS enviado', params.importPayload);
@@ -1642,7 +1643,6 @@ export default function AdminCamerasPage() {
 
       const payload = buildCameraPayload(form);
       const authState = useAuthStore.getState();
-      const authorizationPreview = authState.token ? `${authState.token.slice(0, 12)}...` : null;
       const createMode: 'reaproveitar-camera-vms' | 'fallback-criar-camera-vms' | 'cadastro-camera' =
         payload.vmsServerId && payload.streamExternalId && payload.vmsDeviceId != null && payload.vmsDeviceItemId != null
           ? 'reaproveitar-camera-vms'
@@ -1674,7 +1674,6 @@ export default function AdminCamerasPage() {
               role: authState.user.role,
             }
           : null,
-        authorizationPreview,
         response: {
           status: createResponse.status,
           data: createResponse.body,
@@ -1723,7 +1722,6 @@ export default function AdminCamerasPage() {
               role: authState.user.role,
             }
           : null,
-        authorizationPreview: authState.token ? `${authState.token.slice(0, 12)}...` : null,
         error: createError,
       });
       setSubmitError(getCameraErrorMessage(createError, 'Não foi possível criar a câmera.'));

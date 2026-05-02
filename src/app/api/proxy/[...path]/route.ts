@@ -3,6 +3,7 @@ import { env } from '@/lib/env';
 
 const API_BASE = env.apiBaseUrl;
 const UPSTREAM_TIMEOUT_MS = 15000;
+const STREAM_TIMEOUT_MS = 30 * 60 * 1000;
 const ROOT_MEDIA_SEGMENTS = new Set(['media-hls', 'media', 'uploads', 'files', 'storage']);
 
 const METHODS_WITH_BODY = new Set(['POST', 'PUT', 'PATCH']);
@@ -24,6 +25,7 @@ function copyHeaders(request: NextRequest) {
   const authorizationHeader = request.headers.get('authorization');
   const authorization = authorizationHeader || (cookieToken ? `Bearer ${cookieToken}` : null);
   const contentType = request.headers.get('content-type');
+  const accept = request.headers.get('accept');
   const selectedUnitCookie = request.cookies.get('camera_selected_unit_id')?.value;
   const selectedUnitId = request.headers.get('x-selected-unit-id') || (!authorizationHeader ? selectedUnitCookie : null);
 
@@ -33,6 +35,10 @@ function copyHeaders(request: NextRequest) {
 
   if (contentType) {
     headers.set('content-type', contentType);
+  }
+
+  if (accept) {
+    headers.set('accept', accept);
   }
 
   if (selectedUnitId) {
@@ -47,8 +53,9 @@ async function handle(request: NextRequest, context: { params: Promise<{ path: s
     const { path } = await context.params;
     const targetUrl = buildTargetUrl(path, request);
     const headers = copyHeaders(request);
+    const isEventStream = path.join('/') === 'events/stream';
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
+    const timeoutId = setTimeout(() => controller.abort(), isEventStream ? STREAM_TIMEOUT_MS : UPSTREAM_TIMEOUT_MS);
 
     let upstreamResponse: Response;
 
