@@ -11,7 +11,7 @@ export default function AlertsPage() {
     >
       <AlertsPanel
         title="Avisos recentes"
-        description="Aqui ficam os alertas mais recentes para voce acompanhar."
+        description="Aqui ficam os alertas mais recentes para você acompanhar."
         limit={20}
       />
     </PageContainer>

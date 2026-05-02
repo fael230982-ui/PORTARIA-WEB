@@ -62,7 +62,7 @@ export default function ResidentDeliveriesPage() {
 
         <section className="flex flex-col gap-4 rounded-2xl border border-white/10 bg-white/5 p-4 text-white md:flex-row md:items-center md:justify-between">
           <div className="text-sm text-slate-300">
-            Apresente o codigo de retirada na portaria. Quando a retirada for confirmada, o status muda para retirada.
+            Apresente o código de retirada na portaria. Quando a retirada for confirmada, o status muda para retirada.
           </div>
           <button
             type="button"
@@ -97,7 +97,7 @@ export default function ResidentDeliveriesPage() {
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
                       <p className="text-lg font-semibold">{delivery.deliveryCompany || 'Transportadora'}</p>
-                      <p className="mt-1 text-sm text-slate-400">{delivery.trackingCode || 'Sem codigo de rastreio'}</p>
+                      <p className="mt-1 text-sm text-slate-400">{delivery.trackingCode || 'Sem código de rastreio'}</p>
                     </div>
                     <span className={`rounded-lg px-3 py-1 text-xs font-medium ${statusClass(delivery.status)}`}>
                       {statusLabel(delivery.status)}
@@ -125,8 +125,8 @@ export default function ResidentDeliveriesPage() {
                       <p className="mt-1 text-white">{formatDate(delivery.receivedAt)}</p>
                     </div>
                     <div className="rounded-lg border border-white/10 bg-slate-950/50 p-4">
-                      <p className="text-slate-500">Codigo de retirada</p>
-                      <p className={`mt-1 font-mono text-lg ${brandClasses.accentTextSoft}`}>{code || 'Aguardando codigo'}</p>
+                      <p className="text-slate-500">Código de retirada</p>
+                      <p className={`mt-1 font-mono text-lg ${brandClasses.accentTextSoft}`}>{code || 'Aguardando código'}</p>
                     </div>
                   </div>
 
@@ -145,7 +145,7 @@ export default function ResidentDeliveriesPage() {
                         />
                       </div>
                       <p className={`mt-3 text-center text-xs ${brandClasses.accentTextSoft}`}>
-                        Mostre este QR code na retirada. Ele representa o mesmo codigo exibido acima.
+                        Mostre este QR code na retirada. Ele representa o mesmo código exibido acima.
                       </p>
                     </div>
                   ) : null}

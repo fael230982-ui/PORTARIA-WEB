@@ -673,7 +673,7 @@ function StatusForm({
           Cancelar
         </button>
         <button type="submit" disabled={!canSubmit} className="rounded-xl bg-white px-4 py-3 text-sm font-medium text-slate-950 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-60">
-          {loading ? 'Atualizando...' : status === 'WITHDRAWN' && withdrawalToken ? 'Use a validacao por codigo' : status === 'WITHDRAWN' ? 'Confirmar retirada manual' : 'Atualizar status'}
+          {loading ? 'Atualizando...' : status === 'WITHDRAWN' && withdrawalToken ? 'Use a validação por código' : status === 'WITHDRAWN' ? 'Confirmar retirada manual' : 'Atualizar status'}
         </button>
       </div>
     </form>

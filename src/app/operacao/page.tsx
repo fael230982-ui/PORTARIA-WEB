@@ -3081,7 +3081,7 @@ export default function OperacaoPage() {
             ? getScopeLabel(camera, unitLabels)
             : 'Sem unidade definida';
         const workflow = getAlertWorkflowRecord(alert, alertWorkflowStore);
-        const title = appendUnitContext(sanitizeAlertCopy(alert.title || 'Ocorrencia'), unitLabel);
+        const title = appendUnitContext(sanitizeAlertCopy(alert.title || 'Ocorrência'), unitLabel);
         const description = sanitizeAlertCopy(alert.description || 'Sem descrição complementar.');
 
         return {
@@ -3808,7 +3808,7 @@ export default function OperacaoPage() {
       note: alertResolutionText.trim() || alertResolutionPreset || null,
       preset: alertResolutionPreset || null,
     });
-    setPageMessage({ tone: 'success', text: 'Ocorrencia colocada em espera.' });
+    setPageMessage({ tone: 'success', text: 'Ocorrência colocada em espera.' });
     setAlertResolutionError(null);
   }
 
@@ -4058,7 +4058,7 @@ export default function OperacaoPage() {
       }
       setOpenOccurrence(false);
       setOccurrenceForm(initialOccurrenceForm);
-      setPageMessage((current) => current ?? { tone: 'success', text: 'Ocorrencia registrada com sucesso.' });
+      setPageMessage((current) => current ?? { tone: 'success', text: 'Ocorrência registrada com sucesso.' });
       await refetchReports();
     } catch (error) {
       setPageMessage({ tone: 'error', text: getErrorMessage(error, 'Não foi possível registrar a ocorrência.') });
@@ -4452,7 +4452,7 @@ export default function OperacaoPage() {
               description: residentMessageChannel === 'WHATSAPP' ? 'Enviar mensagem por WhatsApp' : 'Enviar mensagem para unidade',
             },
           ],
-          'Sem conexao. A mensagem foi salva localmente e sera enviada quando a rede voltar.'
+          'Sem conexão. A mensagem foi salva localmente e será enviada quando a rede voltar.'
         );
       }
 
@@ -4480,7 +4480,7 @@ export default function OperacaoPage() {
       await refetchResidentWhatsAppConnection();
       setPageMessage({
         tone: 'success',
-        text: 'Conexao do WhatsApp preparada. Leia o QR code para concluir o pareamento.',
+        text: 'Conexão do WhatsApp preparada. Leia o QR code para concluir o pareamento.',
       });
     } catch (error) {
       setPageMessage({
@@ -5671,7 +5671,7 @@ export default function OperacaoPage() {
                   <p className="mt-2 text-sm font-medium text-white">{activeShiftSummary?.alerts ?? 0}</p>
                 </button>
                 <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-3">
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">Ocorrencias</p>
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">Ocorrências</p>
                   <p className="mt-2 text-sm font-medium text-white">{activeShiftSummary?.occurrences ?? 0}</p>
                 </div>
                 <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-3">
@@ -6464,7 +6464,7 @@ export default function OperacaoPage() {
                   ? 'Consulta de locatarios'
                   : 'Consulta operacional'
           }
-          description="Consulte cadastros operacionais e registre entrada ou saida quando necessario."
+          description="Consulte cadastros operacionais e registre entrada ou saída quando necessário."
           onClose={() => {
             setOpenOperationalPeopleModal(false);
             setOperationalPeopleModalSearch('');
@@ -6550,7 +6550,7 @@ export default function OperacaoPage() {
                           onClick={() => void (isInside ? handleRegisterExit(person) : handleRegisterEntry(person))}
                           disabled={personUpdatingId === person.id}
                         >
-                          {personUpdatingId === person.id ? 'Registrando...' : isInside ? 'Registrar saida' : 'Registrar entrada'}
+                          {personUpdatingId === person.id ? 'Registrando...' : isInside ? 'Registrar saída' : 'Registrar entrada'}
                         </Button>
                       </div>
                     </div>
@@ -6563,8 +6563,8 @@ export default function OperacaoPage() {
 
         <CrudModal
           open={openCamerasListModal}
-          title="Consulta de cameras"
-          description={`Veja as ${cameras.length} camera(s) liberada(s) para este operador e abra uma delas no monitor da operacao.`}
+          title="Consulta de câmeras"
+          description={`Veja as ${cameras.length} câmera(s) liberada(s) para este operador e abra uma delas no monitor da operação.`}
           onClose={() => setOpenCamerasListModal(false)}
           maxWidth="xl"
         >
@@ -7144,7 +7144,7 @@ export default function OperacaoPage() {
                       type="button"
                       onClick={() => {
                         setOccurrenceForm({
-                           title: `Ocorrencia com ${selectedSearchPerson.name}`,
+                           title: `Ocorrência com ${selectedSearchPerson.name}`,
                           description: `${getPersonLabel(selectedSearchPerson)} vinculado a ${getPersonUnitLabel(selectedSearchPerson, accessibleUnitsMap)}.`,
                            priority: scheduleState.label === 'Permanencia vencida' ? 'high' : 'medium',
                            scopeType: selectedSearchPerson.unitId ? 'UNIT' : 'CONDOMINIUM',
@@ -7248,7 +7248,7 @@ export default function OperacaoPage() {
                     <div className="space-y-2">
                       <div className="flex items-center gap-2">
                         <Smartphone className="h-4 w-4 text-emerald-300" />
-                        <p className="text-sm font-medium text-white">Conexao WhatsApp</p>
+                        <p className="text-sm font-medium text-white">Conexão WhatsApp</p>
                       </div>
                       <p className="text-sm text-slate-300">
                         {residentPhone ? `Telefone do morador: ${residentPhone}` : 'Morador sem telefone cadastrado para o WhatsApp.'}
@@ -7299,14 +7299,14 @@ export default function OperacaoPage() {
                       <div className="space-y-3 rounded-2xl border border-white/10 bg-white/5 p-4">
                         <div className="flex items-center gap-2 text-white">
                           <QrCode className="h-4 w-4 text-emerald-300" />
-                          <p className="text-sm font-medium">Leia o QR code no celular da portaria para concluir a conexao.</p>
+                          <p className="text-sm font-medium">Leia o QR code no celular da portaria para concluir a conexão.</p>
                         </div>
                         <p className="text-sm text-slate-300">
-                          A tela atualiza sozinha ate a conexao ficar pronta.
+                          A tela atualiza sozinha até a conexão ficar pronta.
                         </p>
                         {residentWhatsAppPairingCode ? (
                           <div className="rounded-xl border border-white/10 bg-slate-950/60 p-3">
-                            <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Codigo de pareamento</p>
+                            <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Código de pareamento</p>
                             <p className="mt-2 break-all font-mono text-sm text-white">{residentWhatsAppPairingCode}</p>
                           </div>
                         ) : null}

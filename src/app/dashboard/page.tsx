@@ -112,7 +112,7 @@ export default function DashboardPage() {
             <p className={`text-xs uppercase tracking-[0.18em] ${getBrandEyebrowClassName()}`}>Painel do morador</p>
             <h1 className="mt-2 text-2xl font-semibold">Minha unidade</h1>
             <p className="mt-2 max-w-3xl text-sm text-slate-300">
-              Aqui voce acompanha encomendas, avisos e cameras da unidade selecionada.
+              Aqui você acompanha encomendas, avisos e câmeras da unidade selecionada.
             </p>
           </div>
 

@@ -214,7 +214,7 @@ export default function ProfilePage() {
             <div className="grid gap-3 md:grid-cols-2">
               <div className="rounded-xl border border-white/10 bg-slate-950/60 p-4">
                 <p className="text-slate-500">Telefone</p>
-                <p className="mt-1 text-white">{resolvedPhone || 'Nao informado'}</p>
+                <p className="mt-1 text-white">{resolvedPhone || 'Não informado'}</p>
               </div>
               <div className="rounded-xl border border-white/10 bg-slate-950/60 p-4">
                 <p className="text-slate-500">Foto e reconhecimento</p>
@@ -285,7 +285,7 @@ export default function ProfilePage() {
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-slate-300">
           <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Avisos</p>
-          <h2 className="mt-2 text-lg font-semibold text-white">Como voce deseja receber avisos</h2>
+          <h2 className="mt-2 text-lg font-semibold text-white">Como você deseja receber avisos</h2>
           <p className="mt-2 text-sm text-slate-400 text-justify">Escolha como deseja receber os avisos mais importantes.</p>
 
           <div className="mt-5 grid gap-4 md:grid-cols-2">
@@ -348,7 +348,7 @@ export default function ProfilePage() {
           <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Privacidade</p>
           <h2 className="mt-2 text-lg font-semibold text-white">Consentimento e historico</h2>
           <p className="mt-2 text-sm text-slate-400 text-justify">
-            Aqui voce acompanha o aceite atual e os registros mais recentes de privacidade da sua conta.
+            Aqui você acompanha o aceite atual e os registros mais recentes de privacidade da sua conta.
           </p>
 
           <div className="mt-5 grid gap-3 text-sm md:grid-cols-2">

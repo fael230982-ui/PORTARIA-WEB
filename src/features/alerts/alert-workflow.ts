@@ -25,11 +25,11 @@ const EMPTY_STORE: Record<string, AlertWorkflowRecord> = {};
 let cachedStore: Record<string, AlertWorkflowRecord> | null = null;
 
 export const alertResolutionPresets = [
-  'Evento validado pela camera associada.',
-  'Ocorrencia confirmada e tratada pela portaria.',
-  'Disparo indevido confirmado apos conferencia.',
-  'Morador contatado e situacao normalizada.',
-  'Equipe acionada e ocorrencia encaminhada.',
+  'Evento validado pela câmera associada.',
+  'Ocorrência confirmada e tratada pela portaria.',
+  'Disparo indevido confirmado após conferência.',
+  'Morador contatado e situação normalizada.',
+  'Equipe acionada e ocorrência encaminhada.',
 ];
 
 function isBrowser() {
