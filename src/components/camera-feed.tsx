@@ -44,6 +44,7 @@ export function CameraFeed({
 }: CameraFeedProps) {
   const { token, user, hydrated, loading } = useAuth();
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [proxyAuthReady, setProxyAuthReady] = useState(false);
   const streamingReady = Boolean(camera?.id) && preferStreaming && Boolean(token) && hydrated && !loading;
   const { data: streamingData, error: streamingError } = useCameraStreaming(camera?.id, streamingReady);
   const previewMode = getCameraPreviewMode(camera, streamingData);
@@ -55,14 +56,16 @@ export function CameraFeed({
   const nativePayload = getVmsNativePlayerPayload(camera, streamingData);
   const hasOnlyRtsp = Boolean(camera?.streamUrl) && isRtspUrl(camera?.streamUrl) && !videoStreamUrl && !imageStreamUrl && !snapshotUrl;
   const hasOnlyWebRtc = Boolean(webRtcUrl) && !videoStreamUrl && !imageStreamUrl && !snapshotUrl;
-  const mediaKey = `${camera?.id ?? 'none'}|${videoStreamUrl ?? ''}|${imageStreamUrl ?? ''}|${snapshotUrl ?? ''}`;
+  const mediaKey = `${camera?.id ?? 'none'}|${videoStreamUrl ?? ''}|${imageStreamUrl ?? ''}|${snapshotUrl ?? ''}|${proxyAuthReady ? 'auth' : 'no-auth'}`;
   const [failedVideoMediaKey, setFailedVideoMediaKey] = useState<string | null>(null);
   const [failedImageMediaKey, setFailedImageMediaKey] = useState<string | null>(null);
   const videoError = failedVideoMediaKey === mediaKey;
   const imageError = failedImageMediaKey === mediaKey;
-  const shouldUseVideo = previewMode === 'video-stream' && Boolean(videoStreamUrl) && !videoError;
-  const shouldUseImageStream = Boolean(imageStreamUrl) && !imageError && (previewMode === 'image-stream' || videoError);
-  const shouldUseSnapshot = previewMode === 'snapshot' || Boolean(snapshotUrl && (videoError || imageError));
+  const needsProxyAuth = [videoStreamUrl, imageStreamUrl, snapshotUrl].some((url) => String(url ?? '').startsWith('/api/proxy/'));
+  const canRenderProtectedMedia = !needsProxyAuth || proxyAuthReady;
+  const shouldUseVideo = canRenderProtectedMedia && previewMode === 'video-stream' && Boolean(videoStreamUrl) && !videoError;
+  const shouldUseImageStream = canRenderProtectedMedia && Boolean(imageStreamUrl) && !imageError && (previewMode === 'image-stream' || videoError);
+  const shouldUseSnapshot = canRenderProtectedMedia && (previewMode === 'snapshot' || Boolean(snapshotUrl && (videoError || imageError)));
   const cookieSecure = typeof window !== 'undefined' && window.location.protocol === 'https:' ? '; Secure' : '';
 
   useEffect(() => {
@@ -70,8 +73,10 @@ export function CameraFeed({
 
     if (token) {
       document.cookie = `camera_proxy_token=${encodeURIComponent(token)}; Path=/api/proxy; SameSite=Lax${cookieSecure}`;
+      setProxyAuthReady(true);
     } else {
       document.cookie = `camera_proxy_token=; Path=/api/proxy; Max-Age=0; SameSite=Lax${cookieSecure}`;
+      setProxyAuthReady(false);
     }
 
     if (user?.role === 'MORADOR' && user.selectedUnitId) {
@@ -80,6 +85,12 @@ export function CameraFeed({
       document.cookie = `camera_selected_unit_id=; Path=/api/proxy; Max-Age=0; SameSite=Lax${cookieSecure}`;
     }
   }, [cookieSecure, token, user?.role, user?.selectedUnitId]);
+
+  useEffect(() => {
+    if (!proxyAuthReady) return;
+    setFailedVideoMediaKey(null);
+    setFailedImageMediaKey(null);
+  }, [camera?.id, proxyAuthReady]);
 
   useEffect(() => {
     const video = videoRef.current;
