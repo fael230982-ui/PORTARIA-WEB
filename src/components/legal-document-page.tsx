@@ -21,16 +21,16 @@ export function LegalDocumentPage({
     <div className="min-h-screen bg-zinc-950 px-4 py-10 text-white">
       <div className="mx-auto max-w-4xl space-y-6">
         <div className="rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur">
-          <p className="text-xs uppercase tracking-[0.2em] text-zinc-400">LGPD e Governanca</p>
+          <p className="text-xs uppercase tracking-[0.2em] text-zinc-400">LGPD e Governança</p>
           <h1 className="mt-2 text-3xl font-semibold">{title}</h1>
           <p className="mt-3 text-sm text-zinc-300">{summary}</p>
-          <p className="mt-3 text-xs text-zinc-500">Versao de referencia: {version}</p>
+          <p className="mt-3 text-xs text-zinc-500">Versão de referência: {version}</p>
           <div className="mt-4 flex flex-wrap gap-3 text-sm">
             <Link href="/termos" className="rounded-xl border border-white/10 bg-white/10 px-4 py-2 hover:bg-white/15">
               Termo de Uso
             </Link>
             <Link href="/privacidade" className="rounded-xl border border-white/10 bg-white/10 px-4 py-2 hover:bg-white/15">
-              Politica de Privacidade
+              Política de Privacidade
             </Link>
             <Link href="/login" className={`rounded-xl border px-4 py-2 ${brandClasses.outlineAccent}`}>
               Voltar ao login

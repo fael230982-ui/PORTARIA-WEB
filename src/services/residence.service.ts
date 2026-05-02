@@ -109,7 +109,7 @@ export async function getStreets(condominiumId?: string): Promise<Street[]> {
     const status = (error as { response?: { status?: number } }).response?.status;
 
     if (status && [500, 502, 503, 504].includes(status)) {
-      console.warn('[residence] catalogo de ruas indisponivel; usando lista vazia temporariamente', {
+      console.warn('[residence] catálogo de ruas indisponível; usando lista vazia temporariamente', {
         condominiumId,
         status,
       });
@@ -171,7 +171,7 @@ export async function updateUnit(
   } catch (error) {
     const status = (error as { response?: { status?: number } }).response?.status;
     if (status === 404) {
-      throw new Error('Endpoint de edicao de unidades ainda nao esta publicado neste ambiente.');
+      throw new Error('Endpoint de edição de unidades ainda não está publicado neste ambiente.');
     }
     throw error;
   }

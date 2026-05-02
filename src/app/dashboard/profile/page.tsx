@@ -33,7 +33,7 @@ function resolveLinkedUnitLabel(
     units.find((unit) => unit.legacyUnitId === normalizedUnitId);
 
   if (!matchedUnit) {
-    return 'Unidade nao identificada';
+    return 'Unidade não identificada';
   }
 
   return (
@@ -73,7 +73,7 @@ function resolveSelectedUnitLabel(
     if (mappedName) return mappedName;
   }
 
-  return user.selectedUnitName || 'Unidade nao identificada';
+  return user.selectedUnitName || 'Unidade não identificada';
 }
 
 function getAccountLabel(scopeType?: UserScopeType | null) {
@@ -132,7 +132,7 @@ function getResidentFaceStatusLabel(status?: FaceStatus | string | null) {
     case 'NO_PHOTO':
       return 'Sem foto cadastrada';
     default:
-      return 'Status da foto nao informado';
+      return 'Status da foto não informado';
   }
 }
 
@@ -221,8 +221,8 @@ export default function ProfilePage() {
                 <p className="mt-1 text-white">{getResidentFaceStatusLabel(resolvedFaceStatus)}</p>
                 <p className="mt-2 text-xs text-slate-500">
                   {resolvedPhotoUrl
-                    ? 'A foto mais recente da conta ja esta vinculada ao seu perfil.'
-                    : 'Sua conta ainda nao recebeu foto vinculada.'}
+                    ? 'A foto mais recente da conta já está vinculada ao seu perfil.'
+                    : 'Sua conta ainda não recebeu foto vinculada.'}
                 </p>
               </div>
             </div>
@@ -246,16 +246,16 @@ export default function ProfilePage() {
               <p className="mt-1 text-white">{linkedUnitLabel}</p>
             </div>
             <div className="rounded-xl border border-white/10 bg-slate-950/60 p-4">
-              <p className="text-slate-500">Situacao da conta</p>
+              <p className="text-slate-500">Situação da conta</p>
               <p className="mt-1 text-white">{getAccountLabel(effectiveProfile?.scopeType)}</p>
             </div>
             <div className="rounded-xl border border-white/10 bg-slate-950/60 p-4">
-              <p className="text-slate-500">Unidades disponiveis</p>
+              <p className="text-slate-500">Unidades disponíveis</p>
               <p className="mt-1 text-white">{selectedUnitsCount}</p>
               <p className="mt-2 text-xs text-slate-500">
                 {effectiveProfile?.requiresUnitSelection
                   ? 'Escolha uma unidade para continuar usando a conta.'
-                  : 'Sua conta ja esta pronta para uso.'}
+                  : 'Sua conta já está pronta para uso.'}
               </p>
             </div>
           </div>
@@ -267,7 +267,7 @@ export default function ProfilePage() {
           ) : null}
           {residentPersonQuery.isError ? (
             <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
-              Alguns dados complementares, como foto e status de reconhecimento, nao puderam ser atualizados agora.
+              Alguns dados complementares, como foto e status de reconhecimento, não puderam ser atualizados agora.
             </div>
           ) : null}
         </div>
@@ -353,7 +353,7 @@ export default function ProfilePage() {
 
           <div className="mt-5 grid gap-3 text-sm md:grid-cols-2">
             <div className="rounded-xl border border-white/10 bg-slate-950/60 p-4">
-              <p className="text-slate-500">Situacao atual</p>
+              <p className="text-slate-500">Situação atual</p>
               <p className="mt-1 text-white">{consentQuery.data?.accepted ? 'Aceito' : 'Pendente'}</p>
               <p className="mt-2 text-xs text-slate-500">Versão: {consentQuery.data?.version || 'Não registrada'}</p>
             </div>
@@ -366,20 +366,20 @@ export default function ProfilePage() {
               <p className="mt-1 text-white">{consentHistoryCount} registro(s)</p>
             </div>
             <div className="rounded-xl border border-white/10 bg-slate-950/60 p-4">
-              <p className="text-slate-500">Versao atual</p>
+              <p className="text-slate-500">Versão atual</p>
               <p className="mt-1 text-white">{lgpdPolicyQuery.data?.currentVersion || 'Não informada'}</p>
             </div>
           </div>
 
           {consentHistoryCount ? (
             <div className="mt-4 rounded-xl border border-white/10 bg-slate-950/60 p-4">
-              <p className="text-sm text-slate-300">Ultimos registros</p>
+              <p className="text-sm text-slate-300">Últimos registros</p>
               <div className="mt-3 space-y-2 text-sm text-slate-300">
                 {consentHistoryQuery.data?.slice(0, 3).map((entry, index) => (
                   <div key={entry.id || `${index}`} className="rounded-xl border border-white/10 bg-white/5 px-3 py-2">
-                    <p className="text-white">{entry.accepted ? 'Aceite registrado' : 'Revogacao registrada'}</p>
+                    <p className="text-white">{entry.accepted ? 'Aceite registrado' : 'Revogação registrada'}</p>
                     <p className="mt-1 text-xs text-slate-400">
-                      Versao {entry.version || 'nao informada'} em {formatDateTime(entry.acceptedAt || entry.revokedAt)}
+                      Versão {entry.version || 'não informada'} em {formatDateTime(entry.acceptedAt || entry.revokedAt)}
                     </p>
                   </div>
                 ))}

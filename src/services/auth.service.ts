@@ -21,10 +21,10 @@ function normalizeAuthUser(
 
 function getErrorMessage(error: unknown): string {
   return getApiErrorMessage(error, {
-    fallback: 'Nao foi possivel concluir a operacao.',
+    fallback: 'Não foi possível concluir a operação.',
     byStatus: {
-      401: 'Credenciais invalidas.',
-      403: 'Voce nao tem permissao para acessar.',
+      401: 'Credenciais inválidas.',
+      403: 'Você não tem permissão para acessar.',
     },
   });
 }

@@ -251,7 +251,7 @@ export default function ResidentVehiclesPage() {
             <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
               <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Veículos bloqueados</p>
               <p className="mt-2 text-center text-3xl font-semibold tabular-nums text-white">{stats.blocked}</p>
-              <p className="mt-1 text-xs text-slate-400">Exigem revisao antes de voltar ao uso.</p>
+              <p className="mt-1 text-xs text-slate-400">Exigem revisão antes de voltar ao uso.</p>
             </div>
           </section>
 
@@ -461,7 +461,7 @@ export default function ResidentVehiclesPage() {
 
           {editingVehicle ? (
             <label className="space-y-2">
-              <span className="text-sm text-slate-300">Situacao</span>
+              <span className="text-sm text-slate-300">Situação</span>
               <select
                 value={form.status}
                 onChange={(event) => setField('status', event.target.value)}

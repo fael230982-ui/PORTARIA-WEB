@@ -37,16 +37,16 @@ export default function AcordoPage() {
         <p className="text-xs uppercase tracking-[0.2em] text-zinc-400">Primeiro acesso</p>
         <h1 className="mt-2 text-3xl font-semibold">Termo e privacidade</h1>
         <p className="mt-3 text-sm text-zinc-300">
-          Antes de continuar, leia os documentos de uso e privacidade da plataforma. Esta confirmacao e registrada localmente nesta versao do sistema.
+          Antes de continuar, leia os documentos de uso e privacidade da plataforma. Esta confirmação é registrada localmente nesta versão do sistema.
         </p>
-        <p className="mt-2 text-xs text-zinc-500">Versao dos documentos: {LEGAL_VERSION}</p>
+        <p className="mt-2 text-xs text-zinc-500">Versão dos documentos: {LEGAL_VERSION}</p>
 
         <div className="mt-6 flex flex-wrap gap-3 text-sm">
           <Link href="/termos" className="rounded-xl border border-white/10 bg-white/10 px-4 py-2 hover:bg-white/15">
             Ler Termo de Uso
           </Link>
           <Link href="/privacidade" className="rounded-xl border border-white/10 bg-white/10 px-4 py-2 hover:bg-white/15">
-            Ler Politica de Privacidade
+            Ler Política de Privacidade
           </Link>
         </div>
 
@@ -58,7 +58,7 @@ export default function AcordoPage() {
             className="mt-1 h-4 w-4"
           />
           <span className="text-sm text-zinc-200">
-            Li e estou ciente do Termo de Uso e da Politica de Privacidade desta plataforma para continuar utilizando o sistema.
+            Li e estou ciente do Termo de Uso e da Política de Privacidade desta plataforma para continuar utilizando o sistema.
           </span>
         </label>
 

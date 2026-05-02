@@ -4,10 +4,10 @@ import type { UserCreateRequest, UserResponse, UserUpdateRequest } from '@/types
 
 function getErrorMessage(error: unknown) {
   return getApiErrorMessage(error, {
-    fallback: 'Nao foi possivel concluir a operacao com usuarios.',
+    fallback: 'Não foi possível concluir a operação com usuários.',
     byStatus: {
-      404: 'Endpoint de edicao de usuarios ainda nao esta publicado neste ambiente.',
-      409: 'Ja existe outro usuario com este e-mail.',
+      404: 'Endpoint de edição de usuários ainda não está publicado neste ambiente.',
+      409: 'Já existe outro usuário com este e-mail.',
     },
   });
 }

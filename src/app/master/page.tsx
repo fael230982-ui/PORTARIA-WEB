@@ -1711,7 +1711,7 @@ export default function MasterPage() {
                 ) : (
                   <div className="space-y-4 rounded-2xl border border-amber-400/25 bg-amber-400/10 p-4 text-sm text-amber-50">
                     <div>
-                      <p className="font-medium text-white">Administrador nao localizado</p>
+                      <p className="font-medium text-white">Administrador não localizado</p>
                       <p className="mt-2">
                         A lista de usuários não retornou um administrador vinculado a este cliente. Você pode criar um administrador agora. Se o e-mail já existir, o sistema deve impedir duplicidade.
                       </p>
@@ -2030,7 +2030,7 @@ export default function MasterPage() {
             <Field label="E-mail" value={adminUserForm.email} onChange={(value) => setAdminUserForm((prev) => ({ ...prev, email: value }))} type="email" required />
 
             <div className="rounded-2xl border border-amber-400/20 bg-amber-400/10 p-4 text-sm text-amber-50">
-              Se alterar o e-mail, confirme que ele nao pertence a outro morador, operador ou administrador.
+              Se alterar o e-mail, confirme que ele não pertence a outro morador, operador ou administrador.
             </div>
 
             <div className="flex flex-wrap justify-end gap-3">

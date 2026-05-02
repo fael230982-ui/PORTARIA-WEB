@@ -148,7 +148,7 @@ export default function DashboardPage() {
             <div className="rounded-lg border border-white/10 bg-slate-950/50 p-4 text-sm text-slate-300">
               <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Morador logado</p>
               <p className="mt-2 text-white">{user?.personName || user?.name || 'Morador'}</p>
-              <p className="mt-1 text-xs text-slate-400">{user?.email || 'E-mail nao informado'}</p>
+              <p className="mt-1 text-xs text-slate-400">{user?.email || 'E-mail não informado'}</p>
             </div>
             <div className="rounded-lg border border-white/10 bg-slate-950/50 p-4 text-sm text-slate-300">
               <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Unidade ativa</p>

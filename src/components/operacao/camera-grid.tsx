@@ -87,7 +87,7 @@ export function CameraGrid({
                 <div className={`absolute inset-0 flex items-center justify-center ${brandClasses.activeOverlay}`}>
                   <div className="text-center">
                     <Cctv className={`mx-auto mb-2 h-12 w-12 ${brandClasses.accentTextSoft}`} />
-                    <p className="font-medium text-white">Camera ativa</p>
+                    <p className="font-medium text-white">Câmera ativa</p>
                   </div>
                 </div>
               ) : null}
@@ -96,7 +96,7 @@ export function CameraGrid({
             <CardContent className="p-4 pt-0">
               <div className="space-y-1">
                 <h3 className="truncate font-medium text-white">{camera.name}</h3>
-                <p className="truncate text-xs text-slate-400">{camera.location || 'Local nao informado'}</p>
+                <p className="truncate text-xs text-slate-400">{camera.location || 'Local não informado'}</p>
                 <p className="truncate text-xs text-slate-500">{camera.unitLabel || 'Sem unidade vinculada'}</p>
                 <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-300">
                   {mediaLabels.map((label) => (

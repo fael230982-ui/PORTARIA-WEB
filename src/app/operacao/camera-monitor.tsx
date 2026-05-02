@@ -26,7 +26,7 @@ export function CameraMonitor({ cameras = [] }: CameraMonitorProps) {
               key={camera.id}
               name={camera.name}
               status={camera.status}
-              lastActivity={camera.lastSeen || 'Sem ultimo contato'}
+              lastActivity={camera.lastSeen || 'Sem último contato'}
             />
           ))
         )}

@@ -43,7 +43,7 @@ const FALLBACK_EQUIPMENT_CATALOG: FaceEquipmentCatalogEntry[] = [
     vendor: 'MAX_ROBOT',
     vendorLabel: 'Max Robot',
     model: 'CAMERA_IA',
-    modelLabel: 'Camera IA',
+    modelLabel: 'Câmera IA',
     deviceType: 'CAMERA_IA',
     eventWebhookPath: '/api/v1/integrations/devices/max-robot/camera-ia/events',
   },

@@ -17,7 +17,7 @@ export async function PUT(request: Request, context: RouteContext) {
 
   if (index === -1) {
     return NextResponse.json(
-      { success: false, message: 'Veiculo nao encontrado.' },
+      { success: false, message: 'Veículo não encontrado.' },
       { status: 404 }
     );
   }
@@ -44,7 +44,7 @@ export async function DELETE(_request: Request, context: RouteContext) {
 
   if (!removed) {
     return NextResponse.json(
-      { success: false, message: 'Veiculo nao encontrado.' },
+      { success: false, message: 'Veículo não encontrado.' },
       { status: 404 }
     );
   }

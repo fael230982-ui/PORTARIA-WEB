@@ -1048,11 +1048,11 @@ function getActionButtonClass(actionKey: string) {
       }
 
       if ((form.vendor === 'MAX_ROBOT' || form.type === 'CAMERA_IA') && !form.streamUrl.trim()) {
-        throw new Error('Informe a URL de stream da Camera IA. O backend exige o campo streamUrl para salvar esse tipo de equipamento.');
+        throw new Error('Informe a URL de stream da Câmera IA. O backend exige o campo streamUrl para salvar esse tipo de equipamento.');
       }
 
       if ((form.vendor === 'MAX_ROBOT' || form.type === 'CAMERA_IA') && !form.vmsServerId.trim()) {
-        throw new Error('Selecione o servidor VMS da Camera IA. O backend exige vmsServerId para salvar esse tipo de equipamento.');
+        throw new Error('Selecione o servidor VMS da Câmera IA. O backend exige vmsServerId para salvar esse tipo de equipamento.');
       }
 
       if (selectedDevice) {
@@ -1675,7 +1675,7 @@ function getActionButtonClass(actionKey: string) {
               />
               {form.vendor === 'MAX_ROBOT' || form.type === 'CAMERA_IA' ? (
                 <span className="block text-xs text-amber-200">
-                  Para Camera IA Max Robot, informe o DeviceID que chega nos eventos snap/verify. Sem isso o backend nao associa os eventos ao dispositivo.
+                  Para Câmera IA Max Robot, informe o DeviceID que chega nos eventos snap/verify. Sem isso o backend não associa os eventos ao dispositivo.
                 </span>
               ) : null}
             </label>
@@ -1747,9 +1747,9 @@ function getActionButtonClass(actionKey: string) {
 
           {form.type === 'CAMERA_IA' || form.vendor === 'MAX_ROBOT' || form.cameraEnabled ? (
             <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/10 p-4">
-              <p className="text-sm font-medium text-cyan-50">Dados de video da Camera IA</p>
+              <p className="text-sm font-medium text-cyan-50">Dados de vídeo da Câmera IA</p>
               <p className="mt-1 text-xs text-cyan-100/80">
-                Para Camera IA, o backend exige a URL de stream. Use a URL oficial informada pelo equipamento ou pelo servidor VMS.
+                Para Câmera IA, o backend exige a URL de stream. Use a URL oficial informada pelo equipamento ou pelo servidor VMS.
               </p>
               <div className="mt-4 grid gap-4 md:grid-cols-2">
                 <label className="space-y-1 text-sm text-cyan-50 md:col-span-2">

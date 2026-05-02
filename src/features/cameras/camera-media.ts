@@ -144,7 +144,7 @@ export function getCameraMediaAvailabilityLabels(
   if (getPreferredImageStreamUrl(camera, streaming)) labels.push('preview');
   if (getPreferredSnapshotUrl(camera, streaming)) labels.push('snapshot');
   if (camera?.streamUrl) labels.push('stream');
-  if (camera?.lastSeen) labels.push('ultimo contato registrado');
+  if (camera?.lastSeen) labels.push('último contato registrado');
   return labels;
 }
 

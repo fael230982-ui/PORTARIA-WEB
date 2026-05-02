@@ -22,10 +22,10 @@ export function buildEventsFromAccessLogs(accessLogs: AccessLog[]): AccessLogEve
     .filter((log) => log.personId && log.result === 'ALLOWED')
     .map((log) => ({
       personId: log.personId as string,
-      personName: log.personName || 'Pessoa nao identificada',
+      personName: log.personName || 'Pessoa não identificada',
       action: log.direction,
       categoryLabel: log.classificationLabel || log.classification || 'Acesso',
-      unitLabel: log.location || 'Local nao informado',
+      unitLabel: log.location || 'Local não informado',
       createdAt: log.timestamp,
       result: log.result,
       source: 'access-log' as const,

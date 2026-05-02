@@ -495,12 +495,12 @@ function DeliveryForm({
           </div>
           <p className="mt-3">
             {ocrReview.reviewMode === 'auto'
-              ? 'A etiqueta foi considerada confiavel o suficiente para aplicar os vinculos automaticamente.'
-              : 'A leitura trouxe sinais suficientes para ajudar, mas exige revisao antes de salvar.'}
+              ? 'A etiqueta foi considerada confiável o suficiente para aplicar os vínculos automaticamente.'
+              : 'A leitura trouxe sinais suficientes para ajudar, mas exige revisão antes de salvar.'}
           </p>
           <div className="mt-3 grid gap-3 md:grid-cols-2">
             <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-              <p className="text-xs uppercase tracking-[0.16em] text-white/60">Sugestoes</p>
+              <p className="text-xs uppercase tracking-[0.16em] text-white/60">Sugestões</p>
               <p className="mt-2">Unidade: {ocrReview.suggestedUnitName ?? 'Sem sugestão direta'}</p>
               <p className="mt-1">Destinatário: {ocrReview.suggestedResidentName ?? 'Sem sugestão direta'}</p>
               <p className="mt-1">Transportadora: {ocrReview.deliveryCompany ?? 'Não identificada'}</p>

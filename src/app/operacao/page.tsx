@@ -4400,7 +4400,7 @@ export default function OperacaoPage() {
     if (residentMessageChannel === 'WHATSAPP' && !residentWhatsAppReady) {
       setPageMessage({
         tone: 'error',
-        text: 'Conecte o WhatsApp da unidade e aguarde a confirmacao antes de enviar mensagens por esse canal.',
+        text: 'Conecte o WhatsApp da unidade e aguarde a confirmação antes de enviar mensagens por esse canal.',
       });
       return;
     }
@@ -6542,16 +6542,16 @@ export default function OperacaoPage() {
         >
           <div className="max-h-[62vh] space-y-3 overflow-y-auto pr-1">
             {cameras.length === 0 ? (
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">Nenhuma camera cadastrada ou liberada para este usuario.</div>
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">Nenhuma câmera cadastrada ou liberada para este usuário.</div>
             ) : (
               cameras.map((camera) => (
                 <div key={`${camera.id}-camera-consultation`} className="grid gap-3 rounded-2xl border border-white/10 bg-white/[0.035] p-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className="truncate font-medium text-white">{camera.name || camera.location || 'Camera sem nome'}</p>
+                      <p className="truncate font-medium text-white">{camera.name || camera.location || 'Câmera sem nome'}</p>
                       <span className={`rounded-full border px-3 py-1 text-[11px] ${getCameraBadgeTone(camera.status)}`}>{camera.status}</span>
                     </div>
-                    <p className="mt-1 truncate text-sm text-slate-400">{camera.location || 'Local nao informado'}</p>
+                    <p className="mt-1 truncate text-sm text-slate-400">{camera.location || 'Local não informado'}</p>
                     <p className="mt-1 truncate text-xs text-slate-500">{getScopeLabel(camera, unitLabels)}</p>
                   </div>
                   <div className="flex flex-wrap justify-end gap-2">

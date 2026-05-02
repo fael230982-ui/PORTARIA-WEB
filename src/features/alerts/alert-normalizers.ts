@@ -275,12 +275,12 @@ export function getAlertReplayUrl(alert?: Pick<Alert, 'replayUrl' | 'payload' | 
 }
 
 export function getAlertEvidenceLabel(alert?: Pick<Alert, 'snapshotUrl' | 'imageUrl' | 'thumbnailUrl' | 'photoUrl'> | null) {
-  if (!alert) return 'Sem evidencia';
+  if (!alert) return 'Sem evidência';
   if (alert.snapshotUrl) return 'snapshot';
   if (alert.imageUrl) return 'imagem';
   if (alert.thumbnailUrl) return 'thumbnail';
   if (alert.photoUrl) return 'foto';
-  return 'Sem evidencia';
+  return 'Sem evidência';
 }
 
 export function getAlertTone(type: AlertType) {

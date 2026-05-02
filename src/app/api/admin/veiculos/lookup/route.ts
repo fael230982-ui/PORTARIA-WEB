@@ -112,7 +112,7 @@ export async function GET(request: Request) {
       {
         success: false,
         message:
-          'Consulta automatica de placa ainda nao configurada. Defina VEHICLE_LOOKUP_API_URL e, se necessario, VEHICLE_LOOKUP_API_TOKEN.',
+          'Consulta automática de placa ainda não configurada. Defina VEHICLE_LOOKUP_API_URL e, se necessário, VEHICLE_LOOKUP_API_TOKEN.',
       },
       { status: 501 }
     );

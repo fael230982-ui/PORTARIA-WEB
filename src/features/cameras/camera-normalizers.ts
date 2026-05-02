@@ -78,7 +78,7 @@ function normalizeStringArray(value: unknown) {
 export function normalizeCamera(raw: CameraApiShape): Camera {
   return {
     id: String(raw.id ?? ''),
-    name: String(raw.name ?? 'Camera sem nome'),
+    name: String(raw.name ?? 'Câmera sem nome'),
     location: normalizeString(raw.location),
     deviceType: normalizeString(raw.deviceType) as Camera['deviceType'],
     deviceUsageType: normalizeString(raw.deviceUsageType) as Camera['deviceUsageType'],
