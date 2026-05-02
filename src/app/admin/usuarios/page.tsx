@@ -84,6 +84,11 @@ const initialForm: UserFormData = {
   unitId: '',
   personId: '',
 };
+const PT_BR_COLLATOR = new Intl.Collator('pt-BR', { numeric: true, sensitivity: 'base' });
+
+function compareText(a: unknown, b: unknown) {
+  return PT_BR_COLLATOR.compare(String(a ?? ''), String(b ?? ''));
+}
 
 function getResidentAccessInitialData(): Partial<UserFormData> {
   if (typeof window === 'undefined') return {};
@@ -592,18 +597,21 @@ export default function AdminUsuariosPage() {
   }, []);
 
   const users = useMemo(() => {
-    return (usersData ?? []).filter((item): item is UserResponse => Boolean(item && typeof item === 'object')).map((item) => {
-      const condominiumName =
-        condominiums.filter(Boolean).find((condominium) => condominium.id === item.condominiumId)?.name ?? '';
-      const unit = resolveUnit(item.unitId, units);
-      const location = formatUnitLocation(unit, item.unitId) || condominiumName;
+    return (usersData ?? [])
+      .filter((item): item is UserResponse => Boolean(item && typeof item === 'object'))
+      .map((item) => {
+        const condominiumName =
+          condominiums.filter(Boolean).find((condominium) => condominium.id === item.condominiumId)?.name ?? '';
+        const unit = resolveUnit(item.unitId, units);
+        const location = formatUnitLocation(unit, item.unitId) || condominiumName;
 
-      return mapUserToRow(item, {
-        condominiumName,
-        unitLabel: location,
-        location,
-      });
-    });
+        return mapUserToRow(item, {
+          condominiumName,
+          unitLabel: location,
+          location,
+        });
+      })
+      .sort((a, b) => compareText(a.name, b.name) || compareText(a.email, b.email));
   }, [condominiums, units, usersData]);
 
   const filteredUsers = useMemo(() => {
@@ -623,7 +631,7 @@ export default function AdminUsuariosPage() {
       const matchesScope = scopeMatchesFilter(item.scopeType, filters.scope);
 
       return matchesSearch && matchesRole && matchesScope;
-    });
+    }).sort((a, b) => compareText(a.name, b.name) || compareText(a.email, b.email));
   }, [users, filters]);
 
   const stats = useMemo(() => {
@@ -644,7 +652,11 @@ export default function AdminUsuariosPage() {
   );
 
   const condominiumOptions = useMemo(
-    () => condominiums.filter(Boolean).map((item) => ({ id: item.id, name: item.name ?? 'Condomínio sem nome' })),
+    () =>
+      condominiums
+        .filter(Boolean)
+        .map((item) => ({ id: item.id, name: item.name ?? 'Condomínio sem nome' }))
+        .sort((a, b) => compareText(a.name, b.name)),
     [condominiums]
   );
   const allowedRoleOptions = useMemo(() => {
@@ -684,7 +696,8 @@ export default function AdminUsuariosPage() {
             item.legacyUnitId ||
             item.label,
           condominiumId: item.condominiumId,
-        })),
+        }))
+        .sort((a, b) => compareText(a.label, b.label)),
     [units]
   );
   const unitLabelById = useMemo(
@@ -708,7 +721,7 @@ export default function AdminUsuariosPage() {
             [person.unit?.condominium?.name, person.unit?.structure?.label, person.unit?.label].filter(Boolean).join(' / ') ||
             null,
         }))
-        .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')),
+        .sort((a, b) => compareText(a.name, b.name) || compareText(a.unitLabel, b.unitLabel)),
     [peopleData?.data, unitLabelById]
   );
 

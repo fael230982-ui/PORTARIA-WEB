@@ -61,6 +61,11 @@ const vehicleStatusLabels: Record<VehicleStatus, string> = {
 };
 
 const VEHICLES_SNAPSHOT_STORAGE_KEY = 'admin-vehicles-snapshot';
+const PT_BR_COLLATOR = new Intl.Collator('pt-BR', { numeric: true, sensitivity: 'base' });
+
+function compareText(a: unknown, b: unknown) {
+  return PT_BR_COLLATOR.compare(String(a ?? ''), String(b ?? ''));
+}
 
 function normalizeSearch(value: unknown) {
   return String(value ?? '')
@@ -122,8 +127,15 @@ function VehicleForm({
   lookupMessage: string | null;
   onPlateLookup: () => Promise<void> | void;
 }) {
+  const unitOptions = useMemo(
+    () => [...units].sort((a, b) => compareText(formatUnitLabel(a), formatUnitLabel(b))),
+    [units]
+  );
   const peopleOptions = useMemo(
-    () => people.filter((person) => !value.unitId || person.unitId === value.unitId),
+    () =>
+      people
+        .filter((person) => !value.unitId || person.unitId === value.unitId)
+        .sort((a, b) => compareText(a.name, b.name)),
     [people, value.unitId]
   );
   const plateFormat = detectVehiclePlateFormat(value.plate);
@@ -238,7 +250,7 @@ function VehicleForm({
             required
           >
             <option value="">Selecione uma unidade</option>
-            {units.map((unit) => (
+            {unitOptions.map((unit) => (
               <option key={unit.id} value={unit.id}>{formatUnitLabel(unit)}</option>
             ))}
           </select>
@@ -366,15 +378,20 @@ export default function AdminVeiculosPage() {
     if (user?.role !== 'ADMIN' && user?.role !== 'GERENTE') return [];
     return [user.unitId, ...(user.unitIds ?? [])].filter(Boolean) as string[];
   }, [user?.role, user?.unitId, user?.unitIds]);
-  const scopedUnits = useMemo(() => {
-    if (user?.role !== 'ADMIN' && user?.role !== 'GERENTE') return units;
+  const scopedUnits = useMemo<Unit[]>(() => {
+    let nextUnits: Unit[];
+    if (user?.role !== 'ADMIN' && user?.role !== 'GERENTE') {
+      return [...units].sort((a, b) => compareText(formatUnitLabel(a), formatUnitLabel(b)));
+    }
     if (allowedUnitIds.length > 0) {
-      return units.filter((unit) => allowedUnitIds.includes(unit.id) || Boolean(unit.legacyUnitId && allowedUnitIds.includes(unit.legacyUnitId)));
+      nextUnits = units.filter((unit) => allowedUnitIds.includes(unit.id) || Boolean(unit.legacyUnitId && allowedUnitIds.includes(unit.legacyUnitId)));
+      return nextUnits.sort((a, b) => compareText(formatUnitLabel(a), formatUnitLabel(b)));
     }
     if (allowedCondominiumIds.length === 0) return [];
-    return units.filter((unit) => unit.condominiumId && allowedCondominiumIds.includes(unit.condominiumId));
+    nextUnits = units.filter((unit) => unit.condominiumId && allowedCondominiumIds.includes(unit.condominiumId));
+    return nextUnits.sort((a, b) => compareText(formatUnitLabel(a), formatUnitLabel(b)));
   }, [allowedCondominiumIds, allowedUnitIds, units, user?.role]);
-  const unitsById = useMemo(() => new Map(scopedUnits.map((unit) => [unit.id, unit])), [scopedUnits]);
+  const unitsById = useMemo(() => new Map<string, Unit>(scopedUnits.map((unit) => [unit.id, unit])), [scopedUnits]);
   const activeUnit = activeUnitId ? unitsById.get(activeUnitId) ?? null : null;
   const peopleById = useMemo(() => new Map(people.map((person) => [person.id, person])), [people]);
   const duplicatePlateSet = useMemo(() => {
@@ -418,7 +435,11 @@ export default function AdminVeiculosPage() {
         .some((value) => normalizeSearch(value).includes(query));
 
       return statusOk && issueOk && searchOk;
-    });
+    }).sort((a, b) =>
+      compareText(a.plate, b.plate) ||
+      compareText(a.ownerName, b.ownerName) ||
+      compareText(a.unitLabel, b.unitLabel)
+    );
   }, [activeUnitId, duplicatePlateSet, issueFilter, search, statusFilter, visibleVehicles]);
 
   const stats = useMemo(() => ({
