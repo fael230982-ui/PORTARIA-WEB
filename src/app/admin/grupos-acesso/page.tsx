@@ -102,8 +102,11 @@ export default function AdminAccessGroupsPage() {
 
   const filteredGroups = useMemo(() => {
     const normalized = search.trim().toLowerCase();
-    if (!normalized) return groups;
-    return groups.filter((group) => group.name.toLowerCase().includes(normalized));
+    const source = normalized
+      ? groups.filter((group) => group.name.toLowerCase().includes(normalized))
+      : groups;
+
+    return [...source].sort((left, right) => left.name.localeCompare(right.name, 'pt-BR'));
   }, [groups, search]);
 
   const filteredPeople = useMemo(() => {
@@ -115,6 +118,7 @@ export default function AdminAccessGroupsPage() {
           .filter(Boolean)
           .some((value) => String(value).toLowerCase().includes(normalized));
       })
+      .sort((left, right) => left.name.localeCompare(right.name, 'pt-BR'))
       .slice(0, 80);
   }, [people, pickerSearch]);
 
@@ -128,6 +132,7 @@ export default function AdminAccessGroupsPage() {
           .filter(Boolean)
           .some((value) => String(value).toLowerCase().includes(normalized));
       })
+      .sort((left, right) => left.name.localeCompare(right.name, 'pt-BR'))
       .slice(0, 80);
   }, [devices, pickerSearch]);
 
@@ -444,7 +449,7 @@ export default function AdminAccessGroupsPage() {
                   );
                 })}
               </div>
-              <p className="mt-2 text-xs text-slate-500">Se nenhuma categoria for selecionada, o backend pode aceitar qualquer categoria conforme regra padrão.</p>
+              <p className="mt-2 text-xs text-slate-500">Se nenhuma categoria for selecionada, todas ficam disponíveis conforme a regra do condomínio.</p>
             </div>
             <label className="mt-4 block space-y-1 text-sm text-slate-300">
               Observações da política
