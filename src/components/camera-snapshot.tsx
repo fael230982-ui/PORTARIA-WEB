@@ -32,7 +32,6 @@ export function CameraSnapshot({
   const [loading, setLoading] = useState(Boolean(cameraId));
   const [error, setError] = useState<string | null>(null);
   const currentSrcRef = useRef<string | null>(normalizedFallbackSrc);
-  const cookieSecure = typeof window !== 'undefined' && window.location.protocol === 'https:' ? '; Secure' : '';
 
   useEffect(() => {
     setSrc(normalizedFallbackSrc);
@@ -45,14 +44,6 @@ export function CameraSnapshot({
   }, [src]);
 
   useEffect(() => {
-    if (typeof document === 'undefined') return;
-
-    if (token) {
-      document.cookie = `camera_proxy_token=${encodeURIComponent(token)}; Path=/api/proxy; SameSite=Lax${cookieSecure}`;
-    }
-  }, [cookieSecure, token]);
-
-  useEffect(() => {
     if (!cameraId || !token) {
       setSrc(normalizedFallbackSrc);
       setLoading(false);
@@ -62,27 +53,60 @@ export function CameraSnapshot({
     let active = true;
     let timerId: number | null = null;
 
+    const blobToDataUrl = (blob: Blob) =>
+      new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          if (typeof reader.result === 'string') {
+            resolve(reader.result);
+            return;
+          }
+
+          reject(new Error('Snapshot inválido.'));
+        };
+        reader.onerror = () => reject(reader.error ?? new Error('Falha ao ler snapshot.'));
+        reader.readAsDataURL(blob);
+      });
+
     const loadSnapshot = async () => {
-      setLoading((currentLoading) => currentLoading || !currentSrcRef.current);
-      setError(null);
+      try {
+        setLoading((currentLoading) => currentLoading || !currentSrcRef.current);
+        setError(null);
 
-      const nextSrc = `/api/proxy/cameras/${cameraId}/snapshot?_=${Date.now()}`;
-      const image = new Image();
+        const response = await fetch(`/api/proxy/cameras/${cameraId}/snapshot?_=${Date.now()}`, {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: 'image/*',
+          },
+          cache: 'no-store',
+        });
 
-      image.onload = () => {
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const blob = await response.blob();
+        if (!blob.type.startsWith('image/')) {
+          throw new Error(`Tipo de mídia inválido: ${blob.type || 'desconhecido'}`);
+        }
+
+        const nextSrc = await blobToDataUrl(blob);
         if (!active) return;
+
         setSrc(nextSrc);
-        setLoading(false);
-      };
-
-      image.onerror = () => {
+      } catch (error) {
         if (!active) return;
+        console.warn('[camera-snapshot] falha ao carregar snapshot', {
+          cameraId,
+          error: error instanceof Error ? error.message : String(error),
+        });
         setError(currentSrcRef.current || normalizedFallbackSrc ? null : errorLabel);
         setSrc((currentSrc) => currentSrc || normalizedFallbackSrc);
+      } finally {
+        if (!active) return;
         setLoading(false);
-      };
-
-      image.src = nextSrc;
+      }
     };
 
     void loadSnapshot();
