@@ -97,12 +97,6 @@ export function CameraSnapshot({
         setSrc(nextSrc);
       } catch (error) {
         if (!active) return;
-        if (!currentSrcRef.current && !normalizedFallbackSrc) {
-          console.warn('[camera-snapshot] falha ao carregar snapshot', {
-            cameraId,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
         setError(currentSrcRef.current || normalizedFallbackSrc ? null : errorLabel);
         setSrc((currentSrc) => currentSrc || normalizedFallbackSrc);
       } finally {
