@@ -109,6 +109,7 @@ export function CameraFeed({
 
     let disposed = false;
     let networkRecoveryAttempts = 0;
+    let manifestLoaded = false;
     let hlsInstance: {
       destroy: () => void;
       loadSource: (source: string) => void;
@@ -130,10 +131,17 @@ export function CameraFeed({
           lowLatencyMode: true,
           liveSyncDurationCount: 1,
           liveMaxLatencyDurationCount: 5,
+          manifestLoadingMaxRetry: 3,
+          levelLoadingMaxRetry: 6,
+          fragLoadingMaxRetry: 12,
+          manifestLoadingRetryDelay: 500,
+          levelLoadingRetryDelay: 500,
+          fragLoadingRetryDelay: 500,
         });
         hlsInstance.loadSource(videoStreamUrl);
         hlsInstance.attachMedia(video);
         hlsInstance.on(Hls.Events.MANIFEST_LOADED, () => {
+          manifestLoaded = true;
           networkRecoveryAttempts = 0;
         });
         hlsInstance.on(Hls.Events.FRAG_LOADED, () => {
@@ -144,7 +152,7 @@ export function CameraFeed({
             if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
               networkRecoveryAttempts += 1;
 
-              if (networkRecoveryAttempts <= 3) {
+              if (manifestLoaded || networkRecoveryAttempts <= 6) {
                 hlsInstance?.startLoad?.();
                 return;
               }
