@@ -1065,6 +1065,10 @@ function getActionButtonClass(actionKey: string) {
         throw new Error('Selecione o servidor VMS da Câmera IA. O backend exige vmsServerId para salvar esse tipo de equipamento.');
       }
 
+      if (form.unitId && !unitOptions.some((unit) => unit.id === form.unitId)) {
+        throw new Error('A unidade selecionada não pertence ao condomínio disponível para este usuário. Atualize a lista de unidades e selecione novamente.');
+      }
+
       if (selectedDevice) {
         const updatedDevice = await devicesService.update(
           selectedDevice.id,
