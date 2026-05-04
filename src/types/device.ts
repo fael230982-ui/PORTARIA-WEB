@@ -88,7 +88,6 @@ export type DevicePayload = {
   unitId?: string | null;
   condominiumId?: string | null;
   accessGroupIds?: string[];
-  cameraIds?: string[];
   status?: DeviceStatus;
 };
 
