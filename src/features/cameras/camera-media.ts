@@ -70,6 +70,11 @@ function resolvePlayableVideoUrl(value?: string | null) {
   return resolveCameraMediaUrl(value);
 }
 
+function isImageStreamLikeUrl(value?: string | null) {
+  const url = String(value ?? '').trim().toLowerCase().split('?')[0];
+  return url.includes('/image-stream') || url.includes('/mjpeg') || url.includes('/frame') || url.endsWith('.mjpg') || url.endsWith('.mjpeg') || url.endsWith('.jpg') || url.endsWith('.jpeg') || url.endsWith('.png') || url.endsWith('.webp');
+}
+
 export function getPreferredVideoStreamUrl(
   camera?: Pick<Camera, 'streamUrl' | 'preferredLiveUrl' | 'liveUrl' | 'hlsUrl' | 'webRtcUrl' | 'vmsStreamingUrl' | 'vmsStreamingUrls' | 'playback'> | null,
   streaming?: Partial<Pick<CameraStreamingResponse, 'preferredLiveUrl' | 'liveUrl' | 'hlsUrl' | 'webRtcUrl' | 'vmsStreamingUrl' | 'vmsStreamingUrls' | 'transport' | 'playback'>> | null
@@ -101,7 +106,7 @@ export function getPreferredVideoStreamUrl(
 
   for (const candidate of candidates) {
     const resolved = resolvePlayableVideoUrl(candidate);
-    if (isBrowserPlayableVideoUrl(resolved)) return resolved;
+    if (isBrowserPlayableVideoUrl(resolved) && !isImageStreamLikeUrl(resolved)) return resolved;
   }
 
   return null;
@@ -116,9 +121,14 @@ export function getPreferredWebRtcUrl(
 
 export function getPreferredImageStreamUrl(
   camera?: Pick<Camera, 'imageStreamUrl'> | null,
-  streaming?: Pick<CameraStreamingResponse, 'imageStreamUrl' | 'mjpegUrl' | 'frameUrl'> | null
+  streaming?: Partial<Pick<CameraStreamingResponse, 'imageStreamUrl' | 'mjpegUrl' | 'frameUrl' | 'preferredLiveUrl' | 'liveUrl' | 'transport'>> | null
 ) {
-  return resolveCameraMediaUrl(streaming?.frameUrl || streaming?.imageStreamUrl || streaming?.mjpegUrl || camera?.imageStreamUrl || null);
+  const liveCandidate =
+    String(streaming?.transport ?? '').toUpperCase() === 'MJPEG' || isImageStreamLikeUrl(streaming?.preferredLiveUrl) || isImageStreamLikeUrl(streaming?.liveUrl)
+      ? streaming?.preferredLiveUrl || streaming?.liveUrl
+      : null;
+
+  return resolveCameraMediaUrl(streaming?.frameUrl || streaming?.imageStreamUrl || streaming?.mjpegUrl || liveCandidate || camera?.imageStreamUrl || null);
 }
 
 export function getPreferredSnapshotUrl(
