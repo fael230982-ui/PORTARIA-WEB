@@ -59,6 +59,8 @@ type CameraStreamingApiShape = Partial<CameraStreamingResponse> & {
   live_url?: string | null;
   hls_url?: string | null;
   web_rtc_url?: string | null;
+  live_proxy_path?: string | null;
+  replay_proxy_path?: string | null;
   gateway_path?: string | null;
   vms_streaming_url?: string | null;
   vms_streaming_urls?: CameraStreamingResponse['vmsStreamingUrls'];
@@ -67,7 +69,7 @@ type CameraStreamingApiShape = Partial<CameraStreamingResponse> & {
   vms_base_urls?: CameraStreamingResponse['vmsBaseUrls'];
   camera_uuid?: string | null;
   playback?: CameraStreamingResponse['playback'];
-  native_web_socket_protocol?: string | null;
+  native_web_socket_protocol?: CameraStreamingResponse['playback'] extends { nativeWebSocketProtocol?: infer T } ? T : unknown;
 };
 
 function normalizeString(value: unknown) {
@@ -111,13 +113,27 @@ function normalizePlayback(value: unknown) {
     playback.nativePlayerPayload && typeof playback.nativePlayerPayload === 'object' && !Array.isArray(playback.nativePlayerPayload)
       ? (playback.nativePlayerPayload as Record<string, unknown>)
       : null;
+  const nativeWebSocketProtocol =
+    playback.nativeWebSocketProtocol && typeof playback.nativeWebSocketProtocol === 'object' && !Array.isArray(playback.nativeWebSocketProtocol)
+      ? (playback.nativeWebSocketProtocol as Record<string, unknown>)
+      : playback.native_web_socket_protocol && typeof playback.native_web_socket_protocol === 'object' && !Array.isArray(playback.native_web_socket_protocol)
+        ? (playback.native_web_socket_protocol as Record<string, unknown>)
+        : null;
 
   return {
     ...playback,
     mode: normalizeString(playback.mode),
     player: normalizeString(playback.player),
     backendProcessesStream: Boolean(playback.backendProcessesStream ?? false),
-    nativeWebSocketProtocol: normalizeString(playback.nativeWebSocketProtocol) ?? normalizeString(playback.native_web_socket_protocol),
+    nativeWebSocketProtocol: nativeWebSocketProtocol
+      ? {
+          ...nativeWebSocketProtocol,
+          connect: normalizeString(nativeWebSocketProtocol.connect),
+          liveProxyPath: normalizeString(nativeWebSocketProtocol.liveProxyPath) ?? normalizeString(nativeWebSocketProtocol.live_proxy_path),
+          replayProxyPath: normalizeString(nativeWebSocketProtocol.replayProxyPath) ?? normalizeString(nativeWebSocketProtocol.replay_proxy_path),
+          messageFormat: normalizeString(nativeWebSocketProtocol.messageFormat) ?? normalizeString(nativeWebSocketProtocol.message_format),
+        }
+      : null,
     nativePlayerPayload: nativePayload
       ? {
           ...nativePayload,
@@ -221,6 +237,8 @@ export function normalizeCameraStreamingResponse(
     liveUrl: resolveCameraMediaUrl(normalizeString(raw.liveUrl) ?? normalizeString(legacyRaw.live_url)),
     hlsUrl: resolveCameraMediaUrl(normalizeString(raw.hlsUrl) ?? normalizeString(legacyRaw.hls_url)),
     webRtcUrl: resolveCameraMediaUrl(normalizeString(raw.webRtcUrl) ?? normalizeString(legacyRaw.web_rtc_url)),
+    liveProxyPath: normalizeString(raw.liveProxyPath) ?? normalizeString(legacyRaw.live_proxy_path),
+    replayProxyPath: normalizeString(raw.replayProxyPath) ?? normalizeString(legacyRaw.replay_proxy_path),
     gatewayPath: normalizeString(raw.gatewayPath) ?? normalizeString(legacyRaw.gateway_path),
     vmsStreamingUrl: normalizeString(raw.vmsStreamingUrl) ?? normalizeString(legacyRaw.vms_streaming_url),
     vmsStreamingUrls: normalizeRouteUrls(raw.vmsStreamingUrls ?? legacyRaw.vms_streaming_urls ?? null),

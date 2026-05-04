@@ -23,7 +23,16 @@ type VmsNativeCameraSource = Pick<
 
 type VmsNativeStreamingSource = Pick<
   CameraStreamingResponse,
-  'vmsStreamingUrl' | 'vmsStreamingUrls' | 'preferredLiveUrl' | 'liveUrl' | 'transport' | 'cameraUuid' | 'selectedStreamUuid' | 'playback'
+  | 'vmsStreamingUrl'
+  | 'vmsStreamingUrls'
+  | 'preferredLiveUrl'
+  | 'liveUrl'
+  | 'transport'
+  | 'cameraUuid'
+  | 'selectedStreamUuid'
+  | 'liveProxyPath'
+  | 'replayProxyPath'
+  | 'playback'
 >;
 
 export function resolveCameraMediaUrl(value?: string | null) {
@@ -231,13 +240,17 @@ export function getVmsNativePlayerPayload(camera?: VmsNativeCameraSource | null,
   const url = getVmsNativeStreamUrl(camera, streaming);
   const cameraUuid = nativePayload?.cameraUuid || streaming?.cameraUuid || camera?.cameraUuid || null;
   const streamUuid = nativePayload?.streamUuid || streaming?.selectedStreamUuid || camera?.selectedStreamUuid || null;
+  const liveProxyPath = streaming?.liveProxyPath || playback?.nativeWebSocketProtocol?.liveProxyPath || null;
+  const replayProxyPath = streaming?.replayProxyPath || playback?.nativeWebSocketProtocol?.replayProxyPath || null;
 
-  if (!url && !cameraUuid && !streamUuid) return null;
+  if (!url && !cameraUuid && !streamUuid && !liveProxyPath && !replayProxyPath) return null;
 
   return {
     url,
     cameraUuid,
     streamUuid,
+    liveProxyPath,
+    replayProxyPath,
     player: playback?.player ?? null,
     mode: playback?.mode ?? streaming?.transport ?? null,
     nativeWebSocketProtocol: playback?.nativeWebSocketProtocol ?? null,
@@ -369,7 +382,9 @@ export function getCameraDiagnostics(
       label: 'VMS nativo',
       ok: hasVmsNative,
       detail:
-        nativePayload?.cameraUuid && nativePayload?.streamUuid
+        nativePayload?.liveProxyPath || nativePayload?.replayProxyPath
+          ? 'Proxy WebSocket nativo recebido para live/replay; falta acoplar decoder H264/ISPlayer.'
+          : nativePayload?.cameraUuid && nativePayload?.streamUuid
           ? 'Payload nativo recebido com cameraUuid e streamUuid.'
           : hasVmsNative
             ? 'Recebido como WebSocket nativo do VMS; precisa de bind/live do player Incoresoft.'

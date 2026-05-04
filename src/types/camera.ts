@@ -68,12 +68,25 @@ export type CameraNativePlayerPayload = {
   [key: string]: unknown;
 };
 
+export type CameraNativeWebSocketProtocol = {
+  connect?: string | null;
+  liveProxyPath?: string | null;
+  replayProxyPath?: string | null;
+  requiredQuery?: {
+    live?: string[];
+    replay?: string[];
+    [key: string]: unknown;
+  } | null;
+  messageFormat?: string | null;
+  [key: string]: unknown;
+};
+
 export type CameraPlayback = {
   mode?: string | null;
   player?: string | null;
   backendProcessesStream?: boolean;
   nativePlayerPayload?: CameraNativePlayerPayload | null;
-  nativeWebSocketProtocol?: string | null;
+  nativeWebSocketProtocol?: CameraNativeWebSocketProtocol | null;
   [key: string]: unknown;
 };
 
@@ -101,6 +114,8 @@ export type CameraStreamingResponse = {
   liveUrl?: string | null;
   hlsUrl?: string | null;
   webRtcUrl?: string | null;
+  liveProxyPath?: string | null;
+  replayProxyPath?: string | null;
   gatewayPath?: string | null;
   vmsStreamingUrl?: string | null;
   vmsStreamingUrls?: {
