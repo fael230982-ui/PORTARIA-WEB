@@ -108,6 +108,7 @@ export function CameraFeed({
     }
 
     let disposed = false;
+    let networkRecoveryAttempts = 0;
     let hlsInstance: {
       destroy: () => void;
       loadSource: (source: string) => void;
@@ -127,13 +128,28 @@ export function CameraFeed({
         hlsInstance = new Hls({
           enableWorker: true,
           lowLatencyMode: true,
+          liveSyncDurationCount: 1,
+          liveMaxLatencyDurationCount: 5,
         });
         hlsInstance.loadSource(videoStreamUrl);
         hlsInstance.attachMedia(video);
+        hlsInstance.on(Hls.Events.MANIFEST_LOADED, () => {
+          networkRecoveryAttempts = 0;
+        });
+        hlsInstance.on(Hls.Events.FRAG_LOADED, () => {
+          networkRecoveryAttempts = 0;
+        });
         hlsInstance.on(Hls.Events.ERROR, (_event, data) => {
           if (data?.fatal) {
             if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
-              setFailedVideoMediaKey(mediaKey);
+              networkRecoveryAttempts += 1;
+
+              if (networkRecoveryAttempts <= 3) {
+                hlsInstance?.startLoad?.();
+                return;
+              }
+
+              if (!disposed) setFailedVideoMediaKey(mediaKey);
               return;
             }
 
@@ -142,7 +158,7 @@ export function CameraFeed({
               return;
             }
 
-            setFailedVideoMediaKey(mediaKey);
+            if (!disposed) setFailedVideoMediaKey(mediaKey);
           }
         });
       })
