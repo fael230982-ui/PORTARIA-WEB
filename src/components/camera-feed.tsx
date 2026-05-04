@@ -111,6 +111,8 @@ export function CameraFeed({
     let disposed = false;
     let networkRecoveryAttempts = 0;
     let manifestLoaded = false;
+    let renderedFrame = false;
+    let startupTimeoutId: ReturnType<typeof setTimeout> | null = null;
     let hlsInstance: {
       destroy: () => void;
       loadSource: (source: string) => void;
@@ -146,8 +148,14 @@ export function CameraFeed({
           networkRecoveryAttempts = 0;
         });
         hlsInstance.on(Hls.Events.FRAG_LOADED, () => {
+          renderedFrame = true;
           networkRecoveryAttempts = 0;
         });
+        startupTimeoutId = setTimeout(() => {
+          if (!disposed && !renderedFrame && video.readyState < 2) {
+            setFailedVideoMediaKey(mediaKey);
+          }
+        }, 12000);
         hlsInstance.on(Hls.Events.ERROR, (_event, data) => {
           if (data?.fatal) {
             if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
@@ -177,6 +185,7 @@ export function CameraFeed({
 
     return () => {
       disposed = true;
+      if (startupTimeoutId) clearTimeout(startupTimeoutId);
       hlsInstance?.destroy();
     };
   }, [mediaKey, shouldUseVideo, videoStreamUrl]);
