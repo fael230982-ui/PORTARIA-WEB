@@ -12,6 +12,6 @@ export function useCameraStreaming(cameraId?: string | null, enabled = true) {
     staleTime: 0,
     retry: 2,
     refetchOnMount: 'always',
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: false,
   });
 }

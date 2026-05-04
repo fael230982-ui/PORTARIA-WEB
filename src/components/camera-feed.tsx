@@ -68,6 +68,7 @@ export function CameraFeed({
   const shouldUseVideo = canRenderProtectedMedia && previewMode === 'video-stream' && Boolean(videoStreamUrl) && !videoError;
   const shouldUseImageStream = canRenderProtectedMedia && Boolean(imageStreamUrl) && !imageError && previewMode === 'image-stream' && !hasVmsNative;
   const shouldUseSnapshot = canRenderProtectedMedia && Boolean(stillImageUrl) && (previewMode === 'snapshot' || hasVmsNative || videoError || imageError);
+  const currentVideoIsHls = String(videoStreamUrl ?? '').toLowerCase().split('?')[0].endsWith('.m3u8');
   const cookieSecure = typeof window !== 'undefined' && window.location.protocol === 'https:' ? '; Secure' : '';
 
   useEffect(() => {
@@ -249,6 +250,7 @@ export function CameraFeed({
           preload="auto"
           controls={controls}
           onError={() => {
+            if (currentVideoIsHls) return;
             setFailedVideoMediaKey(mediaKey);
           }}
         />
